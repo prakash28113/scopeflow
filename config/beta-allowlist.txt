@@ -1,0 +1,7 @@
+# ScopeFlow private beta — who may create an account.
+# One email per line. Lines starting with # are ignored.
+# The release automation copies this list into the database on every run:
+#   - emails added here are invited; emails removed here lose the invite
+#     (existing accounts are not deleted);
+#   - if no emails are listed, sign-ups stay CLOSED.
+prakashmummidisetti@gmail.com

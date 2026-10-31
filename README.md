@@ -12,7 +12,8 @@ update → milestones are marked paid (recorded manually).
 Stack: Vite · React 19 · React Router 7 · TanStack Query · Tailwind CSS 4 · Supabase (Postgres + Auth) ·
 Cloudflare Workers (static assets + a tiny cron Worker). No email provider, no paid services.
 Security review and verification: [FINAL_AUDIT.md](FINAL_AUDIT.md).
-**Deploying the private beta: follow [DEPLOYMENT.md](DEPLOYMENT.md)** (Supabase setup, migration, allowlist,
+**Deploying the private beta:** the GitHub Actions workflow deploys everything automatically once two
+secrets are added — see *Automatic deployment* in **[DEPLOYMENT.md](DEPLOYMENT.md)** (Supabase setup, migration, allowlist,
 Cloudflare commands, verification, backups, rollback and a step-by-step checklist).
 
 ---
@@ -72,7 +73,7 @@ What runs where on the free plan:
 
 ```bash
 npm run verify         # all of the below except e2e
-npm test               # 92 unit + database tests (real migration on in-process Postgres)
+npm test               # 106 unit + database tests (real migration on in-process Postgres)
 npm run typecheck
 npm run audit:secrets  # build with a public test config, scan build output + repo for secrets
 npm run audit:deps     # licences, paid-service SDKs, external hosts in the bundle

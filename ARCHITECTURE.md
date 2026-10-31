@@ -182,6 +182,12 @@ wrangler.jsonc           Cloudflare Worker + assets config
   a new project; `supabase/rollback/teardown.sql` removes ScopeFlow entirely (tested, reinstall verified).
 - **Deploy guard:** `npm run deploy` runs `scripts/predeploy-check.mjs`, which refuses placeholder,
   mismatched or local-test configuration.
+- **Automated release:** `.github/workflows/release.yml` (GitHub Actions, free tier) runs
+  `scripts/ci/release.mjs`. Using a Supabase access token and a Cloudflare API token stored as GitHub
+  secrets, it applies migrations through the Supabase Management API (once each, transactional,
+  tracked in a private `scopeflow_admin` schema), verifies security invariants, configures auth, syncs
+  `config/beta-allowlist.txt`, deploys with wrangler, and smoke-tests the live site. Tested against a
+  real Postgres and with simulated Supabase/Cloudflare/live-site responses.
 
 ## 10. Costs and limits (all ₹0)
 

@@ -147,8 +147,11 @@ The scanner's own test fixtures are assembled at runtime, so the repository hold
 | `tests/db/workflow.test.ts` — workflow, security, links, abuse limits, response shapes, notifications | 42 | ✅ pass |
 | `tests/db/permissions.test.ts` — catalog-based permission audit | 15 | ✅ pass |
 | `tests/db/rollback.test.ts` — teardown removes everything and the migration reinstalls; post-restore trigger script | 2 | ✅ pass |
+| `.github/workflows/release.yml` — `actionlint` | — | ✅ no problems |
+| `tests/db/release-sql.test.ts` — release automation SQL on real Postgres: fresh install, idempotent rerun, failed migration fully rolled back, unrecorded install refused, allowlist sync and closed-by-default, private bookkeeping schema | 7 | ✅ pass |
 | `tests/unit/` — money/pricing, validation, link parsing, redirects, errors, Worker, CSP, portal errors, secret scanner | 33 | ✅ pass |
-| **Total (`npm test`)** | **92** | ✅ **pass** |
+| `tests/unit/release-deploy.test.ts` — release automation with simulated Supabase/Cloudflare/live site: waits without tokens, full deploy, subdomain registration, provisioning wait, account ambiguity, missing CSP and data-leak detection, Supabase token never passed to build/Cloudflare | 7 | ✅ pass |
+| **Total (`npm test`)** | **106** | ✅ **pass** |
 | TypeScript (`npm run typecheck`) | — | ✅ pass |
 | Secret scan (`npm run audit:secrets`) | build + repo | ✅ pass |
 | Dependency audit (`npm run audit:deps`) | 116 packages | ✅ pass — all open source, no paid-service SDKs |

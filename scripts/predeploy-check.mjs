@@ -12,12 +12,14 @@ const errors = [];
 const fail = (m) => errors.push(m);
 
 const wrangler = readFileSync(join(ROOT, "wrangler.jsonc"), "utf8");
+// CI (scripts/ci/release.mjs) passes the values via environment and `wrangler deploy --var`;
+// a manual deploy reads them from wrangler.jsonc.
 const vars = {
-  url: wrangler.match(/"SUPABASE_URL"\s*:\s*"([^"]*)"/)?.[1] ?? "",
-  key: wrangler.match(/"SUPABASE_ANON_KEY"\s*:\s*"([^"]*)"/)?.[1] ?? "",
+  url: process.env.SUPABASE_URL || wrangler.match(/"SUPABASE_URL"\s*:\s*"([^"]*)"/)?.[1] || "",
+  key: process.env.SUPABASE_ANON_KEY || wrangler.match(/"SUPABASE_ANON_KEY"\s*:\s*"([^"]*)"/)?.[1] || "",
 };
-if (!/^https:\/\/[a-z0-9-]+\.supabase\.co$/.test(vars.url)) fail(`wrangler.jsonc SUPABASE_URL is not a real Supabase URL: "${vars.url}"`);
-if (!vars.key || /YOUR-|your-/.test(vars.key)) fail("wrangler.jsonc SUPABASE_ANON_KEY is still a placeholder");
+if (!/^https:\/\/[a-z0-9-]+\.supabase\.co$/.test(vars.url)) fail(`SUPABASE_URL is not a real Supabase URL: "${vars.url}"`);
+if (!vars.key || /YOUR-|your-/.test(vars.key)) fail("SUPABASE_ANON_KEY is still a placeholder");
 if (/sb_secret_|service_role/.test(wrangler)) fail("wrangler.jsonc must never contain a secret or service-role key");
 
 const dist = join(ROOT, "dist");
