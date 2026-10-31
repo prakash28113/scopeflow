@@ -12,6 +12,8 @@ update → milestones are marked paid (recorded manually).
 Stack: Vite · React 19 · React Router 7 · TanStack Query · Tailwind CSS 4 · Supabase (Postgres + Auth) ·
 Cloudflare Workers (static assets + a tiny cron Worker). No email provider, no paid services.
 Security review and verification: [FINAL_AUDIT.md](FINAL_AUDIT.md).
+**Deploying the private beta: follow [DEPLOYMENT.md](DEPLOYMENT.md)** (Supabase setup, migration, allowlist,
+Cloudflare commands, verification, backups, rollback and a step-by-step checklist).
 
 ---
 
@@ -50,31 +52,32 @@ npm run dev                     # http://localhost:5173
 | Variable | Required | Notes |
 |---|---|---|
 | `VITE_SUPABASE_URL` | yes | Public. Also pins the Content-Security-Policy to this origin |
-| `VITE_SUPABASE_ANON_KEY` | yes | Public by design; access is enforced by RLS and database functions |
+| `VITE_SUPABASE_PUBLISHABLE_KEY` | yes | Supabase publishable key (`sb_publishable_…`), public by design. The legacy anon key also works via `VITE_SUPABASE_ANON_KEY` |
 | `VITE_TURNSTILE_SITE_KEY` | no | Enables the CAPTCHA widget and allows Turnstile in the CSP |
 
 There are no server secrets. Never put the Supabase **service-role** key in this project.
 
 ## 3. Deploy to Cloudflare (free) — only when you approve
 
-1. In `wrangler.jsonc`, set `vars.SUPABASE_URL` and `vars.SUPABASE_ANON_KEY` (used only by the daily keep-alive).
-2. `npx wrangler login` (free Cloudflare account; no card needed).
-3. `VITE_SUPABASE_URL=… VITE_SUPABASE_ANON_KEY=… npm run deploy`
-4. The app is served at `https://scopeflow.<your-subdomain>.workers.dev`. Add that URL to
-   Supabase → Authentication → URL Configuration (Site URL).
+See **[DEPLOYMENT.md](DEPLOYMENT.md)** for exact steps. In short: fill `.env.production.local` and the
+`vars` in `wrangler.jsonc` with your Project URL and publishable key, `npx wrangler login`, then
+`npm run deploy` (which refuses to deploy placeholder or mismatched settings).
 
 What runs where on the free plan:
 - Pages and files: Workers **static assets** — free, unlimited, no Worker CPU.
-- Worker script: a daily cron that calls `public.health()` so Supabase doesn't pause the project after
-  7 idle days, plus a JSON 404 for stray API calls. ~1 invocation/day of the 100,000/day allowance.
+- Worker script: a twice-daily cron that calls `public.health()` so Supabase doesn't pause the project,
+  plus a JSON 404 for stray API calls (~2 invocations/day of the 100,000/day allowance).
 
 ## 4. Tests
 
 ```bash
-npm test               # unit + database tests (real migration on in-process Postgres)
+npm run verify         # all of the below except e2e
+npm test               # 92 unit + database tests (real migration on in-process Postgres)
 npm run typecheck
 npm run audit:secrets  # build with a public test config, scan build output + repo for secrets
-npm run build          # needs VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY
+npm run audit:deps     # licences, paid-service SDKs, external hosts in the bundle
+npm run build          # needs VITE_SUPABASE_URL / VITE_SUPABASE_PUBLISHABLE_KEY
+npm run deploy         # build → pre-deploy check → wrangler deploy (only with your approval)
 ```
 
 - `tests/db/` — the whole workflow, scope checks, pricing, immutability, RLS isolation, privilege checks,
@@ -84,9 +87,11 @@ npm run build          # needs VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY
 - `tests/unit/` — money parsing, pricing (cross-checked against Postgres rounding), validation,
   client-link parsing, redirects, error filtering, the Worker, the CSP builder (with and without
   Turnstile), the portal error wrapper and the secret scanner.
+- `tests/db/rollback.test.ts` — the teardown script removes everything and the migration reinstalls;
+  the post-restore trigger script works.
 - `tests/e2e/` — the built app in **Cloudflare's runtime** (`wrangler dev`) with Chrome, as freelancer
   (desktop) and client (phone), plus link replacement/revocation, malformed links, cross-account and
-  signed-out checks, and a no-horizontal-scroll check on mobile. Uses a local Supabase stand-in
+  signed-out checks, a no-horizontal-scroll check on mobile, and a browser-level rate-limit lockout. Uses a local Supabase stand-in
   (PGlite + the real PostgREST binary + a small auth shim):
   ```bash
   (cd tests/e2e && npm install)

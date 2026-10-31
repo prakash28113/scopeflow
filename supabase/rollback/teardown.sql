@@ -1,0 +1,57 @@
+-- =====================================================================
+-- ScopeFlow — TEARDOWN (destructive, irreversible)
+--
+-- Removes every database object created by
+-- supabase/migrations/20261031000000_scopeflow_schema.sql, including ALL
+-- ScopeFlow data (projects, approvals, history). Accounts in auth.users are
+-- NOT deleted (remove them in Authentication → Users if needed).
+--
+-- Use only to abort the beta or to recover from a failed first install.
+-- TAKE A BACKUP FIRST (see DEPLOYMENT.md §7). Runs in one transaction:
+-- if anything fails, nothing is changed.
+-- =====================================================================
+begin;
+
+drop trigger if exists on_auth_user_created on auth.users;
+
+drop table if exists
+  public.activity_log,
+  public.change_order_decisions,
+  public.milestones,
+  public.change_orders,
+  public.revision_requests,
+  public.scope_decisions,
+  public.share_links,
+  public.scope_snapshots,
+  public.deliverables,
+  public.projects,
+  public.clients,
+  public.profiles,
+  public.beta_allowlist,
+  public.portal_rate_limits
+cascade;
+
+drop function if exists
+  public._forbid_mutation, public._guard_change_order_terms, public._guard_revision_classification,
+  public._handle_new_user, public._uid, public._owned_project, public._log, public._hash_token,
+  public._new_token, public._window_start, public._rate_hit, public._trusted_client_ip,
+  public._portal_gate, public._portal_error, public._request_meta, public._clean_name, public._build_scope,
+  public._issue_link,
+  public.complete_onboarding, public.save_project, public.delete_draft_project, public.rotate_share_link,
+  public.revoke_share_link, public.send_scope, public.recall_scope, public.resolve_revision,
+  public.create_change_order, public.withdraw_change_order, public.complete_change_order_work,
+  public.set_milestone_paid, public.complete_project, public.cancel_project,
+  public.portal_view, public.portal_decide_scope, public.portal_request_revision,
+  public.portal_decide_change_order, public.unread_notification_count, public.mark_notifications_seen,
+  public.health
+cascade;
+
+drop type if exists
+  public.project_status, public.decision, public.revision_kind, public.revision_status,
+  public.change_order_status, public.pricing_type, public.milestone_status, public.actor_type
+cascade;
+
+-- Restore Supabase's default: new functions in public are executable by the API roles.
+alter default privileges in schema public grant execute on functions to public, anon, authenticated;
+
+commit;

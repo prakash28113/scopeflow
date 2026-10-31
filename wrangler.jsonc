@@ -9,12 +9,12 @@
     "directory": "./dist",
     "not_found_handling": "single-page-application"
   },
-  // Daily keep-alive so the free Supabase project isn't paused for inactivity.
-  "triggers": { "crons": ["17 3 * * *"] },
+  // Twice-daily keep-alive so the free Supabase project isn't paused for inactivity.
+  "triggers": { "crons": ["17 3,15 * * *"] },
   // Public values only (the anon key is designed to be public). No secrets here.
   "vars": {
     "SUPABASE_URL": "https://YOUR-PROJECT-REF.supabase.co",
-    "SUPABASE_ANON_KEY": "YOUR-ANON-PUBLIC-KEY"
+    "SUPABASE_ANON_KEY": "YOUR-PUBLISHABLE-KEY"
   },
   "observability": { "enabled": true }
 }

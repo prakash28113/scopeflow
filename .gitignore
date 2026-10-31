@@ -9,4 +9,7 @@ dist
 tests/e2e/keys.json
 tests/e2e/postgrest.conf
 tests/e2e/shots
+backups
+.audit-dist
+.audit-deps-dist
 .audit-dist

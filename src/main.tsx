@@ -56,7 +56,7 @@ const root = createRoot(document.getElementById("root")!);
 if (!configured) {
   root.render(
     <p style={{ padding: 24, fontFamily: "system-ui" }}>
-      ScopeFlow isn't configured: set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY and rebuild.
+      ScopeFlow isn't configured: set VITE_SUPABASE_URL and VITE_SUPABASE_PUBLISHABLE_KEY and rebuild.
     </p>,
   );
 } else {

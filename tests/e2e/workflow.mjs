@@ -296,6 +296,32 @@ try {
   await shot(fm, "15-project-mobile");
   const overflow = await fm.evaluate(() => document.documentElement.scrollWidth > window.innerWidth);
   assert.equal(overflow, false, "mobile project page must not scroll horizontally");
+
+  // Last on purpose: this locks the test IP out of the portal for the rest of the hour.
+  step("rate limit: 20 failed link lookups lock out the IP, even for a valid link");
+  await f.goto(projectUrl);
+  await f.getByRole("button", { name: "Create new link" }).click();
+  await f.getByRole("heading", { name: "Client link ready" }).waitFor();
+  const lockUrl = await f.getByTestId("share-url").innerText();
+  await f.getByRole("button", { name: "Done", exact: true }).click();
+  await c.goto("about:blank");
+  await c.goto(lockUrl);
+  await c.getByText("Brand identity for Northwind Coffee").first().waitFor(); // works before the attack
+  const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
+  let sawLimit = false;
+  for (let i = 0; i < 20; i++) {
+    const fake = Array.from({ length: 43 }, () => alphabet[Math.floor(Math.random() * 64)]).join("");
+    await c.goto("about:blank");
+    await c.goto(`${BASE}/p#${fake}`);
+    await c.getByText(/This link isn't working|Too many requests/).first().waitFor();
+    if (await c.getByText("Too many requests").count()) sawLimit = true;
+  }
+  await c.goto("about:blank");
+  await c.goto(lockUrl);
+  await c.getByText("Too many requests").first().waitFor();
+  await c.getByText("Please wait a few minutes, then reload the page.").waitFor();
+  await shot(c, "16-portal-rate-limited-mobile", false);
+  console.log(`  (lockout reached${sawLimit ? " during" : " after"} the 20 bad lookups; earlier revoked-link checks also count)`);
 } catch (e) {
   for (const [n, p] of [["freelancer", f], ["client", c]]) {
     try {

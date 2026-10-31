@@ -1,6 +1,6 @@
 # ScopeFlow — Architecture (v2, zero-cost)
 
-Status: approved direction, not deployed. Security review: see [FINAL_AUDIT.md](FINAL_AUDIT.md). Target: **₹0** on Cloudflare Workers Free + Supabase Free.
+Status: approved direction, not deployed. Security review: [FINAL_AUDIT.md](FINAL_AUDIT.md). Deployment: [DEPLOYMENT.md](DEPLOYMENT.md). Target: **₹0** on Cloudflare Workers Free + Supabase Free.
 
 ## 1. Why this shape
 
@@ -24,7 +24,8 @@ lives in Postgres — where it already was.
 ```
 
 No service-role key, no API secrets and no email provider exist anywhere in the deployed system.
-The only key in the frontend is Supabase's anon key, which is designed to be public.
+The only key in the frontend is Supabase's publishable key (`sb_publishable_…`, or the legacy anon key),
+which is designed to be public and maps to the low-privilege `anon` role.
 
 ## 2. Authentication
 
@@ -117,7 +118,7 @@ Assets-only routing (configured in `wrangler.jsonc`):
 | Files (`/assets/*.js`, `.css`, icons) | Static assets | none |
 | Page navigations (`/dashboard`, `/p`, …) | `index.html` (SPA fallback) | none |
 | Non-navigation request to an unknown path | Worker `fetch` → JSON 404 | < 1 ms |
-| Daily cron | Worker `scheduled` → calls `public.health()` so the free Supabase project isn't paused for inactivity | ~ 1 ms |
+| Cron, twice daily (03:17, 15:17 UTC) | Worker `scheduled` → calls `public.health()` so the free Supabase project isn't paused for inactivity; also purges old rate-limit counters | ~ 1 ms |
 
 The Worker holds **no secrets** (only the public Supabase URL and anon key). There are no API endpoints:
 everything that needs authority runs inside Postgres under RLS.
@@ -164,15 +165,29 @@ tests/unit               money, pricing, validation, link parsing
 tests/e2e                built app in Cloudflare's runtime + Chrome, full workflow
 build/security-headers.ts  CSP + headers builder (unit-tested)
 scripts/secret-scan.mjs  build-output and repository secret scan
+scripts/deps-audit.mjs   licences, paid-service SDKs, external hosts in the bundle
+scripts/predeploy-check.mjs  refuses placeholder/mismatched/local deploy config
+supabase/rollback/       teardown.sql, restore-auth-trigger.sql (both tested)
+DEPLOYMENT.md            step-by-step private-beta deployment, backup and rollback
 vite.config.ts           build + generated _headers (CSP pinned to your Supabase URL)
 wrangler.jsonc           Cloudflare Worker + assets config
 ```
 
-## 9. Costs and limits (all ₹0)
+## 9. Operations
+
+- **Backups:** Supabase's CLI dump (roles, schema, data) before every migration and weekly; restore tested
+  into a second free project. Supabase's dump omits custom `auth`-schema triggers, so
+  `supabase/rollback/restore-auth-trigger.sql` re-creates the sign-up trigger after a restore (tested).
+- **Rollback:** app via `wrangler rollback` (last 100 versions); database by fixing forward or restoring to
+  a new project; `supabase/rollback/teardown.sql` removes ScopeFlow entirely (tested, reinstall verified).
+- **Deploy guard:** `npm run deploy` runs `scripts/predeploy-check.mjs`, which refuses placeholder,
+  mismatched or local-test configuration.
+
+## 10. Costs and limits (all ₹0)
 
 | Service | Free limits that matter | Our usage |
 |---|---|---|
-| Cloudflare Workers Free | 100k Worker invocations/day; static assets unlimited; 10 ms CPU; 5 cron triggers | ~1 invocation/day (cron) |
+| Cloudflare Workers Free | 100k Worker invocations/day; static assets unlimited; 10 ms CPU; 5 cron triggers | ~2 invocations/day (cron) |
 | Supabase Free | 500 MB DB, 50k MAU, 5 GB egress/mo, 2 projects, no backups, pauses after 7 days idle | Small JSON payloads; keep-alive cron |
 | Cloudflare Turnstile (optional) | Free | Sign-up/sign-in only |
 

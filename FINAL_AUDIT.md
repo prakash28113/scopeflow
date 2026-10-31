@@ -146,11 +146,14 @@ The scanner's own test fixtures are assembled at runtime, so the repository hold
 |---|---|---|
 | `tests/db/workflow.test.ts` — workflow, security, links, abuse limits, response shapes, notifications | 42 | ✅ pass |
 | `tests/db/permissions.test.ts` — catalog-based permission audit | 15 | ✅ pass |
+| `tests/db/rollback.test.ts` — teardown removes everything and the migration reinstalls; post-restore trigger script | 2 | ✅ pass |
 | `tests/unit/` — money/pricing, validation, link parsing, redirects, errors, Worker, CSP, portal errors, secret scanner | 33 | ✅ pass |
-| **Total (`npm test`)** | **90** | ✅ **pass** |
+| **Total (`npm test`)** | **92** | ✅ **pass** |
 | TypeScript (`npm run typecheck`) | — | ✅ pass |
 | Secret scan (`npm run audit:secrets`) | build + repo | ✅ pass |
-| End-to-end (`tests/e2e/run.sh`) — built app served by Cloudflare's runtime (`wrangler dev`), Chrome as freelancer (desktop) and client (phone) | 20 steps | ✅ pass, no browser errors |
+| Dependency audit (`npm run audit:deps`) | 116 packages | ✅ pass — all open source, no paid-service SDKs |
+| Pre-deploy guard (`scripts/predeploy-check.mjs`) | 3 scenarios | ✅ blocks placeholders and local or mismatched builds; passes a consistent build |
+| End-to-end (`tests/e2e/run.sh`) — built app served by Cloudflare's runtime (`wrangler dev`), Chrome as freelancer (desktop) and client (phone) | 21 steps | ✅ pass, no browser errors |
 
 End-to-end coverage:
 - sign-up without email confirmation, onboarding
@@ -176,6 +179,13 @@ Routing and headers were also checked in Cloudflare's runtime:
 
 ---
 
+The 21st end-to-end step proves the rate limits work through the real API path. A phone browser
+loads 20 random links, and then even a valid link is refused with "Too many requests". The client IP
+travelled gateway → PostgREST `request.headers` → `_portal_gate`.
+
+The release-readiness additions (92nd test, dependency audit, pre-deploy guard, rollback scripts) are
+described in [DEPLOYMENT.md](DEPLOYMENT.md).
+
 ## 5. Residual risks (accepted or to verify)
 
 1. **IP-based limits depend on Supabase's gateway headers.** They need `cf-connecting-ip` or `x-real-ip` in `request.headers`. If Supabase provides neither, IP limits are silently skipped and per-link limits still apply. *Verify after deploy* (§6).
@@ -189,21 +199,10 @@ Routing and headers were also checked in Cloudflare's runtime:
 9. **No automatic backups** on Supabase Free. Export periodically.
 10. **No third-party penetration test** has been performed.
 
-## 6. Pre-deploy checklist (requires your approval to deploy)
+## 6. Deployment
 
-- [ ] Run the migration in a new Supabase Free project.
-- [ ] Turn off email confirmation and set the minimum password length to 8.
-- [ ] Add your beta emails to `beta_allowlist`.
-- [ ] Optional — CAPTCHA:
-  - [ ] create a Turnstile widget and enable CAPTCHA in Supabase with its secret
-  - [ ] build with `VITE_TURNSTILE_SITE_KEY`
-  - [ ] confirm the widget loads with no CSP errors in the browser console
-- [ ] Set the public `vars` in `wrangler.jsonc`.
-- [ ] Run `npm test`, `npm run audit:secrets`, then deploy.
-- [ ] **Smoke test on the live site:** sign up, create a project, send it, then approve it from another device.
-- [ ] Then confirm in SQL that the IP-based limits are active:
-  - [ ] `select ip_address from scope_decisions order by created_at desc limit 1;` is not null
-  - [ ] `select count(*) from portal_rate_limits where bucket like 'ip:%';` is greater than 0
-- [ ] Add the live URL to Supabase → Authentication → URL Configuration.
+The step-by-step checklist, Supabase setup, migration, allowlist, Cloudflare commands, post-deploy
+verification (including the IP-limit check from residual risk 1), backups and rollback are in
+**[DEPLOYMENT.md](DEPLOYMENT.md)**. Deployment requires your explicit approval.
 
 Reference: Cloudflare Turnstile CSP guidance — https://developers.cloudflare.com/turnstile/reference/content-security-policy/
