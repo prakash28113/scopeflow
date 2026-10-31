@@ -1,0 +1,155 @@
+/**
+ * Permission audit as code. Reads PostgreSQL's catalog after applying the real
+ * migration (with Supabase's default broad grants in place) and checks every
+ * table, policy and function against an explicit allowlist. Adding a table or
+ * function without reviewing its access makes this suite fail.
+ */
+import { beforeAll, describe, expect, it } from "vitest";
+import type { PGlite } from "@electric-sql/pglite";
+import { createDb } from "./harness";
+
+let db: PGlite;
+beforeAll(async () => {
+  db = await createDb();
+});
+const q = async <T>(sql: string, params: unknown[] = []) => (await db.query<T>(sql, params)).rows;
+
+const PORTAL_FUNCTIONS = ["portal_view", "portal_decide_scope", "portal_request_revision", "portal_decide_change_order"];
+const ANON_FUNCTIONS = [...PORTAL_FUNCTIONS, "health"].sort();
+const FREELANCER_FUNCTIONS = [
+  "complete_onboarding", "save_project", "delete_draft_project", "rotate_share_link", "revoke_share_link",
+  "send_scope", "recall_scope", "resolve_revision", "create_change_order", "withdraw_change_order",
+  "complete_change_order_work", "set_milestone_paid", "complete_project", "cancel_project",
+  "unread_notification_count", "mark_notifications_seen",
+];
+const AUTHENTICATED_FUNCTIONS = [...FREELANCER_FUNCTIONS, ...ANON_FUNCTIONS].sort();
+const SECURITY_DEFINER = [...FREELANCER_FUNCTIONS, ...PORTAL_FUNCTIONS, "health", "_handle_new_user"].sort();
+
+const OWNER_READABLE = [
+  "profiles", "clients", "projects", "deliverables", "scope_snapshots", "scope_decisions", "revision_requests",
+  "change_orders", "change_order_decisions", "milestones", "activity_log",
+].sort();
+const NOT_READABLE = ["beta_allowlist", "portal_rate_limits", "share_links"].sort(); // share_links: column grant only
+const ALL_TABLES = [...OWNER_READABLE, ...NOT_READABLE].sort();
+const PRIVS = ["SELECT", "INSERT", "UPDATE", "DELETE", "TRUNCATE", "REFERENCES", "TRIGGER"];
+
+describe("tables and RLS", () => {
+  it("has exactly the reviewed set of tables, all with Row Level Security enabled", async () => {
+    const rows = await q<{ relname: string; relrowsecurity: boolean }>(
+      "select relname, relrowsecurity from pg_class where relnamespace = 'public'::regnamespace and relkind in ('r','p') order by relname",
+    );
+    expect(rows.map((r) => r.relname)).toEqual(ALL_TABLES);
+    for (const r of rows) expect(r.relrowsecurity, `${r.relname} RLS`).toBe(true);
+  });
+
+  it("has no views, materialized views or sequences in public (views can bypass RLS)", async () => {
+    const rows = await q<{ relname: string }>(
+      "select relname from pg_class where relnamespace = 'public'::regnamespace and relkind in ('v','m','S')",
+    );
+    expect(rows).toEqual([]);
+  });
+
+  it("anon has no table privileges at all", async () => {
+    for (const t of ALL_TABLES) for (const p of PRIVS) {
+      const [r] = await q<{ ok: boolean }>("select has_table_privilege('anon', $1, $2) as ok", [`public.${t}`, p]);
+      expect(r.ok, `anon ${p} ${t}`).toBe(false);
+    }
+  });
+
+  it("authenticated can only SELECT owner-scoped tables, and never write directly", async () => {
+    for (const t of ALL_TABLES) for (const p of PRIVS) {
+      const [r] = await q<{ ok: boolean }>("select has_table_privilege('authenticated', $1, $2) as ok", [`public.${t}`, p]);
+      const expected = p === "SELECT" && OWNER_READABLE.includes(t);
+      expect(r.ok, `authenticated ${p} ${t}`).toBe(expected);
+    }
+  });
+
+  it("owners may read share-link status columns but never the token hash", async () => {
+    const cols = await q<{ column_name: string; ok: boolean }>(
+      "select column_name, has_column_privilege('authenticated', 'public.share_links', column_name, 'SELECT') as ok from information_schema.columns where table_schema = 'public' and table_name = 'share_links' order by column_name",
+    );
+    const readable = cols.filter((c) => c.ok).map((c) => c.column_name).sort();
+    expect(readable).toEqual(["created_at", "expires_at", "id", "project_id", "revoked_at"]);
+  });
+
+  it("every policy is SELECT-only, for authenticated, and scoped to the owner", async () => {
+    const policies = await q<{ tablename: string; cmd: string; roles: string; qual: string; permissive: string }>(
+      "select tablename, cmd, roles::text, qual, permissive from pg_policies where schemaname = 'public' order by tablename",
+    );
+    expect(policies.map((p) => p.tablename).sort()).toEqual([...OWNER_READABLE, "share_links"].sort());
+    for (const p of policies) {
+      expect(p.cmd, p.tablename).toBe("SELECT");
+      expect(p.roles, p.tablename).toBe("{authenticated}");
+      expect(p.permissive, p.tablename).toBe("PERMISSIVE");
+      expect(p.qual, p.tablename).toMatch(/auth\.uid\(\)/);
+    }
+  });
+
+  it("immutable records are protected by triggers", async () => {
+    const rows = await q<{ tbl: string }>(
+      "select c.relname as tbl from pg_trigger t join pg_class c on c.oid = t.tgrelid join pg_proc p on p.oid = t.tgfoid where p.proname = '_forbid_mutation' order by 1",
+    );
+    expect(rows.map((r) => r.tbl)).toEqual(["activity_log", "change_order_decisions", "scope_decisions", "scope_snapshots"]);
+  });
+});
+
+describe("functions", () => {
+  type Fn = { name: string; secdef: boolean; config: string[] | null; src: string; oid: number };
+  let fns: Fn[];
+  beforeAll(async () => {
+    fns = await q<Fn>(
+      "select proname as name, prosecdef as secdef, proconfig as config, prosrc as src, oid::int as oid from pg_proc where pronamespace = 'public'::regnamespace order by proname",
+    );
+  });
+
+  it("only the reviewed functions run as SECURITY DEFINER", () => {
+    expect(fns.filter((f) => f.secdef).map((f) => f.name).sort()).toEqual(SECURITY_DEFINER);
+  });
+
+  it("every function pins search_path to empty (no search-path hijacking)", () => {
+    for (const f of fns) expect(f.config, f.name).toContain('search_path=""');
+  });
+
+  it("anon can execute exactly the public portal functions and health()", async () => {
+    const rows = await q<{ name: string }>(
+      "select proname as name from pg_proc where pronamespace = 'public'::regnamespace and has_function_privilege('anon', oid, 'EXECUTE') order by 1",
+    );
+    expect(rows.map((r) => r.name).sort()).toEqual(ANON_FUNCTIONS);
+  });
+
+  it("authenticated can execute exactly the freelancer API plus the public functions", async () => {
+    const rows = await q<{ name: string }>(
+      "select proname as name from pg_proc where pronamespace = 'public'::regnamespace and has_function_privilege('authenticated', oid, 'EXECUTE') order by 1",
+    );
+    expect(rows.map((r) => r.name).sort()).toEqual(AUTHENTICATED_FUNCTIONS);
+  });
+
+  it("no function is executable via the PUBLIC pseudo-role", async () => {
+    const rows = await q<{ name: string }>(
+      "select p.proname as name from pg_proc p, aclexplode(coalesce(p.proacl, acldefault('f', p.proowner))) a where p.pronamespace = 'public'::regnamespace and a.grantee = 0 and a.privilege_type = 'EXECUTE'",
+    );
+    expect(rows).toEqual([]);
+  });
+
+  it("each freelancer function checks the caller's identity", () => {
+    for (const name of FREELANCER_FUNCTIONS) {
+      const f = fns.find((x) => x.name === name)!;
+      expect(f.src, name).toMatch(/_owned_project\(|_uid\(\)|auth\.uid\(\)/);
+    }
+  });
+
+  it("each public portal function goes through the link + rate-limit gate", () => {
+    for (const name of PORTAL_FUNCTIONS) {
+      const f = fns.find((x) => x.name === name)!;
+      expect(f.src, name).toContain("public._portal_gate(p_token");
+    }
+  });
+
+  it("public portal responses never include owner identifiers", () => {
+    for (const name of PORTAL_FUNCTIONS) {
+      const f = fns.find((x) => x.name === name)!;
+      // Internal use (e.g. looking up the studio's display name) is fine; returning it is not.
+      expect(f.src, name).not.toMatch(/'owner_id'|'project_id'|'email'/);
+    }
+  });
+});

@@ -220,6 +220,16 @@ create table public.beta_allowlist (
 );
 create index activity_log_client_idx on public.activity_log (created_at desc) where actor = 'client';
 
+-- Fixed-window counters for the public client portal (see _portal_gate).
+-- IP buckets store a hash of the IP, never the address itself. Rows older than
+-- a day are purged by health() and opportunistically by _rate_hit().
+create table public.portal_rate_limits (
+  bucket       text not null,
+  window_start timestamptz not null,
+  hits         integer not null default 0,
+  primary key (bucket, window_start)
+);
+
 -- ---------------------------------------------------------------------
 -- Immutability
 -- ---------------------------------------------------------------------
@@ -335,6 +345,7 @@ alter table public.change_order_decisions enable row level security;
 alter table public.milestones             enable row level security;
 alter table public.activity_log           enable row level security;
 alter table public.beta_allowlist         enable row level security;
+alter table public.portal_rate_limits     enable row level security;
 
 create policy "own profile" on public.profiles
   for select to authenticated using (id = (select auth.uid()));
@@ -432,33 +443,134 @@ as $$
            'hex'), 'base64'), '+/', '-_'), '=');
 $$;
 
-create or replace function public._portal_project(p_token text, p_lock boolean)
-returns public.projects
+-- ---------------------------------------------------------------------
+-- Public portal gate: link validation + abuse limits
+--
+-- Limits (fixed windows):
+--   per client IP, all portal calls ............ 300 per 10 minutes
+--   per client IP, failed link lookups ......... 20 per hour, then that IP is
+--                                                 blocked for the rest of the hour
+--   per link, reads (portal_view) .............. 300 per 10 minutes
+--   per link, writes (decisions, requests) ..... 30 per hour
+--   per project, change requests ............... 10 per hour (in portal_request_revision)
+-- IP limits use only gateway-set headers (cf-connecting-ip, x-real-ip), never
+-- the client-controllable X-Forwarded-For, so nobody can lock out someone
+-- else's IP. Without those headers, IP limits are skipped; link limits still apply.
+--
+-- The gate never raises for link problems: it returns an error code so the
+-- caller can *return* (commit) — raising would roll back the counters.
+-- ---------------------------------------------------------------------
+create or replace function public._window_start(p_seconds integer)
+returns timestamptz
+language sql
+stable
+set search_path = ''
+as $$
+  select to_timestamp(floor(extract(epoch from now()) / p_seconds) * p_seconds);
+$$;
+
+create or replace function public._rate_hit(p_bucket text, p_window_seconds integer, p_max integer)
+returns boolean
 language plpgsql
 set search_path = ''
 as $$
 declare
-  v public.projects;
+  v_hits integer;
+begin
+  insert into public.portal_rate_limits (bucket, window_start, hits)
+  values (p_bucket, public._window_start(p_window_seconds), 1)
+  on conflict (bucket, window_start) do update set hits = public.portal_rate_limits.hits + 1
+  returning hits into v_hits;
+  if random() < 0.01 then
+    delete from public.portal_rate_limits where window_start < now() - interval '1 day';
+  end if;
+  return v_hits <= p_max;
+end;
+$$;
+
+create or replace function public._trusted_client_ip()
+returns text
+language plpgsql
+stable
+set search_path = ''
+as $$
+declare
+  h jsonb;
+begin
+  begin
+    h := nullif(current_setting('request.headers', true), '')::jsonb;
+  exception when others then
+    return null;
+  end;
+  return nullif(left(trim(coalesce(h ->> 'cf-connecting-ip', h ->> 'x-real-ip', '')), 64), '');
+end;
+$$;
+
+create or replace function public._portal_gate(
+  p_token text, p_lock boolean, p_write boolean,
+  out o_project public.projects, out o_error text)
+language plpgsql
+set search_path = ''
+as $$
+declare
+  v_ip text := public._trusted_client_ip();
+  v_ipkey text := case when v_ip is null then null else left(public._hash_token(v_ip), 32) end;
   v_link public.share_links;
 begin
-  if p_token is null or p_token !~ '^[A-Za-z0-9_-]{43}$' then
-    raise exception 'This link is invalid or has been revoked' using errcode = '28000';
+  if v_ipkey is not null then
+    if coalesce((select hits from public.portal_rate_limits
+                  where bucket = 'fail:' || v_ipkey and window_start = public._window_start(3600)), 0) >= 20 then
+      o_error := 'rate_limited';
+      return;
+    end if;
+    if not public._rate_hit('ip:' || v_ipkey, 600, 300) then
+      o_error := 'rate_limited';
+      return;
+    end if;
   end if;
-  select s.* into v_link from public.share_links s
-   where s.token_hash = public._hash_token(p_token) and s.revoked_at is null;
-  if not found then
-    raise exception 'This link is invalid or has been revoked' using errcode = '28000';
+
+  if p_token is not null and p_token ~ '^[A-Za-z0-9_-]{43}$' then
+    select s.* into v_link from public.share_links s
+     where s.token_hash = public._hash_token(p_token) and s.revoked_at is null;
+  end if;
+  if v_link.id is null then
+    if v_ipkey is not null then
+      perform public._rate_hit('fail:' || v_ipkey, 3600, 2147483647);
+    end if;
+    o_error := 'invalid_link';
+    return;
   end if;
   if v_link.expires_at <= now() then
-    raise exception 'This link has expired. Ask your freelancer for a new one.' using errcode = '28000';
+    o_error := 'expired_link';
+    return;
   end if;
+
+  if not public._rate_hit(case when p_write then 'lw:' else 'lr:' end || v_link.id::text,
+                          case when p_write then 3600 else 600 end,
+                          case when p_write then 30 else 300 end) then
+    o_error := 'rate_limited';
+    return;
+  end if;
+
   if p_lock then
-    select * into v from public.projects where id = v_link.project_id for update;
+    select * into o_project from public.projects where id = v_link.project_id for update;
   else
-    select * into v from public.projects where id = v_link.project_id;
+    select * into o_project from public.projects where id = v_link.project_id;
   end if;
-  return v;
 end;
+$$;
+
+create or replace function public._portal_error(p_code text)
+returns jsonb
+language sql
+immutable
+set search_path = ''
+as $$
+  select jsonb_build_object('error', p_code, 'message', case p_code
+    when 'invalid_link' then 'This link is invalid or has been revoked.'
+    when 'expired_link' then 'This link has expired. Ask your freelancer for a new one.'
+    when 'rate_limited' then 'Too many requests. Please wait a few minutes and try again.'
+    else 'Something went wrong.' end);
 $$;
 
 -- Approver metadata for audit records, taken from the HTTP request as seen by
@@ -1023,11 +1135,17 @@ security definer
 set search_path = ''
 as $$
 declare
-  v public.projects := public._portal_project(p_token, false);
+  g record;
+  v public.projects;
   v_owner public.profiles;
   v_client public.clients;
   v_snap public.scope_snapshots;
 begin
+  select * into g from public._portal_gate(p_token, false, false);
+  if g.o_error is not null then
+    return public._portal_error(g.o_error);
+  end if;
+  v := g.o_project;
   select * into v_owner from public.profiles where id = v.owner_id;
   select * into v_client from public.clients where id = v.client_id;
   select * into v_snap from public.scope_snapshots
@@ -1043,7 +1161,7 @@ begin
       'name', coalesce(v_owner.business_name, v_owner.full_name, 'Your freelancer')),
     'client', jsonb_build_object('name', v_client.name, 'company', v_client.company),
     'snapshot', case when v_snap.id is null then null else jsonb_build_object(
-      'id', v_snap.id, 'version', v_snap.version, 'data', v_snap.data,
+      'id', v_snap.id, 'version', v_snap.version, 'data', v_snap.data #- '{client,email}',
       'content_hash', v_snap.content_hash, 'created_at', v_snap.created_at,
       'decision', (select jsonb_build_object('decision', d.decision, 'comment', d.comment,
                                              'client_name', d.client_name, 'created_at', d.created_at)
@@ -1098,11 +1216,17 @@ security definer
 set search_path = ''
 as $$
 declare
-  v public.projects := public._portal_project(p_token, true);
+  g record;
+  v public.projects;
   v_snap public.scope_snapshots;
   v_name text := public._clean_name(p_client_name);
   v_comment text := nullif(left(trim(coalesce(p_comment, '')), 4000), '');
 begin
+  select * into g from public._portal_gate(p_token, true, true);
+  if g.o_error is not null then
+    return public._portal_error(g.o_error);
+  end if;
+  v := g.o_project;
   if v.status <> 'awaiting_approval' then
     raise exception 'This scope is not awaiting approval' using errcode = '55000';
   end if;
@@ -1132,9 +1256,8 @@ begin
       jsonb_build_object('snapshot_id', v_snap.id, 'comment', v_comment));
   end if;
 
-  return jsonb_build_object('project_id', v.id, 'owner_id', v.owner_id, 'title', v.title,
-                            'decision', p_decision, 'version', v_snap.version,
-                            'client_name', v_name, 'comment', v_comment);
+  -- Public response: only what the client UI needs. No internal identifiers.
+  return jsonb_build_object('ok', true, 'decision', p_decision, 'version', v_snap.version);
 end;
 $$;
 
@@ -1147,7 +1270,8 @@ security definer
 set search_path = ''
 as $$
 declare
-  v public.projects := public._portal_project(p_token, true);
+  g record;
+  v public.projects;
   v_name text := public._clean_name(p_client_name);
   v_desc text := nullif(left(trim(coalesce(p_description, '')), 4000), '');
   v_del public.deliverables;
@@ -1157,6 +1281,11 @@ declare
   v_id uuid;
   v_summary text;
 begin
+  select * into g from public._portal_gate(p_token, true, true);
+  if g.o_error is not null then
+    return public._portal_error(g.o_error);
+  end if;
+  v := g.o_project;
   if v.status <> 'active' then
     raise exception 'Requests can only be made while the project is in progress' using errcode = '55000';
   end if;
@@ -1197,11 +1326,9 @@ begin
   perform public._log(v.id, 'client', v_name, 'revision.requested', v_summary,
     jsonb_build_object('revision_request_id', v_id, 'in_scope', v_in_scope));
 
-  return jsonb_build_object('id', v_id, 'project_id', v.id, 'owner_id', v.owner_id, 'title', v.title,
-                            'in_scope', v_in_scope, 'revision_number', v_number,
-                            'revisions_included', v_del.revisions_included,
-                            'deliverable_title', v_del.title, 'summary', v_summary,
-                            'client_name', v_name);
+  -- Public response: only what the client UI needs. No internal identifiers.
+  return jsonb_build_object('ok', true, 'in_scope', v_in_scope, 'revision_number', v_number,
+                            'revisions_included', v_del.revisions_included);
 end;
 $$;
 
@@ -1214,13 +1341,19 @@ security definer
 set search_path = ''
 as $$
 declare
-  v public.projects := public._portal_project(p_token, true);
+  g record;
+  v public.projects;
   v_name text := public._clean_name(p_client_name);
   v_comment text := nullif(left(trim(coalesce(p_comment, '')), 4000), '');
   co public.change_orders;
   v_terms jsonb;
   v_pos integer;
 begin
+  select * into g from public._portal_gate(p_token, true, true);
+  if g.o_error is not null then
+    return public._portal_error(g.o_error);
+  end if;
+  v := g.o_project;
   if v.status <> 'active' then
     raise exception 'This project is not in progress' using errcode = '55000';
   end if;
@@ -1270,9 +1403,8 @@ begin
       jsonb_build_object('change_order_id', co.id, 'comment', v_comment));
   end if;
 
-  return jsonb_build_object('project_id', v.id, 'owner_id', v.owner_id, 'title', v.title,
-                            'decision', p_decision, 'number', co.number, 'change_order_title', co.title,
-                            'client_name', v_name, 'comment', v_comment);
+  -- Public response: only what the client UI needs. No internal identifiers.
+  return jsonb_build_object('ok', true, 'decision', p_decision, 'number', co.number);
 end;
 $$;
 
@@ -1305,12 +1437,18 @@ as $$
 $$;
 
 -- Used by the Worker's daily cron so the free project isn't paused for inactivity.
+-- Also purges expired rate-limit counters. Returns nothing but 'ok'.
 create or replace function public.health()
 returns text
-language sql
-stable
+language plpgsql
+security definer
 set search_path = ''
-as $$ select 'ok'::text $$;
+as $$
+begin
+  delete from public.portal_rate_limits where window_start < now() - interval '1 day';
+  return 'ok';
+end;
+$$;
 
 -- ---------------------------------------------------------------------
 -- Privileges

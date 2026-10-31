@@ -50,7 +50,8 @@ export type ScopeData = {
   budget_cents: number;
   start_date: string | null;
   due_date: string | null;
-  client: { name: string; company: string | null; email: string };
+  /** email is present for the freelancer; the public portal omits it. */
+  client: { name: string; company: string | null; email?: string };
   deliverables: { id: string; title: string; description: string | null; revisions_included: number }[];
   milestones: { title: string; amount_cents: number; due_date: string | null }[];
 };

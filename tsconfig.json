@@ -12,9 +12,10 @@
     "resolveJsonModule": true,
     "noUnusedLocals": true,
     "noFallthroughCasesInSwitch": true,
+    "allowImportingTsExtensions": true,
     "types": ["vite/client", "node"],
     "paths": { "@/*": ["./src/*"] }
   },
-  "include": ["src", "tests", "worker", "vite.config.ts", "vitest.config.ts"],
+  "include": ["src", "tests", "worker", "build", "scripts", "vite.config.ts", "vitest.config.ts"],
   "exclude": ["node_modules", "dist", "tests/e2e"]
 }

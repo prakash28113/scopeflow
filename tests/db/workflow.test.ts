@@ -30,8 +30,26 @@ const projectPayload = {
 async function rpc<T = Json>(role: Role, fn: string, args: unknown[]): Promise<T> {
   const placeholders = args.map((_, i) => `$${i + 1}`).join(", ");
   const rows = await as<{ r: T }>(db, role, `select public.${fn}(${placeholders}) as r`, args);
-  return rows[0].r;
+  const r = rows[0].r as unknown;
+  // Portal functions report link/rate problems as { error, message } (so their counters commit).
+  if (fn.startsWith("portal_") && r && typeof r === "object" && "error" in (r as Json)) {
+    throw Object.assign(new Error(String((r as Json).message)), { code: (r as Json).error });
+  }
+  return r as T;
 }
+
+/** Calls a portal function as anon with gateway-style request headers; returns the raw result. */
+async function portalWithHeaders(headers: Record<string, string>, fn: string, args: unknown[]): Promise<Json> {
+  const placeholders = args.map((_, i) => `$${i + 1}`).join(", ");
+  return db.transaction(async (tx) => {
+    await tx.exec("set local role anon");
+    await tx.query("select set_config('request.headers', $1, true)", [JSON.stringify(headers)]);
+    const res = await tx.query<{ r: Json }>(`select public.${fn}(${placeholders}) as r`, args);
+    return res.rows[0].r;
+  });
+}
+
+const ipKey = (ip: string) => createHash("sha256").update(ip).digest("hex").slice(0, 32);
 
 async function createProject(owner: Role) {
   const id = await rpc<string>(owner, "save_project", [null, JSON.stringify(projectPayload)]);
@@ -186,7 +204,9 @@ describe("main workflow", () => {
     expect(logoAfter.revisions_used).toBe(2);
 
     // Classification cannot be tampered with afterwards.
-    await expect(db.query("update revision_requests set in_scope = true where id = $1", [r3.id])).rejects.toThrow(
+    const [flagged] = (await db.query<Json>(
+      "select id from revision_requests where project_id = $1 and kind = 'revision' and not in_scope", [projectId])).rows;
+    await expect(db.query("update revision_requests set in_scope = true where id = $1", [flagged.id])).rejects.toThrow(
       /immutable/,
     );
   });
@@ -372,7 +392,16 @@ describe("security", () => {
 
   it("anon cannot call freelancer functions or internal helpers", async () => {
     await expect(as(db, anon, "select public.send_scope(gen_random_uuid())")).rejects.toThrow(/permission denied/);
-    await expect(as(db, anon, "select public._portal_project('x', false)")).rejects.toThrow(/permission denied/);
+    for (const sql of [
+      "select * from public._portal_gate('x', false, false)",
+      "select public._rate_hit('x', 60, 1)",
+      "select public._trusted_client_ip()",
+      "select public._issue_link(gen_random_uuid(), 30)",
+      "select public._new_token()",
+    ]) {
+      await expect(as(db, anon, sql)).rejects.toThrow(/permission denied/);
+      await expect(as(db, alice, sql)).rejects.toThrow(/permission denied/);
+    }
     await expect(as(db, alice, "select public._log(gen_random_uuid(), 'system', null, 'x', 'x')")).rejects.toThrow(
       /permission denied/,
     );
@@ -515,5 +544,104 @@ describe("in-app notifications", () => {
 
   it("health check is public and reveals nothing", async () => {
     expect(await rpc<string>(anon, "health", [])).toBe("ok");
+  });
+});
+
+describe("public portal abuse limits", () => {
+  it("counts failed link lookups even though the call fails, and locks out the IP after 20", async () => {
+    const { id, token } = await createProject(bob);
+    await rpc(bob, "send_scope", [id, 30]);
+    const attacker = { "cf-connecting-ip": "198.51.100.7" };
+    for (let i = 0; i < 20; i++) {
+      const r = await portalWithHeaders(attacker, "portal_view", ["Z".repeat(43)]);
+      expect(r.error).toBe("invalid_link");
+    }
+    const [row] = (await db.query<Json>("select hits from portal_rate_limits where bucket = $1", ["fail:" + ipKey("198.51.100.7")])).rows;
+    expect(row.hits).toBe(20);
+    // Locked out — even with a valid token — for the rest of the hour.
+    expect((await portalWithHeaders(attacker, "portal_view", [token])).error).toBe("rate_limited");
+    // Other clients are unaffected.
+    const ok = await portalWithHeaders({ "cf-connecting-ip": "203.0.113.50" }, "portal_view", [token]);
+    expect(ok.error).toBeUndefined();
+    expect((ok.project as Json).title).toBe(projectPayload.title);
+  });
+
+  it("never trusts X-Forwarded-For for limits, so nobody can lock out someone else's IP", async () => {
+    const { token } = await createProject(bob);
+    for (let i = 0; i < 25; i++) {
+      await portalWithHeaders({ "x-forwarded-for": "192.0.2.99" }, "portal_view", ["Q".repeat(43)]);
+    }
+    const rows = (await db.query<Json>("select * from portal_rate_limits where bucket like $1", ["%" + ipKey("192.0.2.99") + "%"])).rows;
+    expect(rows).toHaveLength(0);
+    const r = await portalWithHeaders({ "cf-connecting-ip": "192.0.2.99" }, "portal_view", [token]);
+    expect(r.error).toBeUndefined();
+  });
+
+  it("caps all portal calls per IP (300 per 10 minutes)", async () => {
+    const { token } = await createProject(bob);
+    const ip = "203.0.113.77";
+    await db.query(
+      "insert into portal_rate_limits (bucket, window_start, hits) values ($1, public._window_start(600), 300)",
+      ["ip:" + ipKey(ip)],
+    );
+    expect((await portalWithHeaders({ "cf-connecting-ip": ip }, "portal_view", [token])).error).toBe("rate_limited");
+    expect((await portalWithHeaders({ "x-real-ip": "203.0.113.78" }, "portal_view", [token])).error).toBeUndefined();
+  });
+
+  it("caps reads per link (300 per 10 minutes), from any number of IPs", async () => {
+    const { id, token } = await createProject(bob);
+    const [link] = (await db.query<Json>("select id from share_links where project_id = $1 and revoked_at is null", [id])).rows;
+    for (let i = 0; i < 300; i++) await view(token);
+    await expect(view(token)).rejects.toThrow(/Too many requests/);
+    expect((await db.query<Json>("select hits from portal_rate_limits where bucket = $1", ["lr:" + link.id])).rows[0].hits).toBe(301);
+  });
+
+  it("caps writes per link (30 per hour) on every client action", async () => {
+    const { id, token } = await createProject(bob);
+    await rpc(bob, "send_scope", [id, 30]);
+    const v = await view(token);
+    const [link] = (await db.query<Json>("select id from share_links where project_id = $1 and revoked_at is null", [id])).rows;
+    await db.query("insert into portal_rate_limits (bucket, window_start, hits) values ($1, public._window_start(3600), 30)", ["lw:" + link.id]);
+    await expect(
+      rpc(anon, "portal_decide_scope", [token, (v.snapshot as Json).id, "approved", "Dana", null]),
+    ).rejects.toThrow(/Too many requests/);
+    expect(await view(token)).toBeTruthy(); // reads still allowed
+  });
+
+  it("stores only hashed IPs, keeps counters private, and purges old windows", async () => {
+    const buckets = (await db.query<{ bucket: string }>("select bucket from portal_rate_limits")).rows.map((r) => r.bucket);
+    expect(buckets.length).toBeGreaterThan(0);
+    for (const b of buckets) expect(b).not.toMatch(/\d+\.\d+\.\d+\.\d+/);
+    await expect(as(db, anon, "select * from portal_rate_limits")).rejects.toThrow(/permission denied/);
+    await expect(as(db, bob, "select * from portal_rate_limits")).rejects.toThrow(/permission denied/);
+    await db.query("insert into portal_rate_limits (bucket, window_start, hits) values ('old', now() - interval '2 days', 1)");
+    expect(await rpc<string>(anon, "health", [])).toBe("ok");
+    expect((await db.query("select 1 from portal_rate_limits where bucket = 'old'")).rows).toHaveLength(0);
+  });
+});
+
+describe("public responses expose no internal identifiers", () => {
+  it("client decision and request responses return only UI fields", async () => {
+    const carol2 = await createUser(db, "dave@example.com", "Dave");
+    const { id, token } = await createProject(carol2);
+    await rpc(carol2, "send_scope", [id, 30]);
+    const v = await view(token);
+    const scope = await rpc<Json>(anon, "portal_decide_scope", [token, (v.snapshot as Json).id, "approved", "Dana", null]);
+    expect(Object.keys(scope).sort()).toEqual(["decision", "ok", "version"]);
+
+    const deliverable = ((await view(token)).deliverables as Json[])[0];
+    const req = await rpc<Json>(anon, "portal_request_revision", [token, "revision", deliverable.id, "tweak", "Dana"]);
+    expect(Object.keys(req).sort()).toEqual(["in_scope", "ok", "revision_number", "revisions_included"]);
+
+    const coId = await rpc<string>(carol2, "create_change_order", [id, JSON.stringify({ title: "Extra", pricing_type: "fixed", amount_cents: 100 })]);
+    const co = await rpc<Json>(anon, "portal_decide_change_order", [token, coId, "approved", "Dana", null]);
+    expect(Object.keys(co).sort()).toEqual(["decision", "number", "ok"]);
+
+    const all = JSON.stringify([scope, req, co, await view(token)]);
+    expect(all).not.toContain(carol2.id);
+    expect(all).not.toContain(id);
+    expect(all).not.toContain("owner_id");
+    expect(all).not.toContain("dave@example.com");
+    expect(all).not.toContain("dana@northwind.example"); // not even the client's own email
   });
 });

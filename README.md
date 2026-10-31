@@ -11,6 +11,7 @@ update → milestones are marked paid (recorded manually).
 
 Stack: Vite · React 19 · React Router 7 · TanStack Query · Tailwind CSS 4 · Supabase (Postgres + Auth) ·
 Cloudflare Workers (static assets + a tiny cron Worker). No email provider, no paid services.
+Security review and verification: [FINAL_AUDIT.md](FINAL_AUDIT.md).
 
 ---
 
@@ -70,15 +71,19 @@ What runs where on the free plan:
 ## 4. Tests
 
 ```bash
-npm test            # unit + database tests (real migration on in-process Postgres)
+npm test               # unit + database tests (real migration on in-process Postgres)
 npm run typecheck
-npm run build
+npm run audit:secrets  # build with a public test config, scan build output + repo for secrets
+npm run build          # needs VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY
 ```
 
 - `tests/db/` — the whole workflow, scope checks, pricing, immutability, RLS isolation, privilege checks,
-  token hashing/expiry/rotation/revocation, rate limiting, beta allowlist, notifications.
+  token hashing/expiry/rotation/revocation, portal abuse limits (per IP, per link, failed-lookup
+  lockout, spoofed-header resistance), minimal public responses, beta allowlist, notifications.
+  `permissions.test.ts` audits every table, policy and function grant from the database catalog.
 - `tests/unit/` — money parsing, pricing (cross-checked against Postgres rounding), validation,
-  client-link parsing, redirects, error filtering, the Worker.
+  client-link parsing, redirects, error filtering, the Worker, the CSP builder (with and without
+  Turnstile), the portal error wrapper and the secret scanner.
 - `tests/e2e/` — the built app in **Cloudflare's runtime** (`wrangler dev`) with Chrome, as freelancer
   (desktop) and client (phone), plus link replacement/revocation, malformed links, cross-account and
   signed-out checks, and a no-horizontal-scroll check on mobile. Uses a local Supabase stand-in
@@ -89,7 +94,14 @@ npm run build
   POSTGREST_BIN=/path/to/postgrest CHROME_PATH=/path/to/chrome tests/e2e/run.sh
   ```
 
-## 5. Deliberately not in this MVP
+## 5. Public portal limits
+
+All public client-portal calls are rate-limited in the database (details in ARCHITECTURE.md §4):
+300 calls per IP per 10 min; 20 failed link lookups per IP per hour (then blocked for the hour);
+per link 300 reads per 10 min and 30 writes per hour; 10 change requests per project per hour.
+Clients who hit a limit see "Too many requests — please wait a few minutes".
+
+## 6. Deliberately not in this MVP
 
 - Email of any kind (sign-up confirmation, password reset, notifications). Notifications are in-app.
 - File uploads / proofs.

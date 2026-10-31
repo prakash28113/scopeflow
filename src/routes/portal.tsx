@@ -3,6 +3,7 @@ import { Alert, Card, Logo, Meter, Tag } from "@/components/ui";
 import { PageSpinner } from "@/components/app-shell";
 import { usePortal } from "@/lib/queries";
 import { tokenFromHash } from "@/lib/portal-link";
+import type { PortalError } from "@/lib/portal-rpc";
 import { formatMoney } from "@/lib/money";
 import { formatDate, formatDateTime, pluralize, shortHash, STATUS_LABEL } from "@/lib/format";
 import { currentDueDate } from "@/lib/pricing";
@@ -38,17 +39,22 @@ export default function PortalPage() {
   if (token && q.isLoading) return <PageSpinner />;
   const v = q.data;
   if (!token || !v) {
-    const err = q.error as { code?: string; message?: string } | null;
-    const expired = err?.code === "28000" && /expired/i.test(err.message ?? "");
-    const offline = err && err.code !== "28000";
+    const err = q.error as PortalError | null;
+    const expired = err?.kind === "expired_link";
+    const limited = err?.kind === "rate_limited";
+    const offline = Boolean(err) && !err?.kind;
     return (
       <Shell>
         <div className="py-16 text-center">
-          <h1 className="text-xl font-semibold">{expired ? "This link has expired" : offline ? "Couldn't load the project" : "This link isn't working"}</h1>
+          <h1 className="text-xl font-semibold">
+            {expired ? "This link has expired" : limited ? "Too many requests" : offline ? "Couldn't load the project" : "This link isn't working"}
+          </h1>
           <p className="mx-auto mt-2 max-w-sm text-sm text-muted">
             {expired
               ? "Ask your freelancer to send you a new link."
-              : offline
+              : limited
+                ? "Please wait a few minutes, then reload the page."
+                : offline
                 ? "Check your connection and reload the page."
                 : "It may have been replaced or revoked, or copied incompletely. Ask your freelancer for the current project link."}
           </p>

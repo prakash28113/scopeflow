@@ -2,6 +2,7 @@ import { defineConfig, loadEnv, type Plugin } from "vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import { fileURLToPath } from "node:url";
+import { buildHeadersFile } from "./build/security-headers.ts";
 
 /**
  * Emits dist/_headers for Cloudflare static assets. The CSP is pinned to the
@@ -12,41 +13,9 @@ function securityHeaders(env: Record<string, string>): Plugin {
     name: "scopeflow-security-headers",
     apply: "build",
     generateBundle() {
-      const supabaseUrl = env.VITE_SUPABASE_URL;
-      if (!supabaseUrl) throw new Error("VITE_SUPABASE_URL must be set when building");
-      const supabase = new URL(supabaseUrl).origin;
-      const turnstile = env.VITE_TURNSTILE_SITE_KEY ? " https://challenges.cloudflare.com" : "";
-      const csp = [
-        "default-src 'self'",
-        `script-src 'self'${turnstile}`,
-        "style-src 'self' 'unsafe-inline'",
-        "img-src 'self' data:",
-        "font-src 'self'",
-        `connect-src 'self' ${supabase}`,
-        `frame-src ${turnstile ? turnstile.trim() : "'none'"}`,
-        "frame-ancestors 'none'",
-        "base-uri 'none'",
-        "form-action 'self'",
-        "object-src 'none'",
-      ].join("; ");
-      const headers = `/*
-  Content-Security-Policy: ${csp}
-  X-Content-Type-Options: nosniff
-  X-Frame-Options: DENY
-  Referrer-Policy: strict-origin-when-cross-origin
-  Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=()
-  Strict-Transport-Security: max-age=31536000; includeSubDomains
-  Cross-Origin-Opener-Policy: same-origin
-
-/p
-  Referrer-Policy: no-referrer
-  X-Robots-Tag: noindex, nofollow
-  Cache-Control: no-store
-
-/assets/*
-  Cache-Control: public, max-age=31536000, immutable
-`;
-      this.emitFile({ type: "asset", fileName: "_headers", source: headers });
+      if (!env.VITE_SUPABASE_URL) throw new Error("VITE_SUPABASE_URL must be set when building");
+      const source = buildHeadersFile({ supabaseUrl: env.VITE_SUPABASE_URL, turnstile: Boolean(env.VITE_TURNSTILE_SITE_KEY) });
+      this.emitFile({ type: "asset", fileName: "_headers", source });
     },
   };
 }

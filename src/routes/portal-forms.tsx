@@ -5,7 +5,7 @@ import { SubmitButton } from "@/components/form-bits";
 import { useToast } from "@/components/toast";
 import { changeOrderDecisionSchema, revisionRequestSchema, scopeDecisionSchema } from "@/lib/validation";
 import { useAction } from "@/lib/use-action";
-import { portalClient } from "@/lib/supabase";
+import { portalRpc } from "@/lib/portal-rpc";
 
 /** Portal form helper: on success, confirm and refresh the portal so the page shows the new state. */
 function usePortalAction(token: string) {
@@ -59,7 +59,7 @@ export function ScopeDecisionForm({ token, snapshotId, clientName }: { token: st
   async function onSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const res = await a.run(scopeDecisionSchema, formData(e), (d) =>
-      portalClient.rpc("portal_decide_scope", {
+      portalRpc("portal_decide_scope", {
         p_token: token,
         p_snapshot_id: d.snapshotId,
         p_decision: d.decision,
@@ -116,7 +116,7 @@ export function ChangeOrderDecisionForm({ token, changeOrderId, clientName }: { 
   async function onSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const res = await a.run(changeOrderDecisionSchema, formData(e), (d) =>
-      portalClient.rpc("portal_decide_change_order", {
+      portalRpc("portal_decide_change_order", {
         p_token: token,
         p_change_order_id: d.changeOrderId,
         p_decision: d.decision,
@@ -181,7 +181,7 @@ export function RevisionRequestForm({
   async function onSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const res = await a.run(revisionRequestSchema, formData(e), (d) =>
-      portalClient.rpc("portal_request_revision", {
+      portalRpc("portal_request_revision", {
         p_token: token,
         p_kind: d.kind,
         p_deliverable_id: d.kind === "revision" ? d.deliverableId : null,

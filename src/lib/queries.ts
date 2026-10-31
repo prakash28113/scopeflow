@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
-import { portalClient, supabase } from "./supabase";
+import { supabase } from "./supabase";
+import { portalRpc } from "./portal-rpc";
 import type {
   ActivityEntry,
   ChangeOrder,
@@ -125,6 +126,10 @@ export function usePortal(token: string | null) {
     enabled: Boolean(token),
     retry: false,
     refetchOnWindowFocus: true,
-    queryFn: async () => unwrap(await portalClient.rpc("portal_view", { p_token: token })) as PortalView,
+    queryFn: async () => {
+      const { data, error } = await portalRpc<PortalView>("portal_view", { p_token: token });
+      if (error) throw error;
+      return data as PortalView;
+    },
   });
 }
