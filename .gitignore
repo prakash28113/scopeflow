@@ -1,0 +1,10 @@
+node_modules
+.next
+.env*.local
+.env
+*.tsbuildinfo
+next-env.d.ts
+.vercel
+tests/e2e/keys.json
+tests/e2e/postgrest.conf
+tests/e2e/shots
