@@ -99,8 +99,13 @@ async function body(req) {
   const s = Buffer.concat(chunks).toString();
   try { return s ? JSON.parse(s) : {}; } catch { return {}; }
 }
+const CORS = {
+  "access-control-allow-origin": "*",
+  "access-control-allow-headers": "authorization, apikey, content-type, x-client-info, x-supabase-api-version, accept-profile, content-profile, prefer",
+  "access-control-allow-methods": "GET, POST, PUT, PATCH, DELETE, OPTIONS",
+};
 function json(res, status, obj) {
-  res.writeHead(status, { "content-type": "application/json" });
+  res.writeHead(status, { "content-type": "application/json", ...CORS });
   res.end(JSON.stringify(obj));
 }
 
@@ -137,7 +142,7 @@ async function auth(req, res, url) {
     if (!r.rows.length) return json(res, 404, { code: 404, msg: "User not found" });
     return json(res, 200, userObj(r.rows[0]));
   }
-  if (path === "/logout") { res.writeHead(204); return res.end(); }
+  if (path === "/logout") { res.writeHead(204, CORS); return res.end(); }
   if (path === "/recover") return json(res, 200, {});
   return json(res, 404, { msg: `auth shim: ${req.method} ${path} not implemented` });
 }
@@ -147,14 +152,19 @@ http
   .createServer(async (req, res) => {
     const url = new URL(req.url, "http://localhost");
     try {
+      if (req.method === "OPTIONS") {
+        // Like Supabase: allow whatever headers the client asks for.
+        res.writeHead(204, { ...CORS, "access-control-allow-headers": req.headers["access-control-request-headers"] ?? CORS["access-control-allow-headers"] });
+        return res.end();
+      }
       if (url.pathname.startsWith("/auth/v1")) return await auth(req, res, url);
       if (url.pathname.startsWith("/rest/v1")) {
-        const headers = { ...req.headers, host: "127.0.0.1:3001" };
+        const headers = { ...req.headers, host: "127.0.0.1:3001", "cf-connecting-ip": req.socket.remoteAddress };
         // Supabase sends the anon/service key as Authorization when no session exists.
         if (!headers.authorization && headers.apikey) headers.authorization = `Bearer ${headers.apikey}`;
         const up = http.request(
           { host: "127.0.0.1", port: 3001, method: req.method, path: url.pathname.replace("/rest/v1", "") + url.search, headers },
-          (r) => { res.writeHead(r.statusCode, r.headers); r.pipe(res); },
+          (r) => { res.writeHead(r.statusCode, { ...r.headers, ...CORS }); r.pipe(res); },
         );
         up.on("error", (e) => json(res, 502, { message: String(e) }));
         req.pipe(up);

@@ -1,0 +1,12 @@
+{
+  "name": "scopeflow-e2e",
+  "private": true,
+  "type": "module",
+  "description": "End-to-end test tooling (kept separate from the app's dependencies)",
+  "dependencies": {
+    "@electric-sql/pglite": "0.5.14",
+    "@electric-sql/pglite-socket": "^0.2.17",
+    "playwright": "1.63.0",
+    "ws": "^8.18.0"
+  }
+}

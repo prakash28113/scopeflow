@@ -7,7 +7,7 @@ import { PGlite } from "@electric-sql/pglite";
 import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { randomUUID, randomBytes, createHash } from "node:crypto";
+import { randomUUID } from "node:crypto";
 
 export const SUPABASE_STUB = `
   create role anon nologin;
@@ -77,11 +77,6 @@ export async function createUser(db: PGlite, email: string, fullName = "Test Use
   return { kind: "user" as const, id };
 }
 
-export function newToken() {
-  const token = randomBytes(32).toString("base64url");
-  const hash = createHash("sha256").update(token, "utf8").digest("hex");
-  return { token, hash };
-}
 
 export const anon: Role = { kind: "anon" };
 export const service: Role = { kind: "service" };

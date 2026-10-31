@@ -1,42 +1,26 @@
 import { describe, expect, it } from "vitest";
-import { PGlite } from "@electric-sql/pglite";
-import { decryptToken, encryptToken, generateToken, hashToken, isPlausibleToken } from "@/lib/tokens";
 import { safeNext } from "@/lib/safe-redirect";
-import { escapeHtml, renderEmail } from "@/lib/email";
 import { userMessage } from "@/lib/errors";
+import { portalUrl, tokenFromHash, TOKEN_PATTERN } from "@/lib/portal-link";
+import { keepAlive } from "../../worker/index";
+import worker from "../../worker/index";
 
-const secret = Buffer.alloc(32, 7).toString("base64");
-
-describe("share tokens", () => {
-  it("are 256-bit and URL-safe", () => {
-    const t = generateToken();
-    expect(t).toMatch(/^[A-Za-z0-9_-]{43}$/);
-    expect(isPlausibleToken(t)).toBe(true);
-    expect(new Set(Array.from({ length: 200 }, generateToken)).size).toBe(200);
-  });
-  it("hash identically in Node and PostgreSQL", async () => {
-    const db = new PGlite();
-    const t = generateToken();
-    const r = await db.query<{ h: string }>("select encode(sha256(convert_to($1, 'UTF8')), 'hex') as h", [t]);
-    expect(hashToken(t)).toBe(r.rows[0].h);
-  });
-  it("encrypt and decrypt; tampering is detected", () => {
-    const t = generateToken();
-    const enc = encryptToken(t, secret);
-    expect(enc).not.toContain(t);
-    expect(decryptToken(enc, secret)).toBe(t);
-    const parts = enc.split(".");
-    parts[3] = Buffer.from("x".repeat(43)).toString("base64url");
-    expect(() => decryptToken(parts.join("."), secret)).toThrow();
-    expect(() => decryptToken(enc, Buffer.alloc(32, 8).toString("base64"))).toThrow();
-  });
-  it("requires a 32-byte key", () => {
-    expect(() => encryptToken("x", Buffer.alloc(16).toString("base64"))).toThrow(/32 bytes/);
-  });
-  it("rejects implausible tokens before hitting the database", () => {
-    for (const bad of ["", "short", "a".repeat(200), "../../etc/passwd" + "a".repeat(30), "has space " + "a".repeat(30)]) {
-      expect(isPlausibleToken(bad)).toBe(false);
+describe("client link parsing", () => {
+  const token = "AbCdEfGhIjKlMnOpQrStUvWxYz0123456789-_AbCd"; // 42 chars
+  const good = token + "e"; // 43
+  it("accepts only well-formed 43-character base64url tokens from the fragment", () => {
+    expect(TOKEN_PATTERN.test(good)).toBe(true);
+    expect(tokenFromHash(`#${good}`)).toBe(good);
+    expect(tokenFromHash(good)).toBe(good);
+    for (const bad of ["", "#", `#${token}`, `#${good}x`, "#../../etc/passwd", `#${good.slice(0, 42)}=`, "#<script>alert(1)</script>"]) {
+      expect(tokenFromHash(bad)).toBeNull();
     }
+  });
+  it("puts the token in the fragment so it is never sent to a server", () => {
+    const url = new URL(portalUrl("https://scopeflow.example.workers.dev/", good));
+    expect(url.pathname).toBe("/p");
+    expect(url.search).toBe("");
+    expect(url.hash).toBe(`#${good}`);
   });
 });
 
@@ -49,28 +33,35 @@ describe("redirects", () => {
   });
 });
 
-describe("emails", () => {
-  it("escape user-provided content", () => {
-    expect(escapeHtml(`<script>"x"&'y'</script>`)).toBe("&lt;script&gt;&quot;x&quot;&amp;&#39;y&#39;&lt;/script&gt;");
-    const { html, text } = renderEmail({
-      subject: "s",
-      heading: "<b>Project</b>",
-      paragraphs: ["<img src=x onerror=alert(1)>"],
-      cta: { label: "Open", url: "https://app.example/p/abc?x=1&y=2" },
-    });
-    expect(html).not.toContain("<img");
-    expect(html).not.toContain("<b>Project");
-    expect(html).toContain("&amp;y=2");
-    expect(text).toContain("https://app.example/p/abc?x=1&y=2");
-  });
-});
-
 describe("error messages", () => {
   it("passes through deliberate messages and hides internals", () => {
     expect(userMessage({ code: "55000", message: "Scope is locked" })).toBe("Scope is locked");
+    expect(userMessage({ code: "28000", message: "This link has expired." })).toBe("This link has expired.");
     const original = console.error;
     console.error = () => {};
     expect(userMessage({ code: "XX000", message: "internal: relation secret" })).not.toContain("secret");
+    expect(userMessage({ code: "PGRST202", message: "Could not find the function public.x" })).not.toContain("public.x");
     console.error = original;
+  });
+});
+
+describe("worker", () => {
+  it("returns a JSON 404 for stray API requests", async () => {
+    const res = await worker.fetch();
+    expect(res.status).toBe(404);
+    expect(res.headers.get("content-type")).toBe("application/json");
+    expect(res.headers.get("cache-control")).toBe("no-store");
+  });
+  it("keep-alive calls only the public health function with the anon key", async () => {
+    const calls: { url: string; init: RequestInit }[] = [];
+    const fake = (async (url: string, init: RequestInit) => {
+      calls.push({ url, init });
+      return new Response('"ok"', { status: 200 });
+    }) as unknown as typeof fetch;
+    expect(await keepAlive({ SUPABASE_URL: "https://abc.supabase.co/", SUPABASE_ANON_KEY: "anon" }, fake)).toBe(true);
+    expect(calls[0].url).toBe("https://abc.supabase.co/rest/v1/rpc/health");
+    expect((calls[0].init.headers as Record<string, string>).apikey).toBe("anon");
+    expect(await keepAlive({ SUPABASE_URL: "ftp://bad", SUPABASE_ANON_KEY: "x" }, fake)).toBe(false);
+    expect(calls).toHaveLength(1);
   });
 });

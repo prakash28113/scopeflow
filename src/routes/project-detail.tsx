@@ -1,0 +1,668 @@
+import { useState, type FormEvent, type ReactNode } from "react";
+import { Link, useNavigate, useParams } from "react-router";
+import { useQueryClient } from "@tanstack/react-query";
+import {
+  Alert,
+  Button,
+  Card,
+  CardHeader,
+  EmptyState,
+  Input,
+  LinkButton,
+  Meter,
+  PageHeader,
+  Select,
+  StatusBadge,
+  Tag,
+  buttonClass,
+} from "@/components/ui";
+import { ActionButton } from "@/components/form-bits";
+import { PageSpinner } from "@/components/app-shell";
+import { ShareLinkDialog } from "@/components/share-link-dialog";
+import { useToast } from "@/components/toast";
+import { useProject, type FullProject } from "@/lib/queries";
+import { supabase } from "@/lib/supabase";
+import { call } from "@/lib/use-action";
+import { LINK_VALIDITY_DAYS, portalUrl } from "@/lib/portal-link";
+import { formatMoney } from "@/lib/money";
+import { formatDate, formatDateTime, pluralize, shortHash } from "@/lib/format";
+import { currentDueDate, projectTotals } from "@/lib/pricing";
+import type { ChangeOrder, RevisionRequest, ScopeDecision, ScopeSnapshot, ShareLinkStatus } from "@/lib/types";
+import NotFound from "./not-found";
+
+type NewLink = { url: string; expiresAt: string } | null;
+
+export default function ProjectPage() {
+  const { id } = useParams();
+  const q = useProject(id);
+  const qc = useQueryClient();
+  const toast = useToast();
+  const [newLink, setNewLink] = useState<NewLink>(null);
+  const [linkDays, setLinkDays] = useState<number>(30);
+
+  if (q.isLoading) return <PageSpinner />;
+  if (q.isError) return <Alert>Couldn't load this project. Please refresh.</Alert>;
+  if (!q.data) return <NotFound />;
+
+  const { project: p, snapshots, decisions, revisions, changeOrders, activity, link } = q.data;
+  const pid = p.id;
+  const latest = snapshots[0];
+  const latestDecision = latest ? decisions.find((d) => d.snapshot_id === latest.id) : undefined;
+  const editable = p.status === "draft" || p.status === "changes_requested";
+  const approved = Boolean(p.approved_at);
+  const money = projectTotals(Number(p.budget_cents), Number(p.approved_extras_cents), p.milestones);
+  const due = currentDueDate(p.due_date, p.extra_days);
+  const used = (dId: string) => revisions.filter((r) => r.deliverable_id === dId && r.kind === "revision" && r.in_scope).length;
+  const fmt = (n: number) => formatMoney(n, p.currency);
+
+  /** Runs a database function, reports the result and refreshes the page data. */
+  async function act<T>(fn: () => PromiseLike<{ data: T; error: { code?: string; message?: string } | null }>, success?: string) {
+    const r = await call(fn);
+    if (!r.ok) toast("danger", r.message);
+    else if (success) toast("positive", success);
+    await Promise.all([
+      qc.invalidateQueries({ queryKey: ["project", pid] }),
+      qc.invalidateQueries({ queryKey: ["dashboard"] }),
+    ]);
+    return r;
+  }
+  const showLink = (l: { token: string; expires_at: string }) =>
+    setNewLink({ url: portalUrl(window.location.origin, l.token), expiresAt: l.expires_at });
+
+  async function sendScope() {
+    const r = await act(() => supabase.rpc("send_scope", { p_project_id: pid, p_link_days: linkDays }));
+    if (!r.ok) return;
+    const res = r.data as { version: number; link: { token: string; expires_at: string } | null };
+    if (res.link) {
+      showLink(res.link);
+      toast("positive", `Scope v${res.version} is ready for approval. Share the link with ${p.clients.name}.`);
+    } else {
+      toast("positive", `Scope v${res.version} sent. ${p.clients.name}'s existing link now shows the new version.`);
+    }
+  }
+
+  async function rotate() {
+    const r = await act(() => supabase.rpc("rotate_share_link", { p_project_id: pid, p_expires_in_days: linkDays }));
+    if (r.ok) showLink(r.data as { token: string; expires_at: string });
+  }
+
+  return (
+    <>
+      <ShareLinkDialog link={newLink} clientName={p.clients.name} projectTitle={p.title} onClose={() => setNewLink(null)} />
+      <PageHeader
+        eyebrow={
+          <Link to="/dashboard" className="hover:text-ink">
+            ← Dashboard
+          </Link>
+        }
+        title={p.title}
+        description={
+          <span className="inline-flex flex-wrap items-center gap-2">
+            <StatusBadge status={p.status} />
+            <span className="break-all">
+              {p.clients.name}
+              {p.clients.company ? ` · ${p.clients.company}` : ""} · {p.clients.email}
+            </span>
+          </span>
+        }
+        actions={
+          <>
+            {editable ? (
+              <LinkButton to={`/projects/${pid}/edit`} variant="secondary">
+                Edit scope
+              </LinkButton>
+            ) : null}
+            {editable ? (
+              <ActionButton onAction={sendScope} pendingLabel="Sending…">
+                {p.status === "changes_requested" ? "Send revised scope" : "Send to client"}
+              </ActionButton>
+            ) : null}
+            {p.status === "active" ? <LinkButton to={`/projects/${pid}/change-orders/new`}>New change order</LinkButton> : null}
+          </>
+        }
+      />
+
+      <NextStep p={p} latest={latest} decision={latestDecision} revisions={revisions} changeOrders={changeOrders} />
+
+      <div className="grid gap-6 lg:grid-cols-[1fr_360px]">
+        <div className="min-w-0 space-y-6">
+          {/* -------------------------------------------- scope */}
+          <Card>
+            <CardHeader
+              title="Scope"
+              description={
+                approved
+                  ? `Approved ${formatDate(p.approved_at)} — changes go through change orders.`
+                  : editable
+                    ? "Draft — editable until your client approves it."
+                    : "Locked while your client reviews it."
+              }
+            />
+            {p.summary ? <p className="whitespace-pre-line border-b border-line px-5 py-4 text-sm text-ink-2">{p.summary}</p> : null}
+            <ul className="divide-y divide-line">
+              {p.deliverables.map((d) => {
+                const u = used(d.id);
+                return (
+                  <li key={d.id} className="px-5 py-4">
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium">{d.title}</p>
+                        {d.description ? <p className="mt-0.5 whitespace-pre-line text-[13px] text-muted">{d.description}</p> : null}
+                      </div>
+                      <p className="num shrink-0 text-[13px] text-ink-2">
+                        {approved ? `${u} / ${d.revisions_included}` : pluralize(d.revisions_included, "revision")}
+                      </p>
+                    </div>
+                    {approved ? (
+                      <div className="mt-3 max-w-xs">
+                        <Meter value={u} max={d.revisions_included} tone={u >= d.revisions_included ? "warning" : "accent"} />
+                      </div>
+                    ) : null}
+                  </li>
+                );
+              })}
+            </ul>
+          </Card>
+
+          {/* -------------------------------------------- requests */}
+          {approved ? (
+            <Card>
+              <div id="requests" className="scroll-mt-20" />
+              <CardHeader title="Revision & change requests" description="Each request is checked against the approved scope when the client submits it." />
+              {revisions.length === 0 ? (
+                <EmptyState title="No requests yet" body="Your client can request revisions or new work from their project link." />
+              ) : (
+                <ul className="divide-y divide-line">
+                  {revisions.map((r) => {
+                    const d = p.deliverables.find((x) => x.id === r.deliverable_id);
+                    const linkedCo = changeOrders.find((c) => c.revision_request_id === r.id && c.status !== "withdrawn");
+                    return (
+                      <li key={r.id} className="px-5 py-4">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <p className="text-sm font-medium">{r.kind === "revision" ? `Revision · ${d?.title ?? "Deliverable"}` : "New work request"}</p>
+                          {r.in_scope ? (
+                            <Tag tone="accent">
+                              In scope · {r.revision_number} of {d?.revisions_included}
+                            </Tag>
+                          ) : (
+                            <Tag tone="warning">{r.kind === "revision" ? "Over revision limit" : "Outside original scope"}</Tag>
+                          )}
+                          <Tag tone={r.status === "resolved" ? "positive" : "neutral"}>
+                            {r.status === "open" ? "Open" : r.status === "resolved" ? "Done" : `Change order #${linkedCo?.number ?? ""}`}
+                          </Tag>
+                        </div>
+                        <p className="mt-1.5 whitespace-pre-line break-words text-[13px] text-ink-2">{r.description}</p>
+                        <p className="mt-1 text-[12px] text-muted">
+                          {r.requested_by} · {formatDateTime(r.created_at)}
+                        </p>
+                        {r.resolution_note ? <p className="mt-1 text-[12px] text-muted">Note: {r.resolution_note}</p> : null}
+                        {r.status === "open" && p.status === "active" ? (
+                          <div className="mt-3 flex flex-wrap items-start gap-2">
+                            {!r.in_scope ? (
+                              <LinkButton size="sm" to={`/projects/${pid}/change-orders/new?request=${r.id}`}>
+                                Propose change order
+                              </LinkButton>
+                            ) : null}
+                            <NoteAction
+                              label={r.in_scope ? "Mark done" : "Do it anyway"}
+                              placeholder="Optional note for the client"
+                              maxLength={2000}
+                              onSubmit={(note) =>
+                                act(() => supabase.rpc("resolve_revision", { p_revision_id: r.id, p_note: note }), "Request marked as done.")
+                              }
+                            />
+                          </div>
+                        ) : null}
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </Card>
+          ) : null}
+
+          {/* -------------------------------------------- change orders */}
+          {approved ? (
+            <Card>
+              <CardHeader
+                title="Change orders"
+                description="Out-of-scope work, priced and approved before it starts."
+                action={
+                  p.status === "active" ? (
+                    <LinkButton size="sm" variant="secondary" to={`/projects/${pid}/change-orders/new`}>
+                      New
+                    </LinkButton>
+                  ) : null
+                }
+              />
+              {changeOrders.length === 0 ? (
+                <EmptyState title="No change orders" body="When a client asks for something outside the approved scope, propose a change order here." />
+              ) : (
+                <ul className="divide-y divide-line">
+                  {changeOrders.map((c) => (
+                    <li key={c.id} className="px-5 py-4">
+                      <div className="flex flex-wrap items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium">
+                            #{c.number} · {c.title}
+                          </p>
+                          {c.description ? <p className="mt-0.5 whitespace-pre-line text-[13px] text-muted">{c.description}</p> : null}
+                          <p className="num mt-1 text-[12px] text-muted">
+                            {c.pricing_type === "hourly" && c.hourly_rate_cents !== null ? `${Number(c.hours)} h × ${fmt(Number(c.hourly_rate_cents))} · ` : ""}
+                            {c.additional_days ? `+${pluralize(c.additional_days, "day")} · ` : ""}
+                            Sent {formatDate(c.created_at)}
+                          </p>
+                        </div>
+                        <div className="text-right">
+                          <p className="num text-sm font-semibold">{fmt(Number(c.amount_cents))}</p>
+                          <div className="mt-1">
+                            <CoStatus c={c} />
+                          </div>
+                        </div>
+                      </div>
+                      {c.status === "sent" ? (
+                        <ActionButton
+                          className="mt-3"
+                          size="sm"
+                          variant="ghost"
+                          confirm="Withdraw this change order?"
+                          onAction={() => act(() => supabase.rpc("withdraw_change_order", { p_change_order_id: c.id }), "Change order withdrawn.")}
+                        >
+                          Withdraw
+                        </ActionButton>
+                      ) : null}
+                      {c.status === "approved" && !c.work_completed_at ? (
+                        <ActionButton
+                          className="mt-3"
+                          size="sm"
+                          variant="secondary"
+                          onAction={() =>
+                            act(() => supabase.rpc("complete_change_order_work", { p_change_order_id: c.id }), "Additional work marked as delivered.")
+                          }
+                        >
+                          Mark work delivered
+                        </ActionButton>
+                      ) : null}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </Card>
+          ) : null}
+
+          {/* -------------------------------------------- versions */}
+          <Card>
+            <CardHeader title="Scope versions" description="Every version sent is stored permanently with a fingerprint of its exact content." />
+            {snapshots.length === 0 ? (
+              <p className="px-5 py-6 text-[13px] text-muted">Not sent yet.</p>
+            ) : (
+              <ul className="divide-y divide-line">
+                {snapshots.map((s) => {
+                  const d = decisions.find((x) => x.snapshot_id === s.id);
+                  return (
+                    <li key={s.id} className="flex flex-wrap items-start justify-between gap-3 px-5 py-3.5">
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium">Version {s.version}</p>
+                        <p className="text-[12px] text-muted">
+                          Sent {formatDateTime(s.created_at)} · <span className="font-mono">{shortHash(s.content_hash)}</span>
+                        </p>
+                        {d?.comment ? <p className="mt-1 break-words text-[13px] text-ink-2">“{d.comment}”</p> : null}
+                      </div>
+                      {d ? (
+                        <div className="text-right">
+                          <Tag tone={d.decision === "approved" ? "positive" : "danger"}>{d.decision === "approved" ? "Approved" : "Changes requested"}</Tag>
+                          <p className="mt-1 text-[12px] text-muted">
+                            {d.client_name} · {formatDateTime(d.created_at)}
+                          </p>
+                        </div>
+                      ) : (
+                        <Tag>{s.id === latest?.id && p.status === "awaiting_approval" ? "Awaiting decision" : "Superseded"}</Tag>
+                      )}
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </Card>
+        </div>
+
+        {/* ================================================ sidebar */}
+        <div className="min-w-0 space-y-6">
+          <LinkCard
+            link={link}
+            sent={snapshots.length > 0}
+            cancelled={p.status === "cancelled"}
+            days={linkDays}
+            setDays={setLinkDays}
+            onRotate={rotate}
+            onRevoke={() => act(() => supabase.rpc("revoke_share_link", { p_project_id: pid }), "Client link revoked.")}
+          />
+
+          <Card>
+            <CardHeader title="Payments" description="Tracking only — record payments you've received." />
+            <dl className="num grid grid-cols-2 gap-x-4 gap-y-3 border-b border-line px-5 py-4 text-[13px]" data-testid="payment-totals">
+              <dt className="text-muted">Original budget</dt>
+              <dd className="text-right">{fmt(money.original)}</dd>
+              <dt className="text-muted">Approved changes</dt>
+              <dd className="text-right">{money.extras ? `+ ${fmt(money.extras)}` : "—"}</dd>
+              <dt className="font-medium">Contract total</dt>
+              <dd className="text-right font-semibold">{fmt(money.contract)}</dd>
+              <dt className="text-muted">Received</dt>
+              <dd className="text-right text-positive">{fmt(money.paid)}</dd>
+              <dt className="text-muted">Outstanding</dt>
+              <dd className="text-right">{fmt(money.outstanding)}</dd>
+            </dl>
+            {money.contract > 0 ? (
+              <div className="border-b border-line px-5 py-3">
+                <Meter value={money.paid} max={money.contract} tone="positive" />
+              </div>
+            ) : null}
+            {p.milestones.length === 0 ? (
+              <p className="px-5 py-4 text-[13px] text-muted">No milestones scheduled.</p>
+            ) : (
+              <ul className="divide-y divide-line">
+                {p.milestones.map((m) => (
+                  <li key={m.id} className="px-5 py-3.5">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="text-[13px] font-medium">{m.title}</p>
+                        <p className="break-words text-[12px] text-muted">
+                          {m.status === "paid"
+                            ? `Paid ${formatDate(m.paid_at)}${m.payment_note ? ` · ${m.payment_note}` : ""}`
+                            : m.due_date
+                              ? `Due ${formatDate(m.due_date)}`
+                              : "No due date"}
+                        </p>
+                      </div>
+                      <p className="num text-[13px] font-medium">{fmt(Number(m.amount_cents))}</p>
+                    </div>
+                    {approved && p.status !== "cancelled" ? (
+                      m.status === "paid" ? (
+                        <ActionButton
+                          className="mt-2"
+                          size="sm"
+                          variant="ghost"
+                          confirm="Remove the paid mark from this milestone?"
+                          onAction={() =>
+                            act(() => supabase.rpc("set_milestone_paid", { p_milestone_id: m.id, p_paid: false, p_note: null }), "Payment mark removed.")
+                          }
+                        >
+                          Undo paid
+                        </ActionButton>
+                      ) : (
+                        <div className="mt-2">
+                          <NoteAction
+                            label="Mark paid"
+                            submitLabel="Save"
+                            placeholder="Reference (optional)"
+                            maxLength={500}
+                            onSubmit={(note) =>
+                              act(() => supabase.rpc("set_milestone_paid", { p_milestone_id: m.id, p_paid: true, p_note: note }), "Payment recorded.")
+                            }
+                          />
+                        </div>
+                      )
+                    ) : null}
+                  </li>
+                ))}
+              </ul>
+            )}
+            {money.unscheduled > 0 && p.milestones.length ? (
+              <p className="num border-t border-line px-5 py-3 text-[12px] text-warning">{fmt(money.unscheduled)} of the contract isn&apos;t covered by a milestone.</p>
+            ) : null}
+          </Card>
+
+          <Card>
+            <CardHeader title="Timeline" />
+            <dl className="grid grid-cols-2 gap-x-4 gap-y-3 px-5 py-4 text-[13px]">
+              <dt className="text-muted">Start</dt>
+              <dd className="text-right">{formatDate(p.start_date)}</dd>
+              <dt className="text-muted">Original due date</dt>
+              <dd className="text-right">{formatDate(p.due_date)}</dd>
+              <dt className="text-muted">Extensions</dt>
+              <dd className="text-right">{p.extra_days ? `+ ${pluralize(p.extra_days, "day")}` : "—"}</dd>
+              <dt className="font-medium">Current due date</dt>
+              <dd className="text-right font-semibold">{formatDate(due)}</dd>
+            </dl>
+          </Card>
+
+          <Card>
+            <CardHeader title="Activity" />
+            <ol className="max-h-[480px] space-y-3.5 overflow-y-auto px-5 py-4">
+              {activity.map((a) => (
+                <li key={a.id} className="relative pl-4 text-[13px]">
+                  <span className={`absolute left-0 top-[7px] size-1.5 rounded-full ${a.actor === "client" ? "bg-accent" : "bg-line-strong"}`} aria-hidden />
+                  <p className="text-ink-2">{a.summary}</p>
+                  <p className="text-[12px] text-muted">{formatDateTime(a.created_at)}</p>
+                </li>
+              ))}
+            </ol>
+          </Card>
+
+          <div className="flex flex-wrap gap-2">
+            {p.status === "awaiting_approval" ? (
+              <ActionButton
+                size="sm"
+                variant="secondary"
+                confirm="Recall this scope to edit it? Your client can't approve it until you send it again."
+                onAction={() => act(() => supabase.rpc("recall_scope", { p_project_id: pid }), "Scope recalled. Edit it and send it again when ready.")}
+              >
+                Recall scope to edit
+              </ActionButton>
+            ) : null}
+            {p.status === "active" ? (
+              <ActionButton
+                size="sm"
+                variant="secondary"
+                confirm="Mark this project as completed?"
+                onAction={() => act(() => supabase.rpc("complete_project", { p_project_id: pid }), "Project marked as completed.")}
+              >
+                Mark completed
+              </ActionButton>
+            ) : null}
+            {p.status === "draft" && snapshots.length === 0 ? (
+              <DeleteDraft id={pid} />
+            ) : p.status !== "completed" && p.status !== "cancelled" ? (
+              <ActionButton
+                size="sm"
+                variant="danger"
+                confirm="Cancel this project? Records are kept, but no further approvals can be made."
+                onAction={() => act(() => supabase.rpc("cancel_project", { p_project_id: pid }), "Project cancelled. Pending change orders were withdrawn.")}
+              >
+                Cancel project
+              </ActionButton>
+            ) : null}
+          </div>
+        </div>
+      </div>
+    </>
+  );
+}
+
+function DeleteDraft({ id }: { id: string }) {
+  const toast = useToast();
+  const qc = useQueryClient();
+  const navigate = useNavigate();
+  return (
+    <ActionButton
+      size="sm"
+      variant="danger"
+      confirm="Delete this draft permanently?"
+      onAction={async () => {
+        const r = await call(() => supabase.rpc("delete_draft_project", { p_project_id: id }));
+        if (!r.ok) return toast("danger", r.message);
+        await qc.invalidateQueries();
+        toast("info", "Draft deleted.");
+        navigate("/dashboard", { replace: true });
+      }}
+    >
+      Delete draft
+    </ActionButton>
+  );
+}
+
+function LinkCard({
+  link,
+  sent,
+  cancelled,
+  days,
+  setDays,
+  onRotate,
+  onRevoke,
+}: {
+  link: ShareLinkStatus | null;
+  sent: boolean;
+  cancelled: boolean;
+  days: number;
+  setDays: (d: number) => void;
+  onRotate: () => Promise<unknown>;
+  onRevoke: () => Promise<unknown>;
+}) {
+  const expired = link ? Date.parse(link.expires_at) <= Date.now() : false;
+  let status: ReactNode;
+  if (link && !expired)
+    status = (
+      <p className="text-[13px] text-ink-2">
+        <span className="mr-1.5 inline-block size-1.5 rounded-full bg-positive align-middle" aria-hidden />
+        Active · works until <strong className="font-medium">{formatDate(link.expires_at)}</strong>
+        <span className="block text-[12px] text-muted">Created {formatDateTime(link.created_at)}</span>
+      </p>
+    );
+  else if (link && expired) status = <p className="text-[13px] text-danger">Expired on {formatDate(link.expires_at)}. Your client can't open it.</p>;
+  else status = <p className="text-[13px] text-muted">{sent ? "No active link. Your client can't open the project." : "A link is created when you send the scope."}</p>;
+
+  return (
+    <Card>
+      <CardHeader title="Client link" description="Private, no account needed. Shown once when created — only a fingerprint is stored." />
+      <div className="space-y-4 p-5">
+        {status}
+        {!cancelled ? (
+          <div className="space-y-3">
+            <label className="flex items-center justify-between gap-3 text-[13px] text-ink-2">
+              <span>Valid for</span>
+              <Select value={days} onChange={(e) => setDays(Number(e.target.value))} className="h-8 w-auto text-[13px]" aria-label="Link validity">
+                {LINK_VALIDITY_DAYS.map((d) => (
+                  <option key={d} value={d}>
+                    {d} days
+                  </option>
+                ))}
+              </Select>
+            </label>
+            {sent || link ? (
+              <div className="flex flex-wrap gap-2">
+                <ActionButton
+                  size="sm"
+                  variant={link && !expired ? "secondary" : "primary"}
+                  confirm={link && !expired ? "Create a new link? The current link will stop working immediately." : undefined}
+                  onAction={onRotate}
+                >
+                  {link && !expired ? "Replace link" : "Create new link"}
+                </ActionButton>
+                {link && !expired ? (
+                  <ActionButton size="sm" variant="ghost" confirm="Revoke the link? Your client will lose access until you create a new one." onAction={onRevoke}>
+                    Revoke
+                  </ActionButton>
+                ) : null}
+              </div>
+            ) : null}
+          </div>
+        ) : null}
+      </div>
+    </Card>
+  );
+}
+
+function NoteAction({
+  label,
+  submitLabel = "Confirm",
+  placeholder,
+  maxLength,
+  onSubmit,
+}: {
+  label: string;
+  submitLabel?: string;
+  placeholder: string;
+  maxLength: number;
+  onSubmit: (note: string) => Promise<unknown>;
+}) {
+  const [open, setOpen] = useState(false);
+  const [pending, setPending] = useState(false);
+  if (!open)
+    return (
+      <Button type="button" size="sm" variant="secondary" onClick={() => setOpen(true)}>
+        {label}
+      </Button>
+    );
+  return (
+    <form
+      className="flex flex-wrap gap-2"
+      onSubmit={async (e: FormEvent<HTMLFormElement>) => {
+        e.preventDefault();
+        setPending(true);
+        await onSubmit(String(new FormData(e.currentTarget).get("note") ?? "").slice(0, maxLength));
+        setPending(false);
+        setOpen(false);
+      }}
+    >
+      <Input name="note" placeholder={placeholder} className="h-8 w-56 max-w-full text-[13px]" maxLength={maxLength} autoFocus />
+      <Button type="submit" size="sm" disabled={pending}>
+        {pending ? "…" : submitLabel}
+      </Button>
+      <button type="button" className={buttonClass("ghost", "sm")} onClick={() => setOpen(false)}>
+        Cancel
+      </button>
+    </form>
+  );
+}
+
+function CoStatus({ c }: { c: ChangeOrder }) {
+  if (c.status === "sent") return <Tag tone="warning">Awaiting client</Tag>;
+  if (c.status === "approved") return <Tag tone="positive">{c.work_completed_at ? "Approved · delivered" : "Approved"}</Tag>;
+  if (c.status === "rejected") return <Tag tone="danger">Declined</Tag>;
+  return <Tag>Withdrawn</Tag>;
+}
+
+function NextStep({
+  p,
+  latest,
+  decision,
+  revisions,
+  changeOrders,
+}: {
+  p: FullProject;
+  latest?: ScopeSnapshot;
+  decision?: ScopeDecision;
+  revisions: RevisionRequest[];
+  changeOrders: ChangeOrder[];
+}) {
+  let content: ReactNode = null;
+  let tone: "info" | "warning" | "danger" = "info";
+  if (p.status === "draft") {
+    content = latest
+      ? "You recalled the scope. Edit it if needed, then send it again."
+      : "Review the scope, then send it. You'll get a private link to share with your client for approval.";
+  } else if (p.status === "awaiting_approval") {
+    content = `Waiting for ${p.clients.name} to review version ${latest?.version ?? 1}.`;
+  } else if (p.status === "changes_requested") {
+    tone = "danger";
+    content = (
+      <>
+        <strong className="font-semibold">{decision?.client_name ?? p.clients.name} asked for changes:</strong> “{decision?.comment}” — edit the scope and
+        send the revised version.
+      </>
+    );
+  } else if (p.status === "active") {
+    const flagged = revisions.filter((r) => r.status === "open" && !r.in_scope).length;
+    const pending = changeOrders.filter((c) => c.status === "sent").length;
+    if (flagged) {
+      tone = "warning";
+      content = `${pluralize(flagged, "request")} from your client ${flagged === 1 ? "falls" : "fall"} outside the approved scope. Propose a change order or do the work anyway.`;
+    } else if (pending) content = `${pluralize(pending, "change order")} awaiting your client's decision.`;
+    else return null;
+  } else return null;
+  return (
+    <div className="mb-6">
+      <Alert tone={tone}>{content}</Alert>
+    </div>
+  );
+}

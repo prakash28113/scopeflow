@@ -1,0 +1,134 @@
+# ScopeFlow — Architecture (v2, zero-cost)
+
+Status: approved direction, not deployed. Target: **₹0** on Cloudflare Workers Free + Supabase Free.
+
+## 1. Why this shape
+
+The Next.js build was verified on Cloudflare's runtime: functionally correct, but server-rendered pages used
+16–46 ms CPU each against the Workers Free limit of 10 ms per request. Static files on Workers are free,
+unlimited and never run the Worker. So the UI ships as static files, and every rule that protects data
+lives in Postgres — where it already was.
+
+```
+                ┌──────────────────────── Cloudflare Workers (Free) ───────────────────────┐
+ Browser ──────▶│ Static assets: index.html, JS, CSS  (free, unlimited, no Worker CPU)     │
+   │            │ _headers: CSP, frame/referrer/permissions policies                       │
+   │            │ Worker script: daily keep-alive cron + 404 for stray API calls (no secrets)│
+   │            └──────────────────────────────────────────────────────────────────────────┘
+   │  HTTPS (supabase-js, public anon key + user session JWT)
+   ▼
+ ┌──────────────────────────── Supabase (Free) ────────────────────────────┐
+ │ Auth (email + password, confirmation off, optional Turnstile CAPTCHA)    │
+ │ PostgREST → Postgres: RLS on every table, writes only via functions      │
+ └──────────────────────────────────────────────────────────────────────────┘
+```
+
+No service-role key, no API secrets and no email provider exist anywhere in the deployed system.
+The only key in the frontend is Supabase's anon key, which is designed to be public.
+
+## 2. Authentication
+
+- **Method:** Supabase Auth email + password, called from the browser with `supabase-js`.
+- **Email confirmation: OFF** (Supabase dashboard → Authentication → Providers → Email → *Confirm email*).
+  This is a supported Supabase setting. Sign-up returns a session immediately.
+- **Consequences of no email, and mitigations:**
+  - Email ownership isn't verified → **beta allowlist**: when `beta_allowlist` has any rows, the
+    sign-up trigger rejects emails not on it (enforced in Postgres, so the API can't bypass it).
+  - Bot sign-ups → optional **Cloudflare Turnstile** CAPTCHA (free), enforced by Supabase when enabled.
+  - No "forgot password" email → signed-in users can change their password in Settings; a forgotten
+    password is reset by the admin in the Supabase dashboard/SQL editor (documented in README).
+- **Session:** stored by supabase-js in `localStorage`, auto-refreshed. XSS is the main risk to a
+  browser-held session, so: strict CSP (`script-src 'self'`, no inline scripts, no third-party scripts
+  except Turnstile when enabled), React output escaping, no `dangerouslySetInnerHTML`.
+- **Password policy:** minimum 8 characters in the app; set the same minimum in Supabase Auth settings.
+- **Route guards** in the SPA are for UX only. Real authorization is in the database (§3).
+
+## 3. Database access
+
+| Who | Key / identity | Can read | Can write |
+|---|---|---|---|
+| Signed-in freelancer | anon key + session JWT (`authenticated`) | Own rows only (RLS `owner_id = auth.uid()`) | Nothing directly. Only via `SECURITY DEFINER` functions that check `auth.uid()` and lock the project row |
+| Client (no account) | anon key (`anon`) | Nothing directly | Only via `portal_*` functions that require a valid, unexpired, unrevoked token |
+| Admin (you) | Supabase dashboard | Everything | Beta allowlist, password resets |
+
+- All business rules (project stages, scope checks, pricing, change-order effects, payments) are
+  Postgres functions. The browser can't skip a step because there is no table write permission to skip with.
+- Immutability: scope snapshots, scope decisions, change-order decisions and the activity log reject
+  every `UPDATE` by trigger; change-order terms and revision scope classifications are frozen on insert.
+- Rate limit in the database: at most **10 client requests per project per hour**.
+- Approval audit records (IP, user agent) are read inside Postgres from the request headers set by
+  Supabase's API gateway — not from function arguments, so a client can't supply fake values.
+- Validation runs twice: zod in the browser (for messages) and constraints/checks in Postgres (authoritative).
+
+## 4. Public client approval links
+
+- **Generation:** `rotate_share_link(project_id, expires_in_days)` runs in Postgres. It creates a
+  random token (32 bytes from the database's cryptographic RNG, 244 random bits), stores **only its SHA-256 hash** plus `expires_at`, revokes any previous link,
+  and returns the raw token **once**. Nothing recoverable is stored — no encrypted copy.
+- **Showing it:** the freelancer sees the link once in a dialog with Copy and Share buttons
+  (native share sheet on phones). If it's lost, they generate a new one, which revokes the old one.
+- **Format:** `https://<app>/p#<token>`. The token is in the URL **fragment**, which browsers never
+  send to servers — so it doesn't appear in Cloudflare logs, analytics or `Referer` headers.
+  The portal page reads it with JavaScript and passes it to `portal_*` functions.
+- **Expiry:** 7, 30 (default) or 90 days, chosen by the freelancer; enforced in every `portal_*` call.
+- **Revocation:** immediate (`revoke_share_link`), and rotation revokes the previous link.
+- **Lookup:** `portal_*` functions hash the presented token and match it against active, unexpired
+  hashes. Malformed tokens are rejected before lookup. 244 random bits make guessing infeasible.
+- Sending a scope for approval automatically creates a link if no active one exists.
+
+## 5. Worker
+
+Assets-only routing (configured in `wrangler.jsonc`):
+
+| Request | Handled by | Worker CPU |
+|---|---|---|
+| Files (`/assets/*.js`, `.css`, icons) | Static assets | none |
+| Page navigations (`/dashboard`, `/p`, …) | `index.html` (SPA fallback) | none |
+| Non-navigation request to an unknown path | Worker `fetch` → JSON 404 | < 1 ms |
+| Daily cron | Worker `scheduled` → calls `public.health()` so the free Supabase project isn't paused for inactivity | ~ 1 ms |
+
+The Worker holds **no secrets** (only the public Supabase URL and anon key). There are no API endpoints:
+everything that needs authority runs inside Postgres under RLS.
+
+Verified locally in Cloudflare's runtime (`wrangler dev`): page navigations return `index.html` with the
+security headers, hashed assets get a one-year immutable cache, `/p` adds `no-referrer`, `noindex`
+and `no-store`, and only non-navigation requests to unknown paths reach the Worker.
+
+## 6. Notifications (in-app only)
+
+- Client actions (approvals, requests, change-order decisions) are already written to `activity_log`.
+- `profiles.notifications_seen_at` tracks what the freelancer has seen; a bell in the header shows
+  the unread count (`unread_notification_count()`, RLS-scoped) and the Notifications page lists them.
+- The app refreshes the count every 60 s while open and when the tab regains focus.
+
+## 7. Repository layout
+
+```
+index.html               SPA entry
+src/
+  main.tsx               router + data-cache setup
+  styles.css             Tailwind theme (cobalt #3F6FD1, Inter)
+  lib/                   supabase client, auth, validation, money, pricing, formatting, errors
+  components/            UI kit, app shell, notification bell, share-link dialog
+  routes/                landing, auth, onboarding/settings, dashboard, notifications,
+                         project (new/edit/detail), change order, client portal
+worker/index.ts          keep-alive cron + 404 fallback
+public/                  icon
+supabase/migrations/     schema, RLS, functions (single source of truth)
+tests/db                 real migration on Postgres (PGlite): workflows, RLS, tokens, limits
+tests/unit               money, pricing, validation, link parsing
+tests/e2e                built app in Cloudflare's runtime + Chrome, full workflow
+vite.config.ts           build + generated _headers (CSP pinned to your Supabase URL)
+wrangler.jsonc           Cloudflare Worker + assets config
+```
+
+## 8. Costs and limits (all ₹0)
+
+| Service | Free limits that matter | Our usage |
+|---|---|---|
+| Cloudflare Workers Free | 100k Worker invocations/day; static assets unlimited; 10 ms CPU; 5 cron triggers | ~1 invocation/day (cron) |
+| Supabase Free | 500 MB DB, 50k MAU, 5 GB egress/mo, 2 projects, no backups, pauses after 7 days idle | Small JSON payloads; keep-alive cron |
+| Cloudflare Turnstile (optional) | Free | Sign-up/sign-in only |
+
+Known limitations: no email of any kind; no automatic backups on Supabase Free (export manually from the
+dashboard); `*.workers.dev` address (a custom domain would cost money).

@@ -8,10 +8,9 @@
 --   * All writes go through SECURITY DEFINER functions that check
 --     auth.uid() and enforce the project state machine.
 --   * The `anon` role can read nothing. Clients reach their project only
---     through portal_* functions, which require a 256-bit share token.
---     Only the SHA-256 hash of the token is stored for lookup; an
---     AES-GCM ciphertext (key lives in the app server env) lets the
---     freelancer re-copy the link.
+--     through portal_* functions, which require a share token. Tokens are
+--     generated here (244 random bits), returned once, and only their
+--     SHA-256 hash and expiry are stored. Nothing recoverable is kept.
 --   * Approval records, scope snapshots and the activity log are
 --     immutable: UPDATE is always rejected by trigger, and DELETE is
 --     only possible as a cascade from deleting the parent project/account.
@@ -40,6 +39,8 @@ create table public.profiles (
   business_name    text check (char_length(business_name) <= 120),
   default_currency char(3) not null default 'USD' check (default_currency ~ '^[A-Z]{3}$'),
   onboarded_at     timestamptz,
+  -- In-app notifications: client activity newer than this is unread.
+  notifications_seen_at timestamptz not null default now(),
   created_at       timestamptz not null default now(),
   updated_at       timestamptz not null default now()
 );
@@ -104,12 +105,14 @@ create table public.scope_snapshots (
 );
 
 create table public.share_links (
-  id               uuid primary key default gen_random_uuid(),
-  project_id       uuid not null references public.projects (id) on delete cascade,
-  token_hash       text not null unique check (token_hash ~ '^[0-9a-f]{64}$'),
-  token_ciphertext text not null check (char_length(token_ciphertext) <= 512),
-  created_at       timestamptz not null default now(),
-  revoked_at       timestamptz
+  id          uuid primary key default gen_random_uuid(),
+  project_id  uuid not null references public.projects (id) on delete cascade,
+  -- SHA-256 of the token. The token itself is never stored.
+  token_hash  text not null unique check (token_hash ~ '^[0-9a-f]{64}$'),
+  created_at  timestamptz not null default now(),
+  expires_at  timestamptz not null,
+  revoked_at  timestamptz,
+  check (expires_at > created_at and expires_at <= created_at + interval '181 days')
 );
 create unique index share_links_one_active_idx
   on public.share_links (project_id) where revoked_at is null;
@@ -208,20 +211,14 @@ create table public.activity_log (
 );
 create index activity_log_project_idx on public.activity_log (project_id, created_at desc);
 
--- Written by the app server (service role) for every attempted email,
--- so the UI can show honestly whether a notification was delivered.
-create table public.email_log (
-  id                  uuid primary key default gen_random_uuid(),
-  owner_id            uuid not null references public.profiles (id) on delete cascade,
-  project_id          uuid references public.projects (id) on delete cascade,
-  recipient           text not null,
-  template            text not null,
-  status              text not null check (status in ('sent', 'skipped', 'failed')),
-  provider_message_id text,
-  error               text,
-  created_at          timestamptz not null default now()
+-- Private beta gate. While this table has any rows, only these emails can
+-- sign up. Managed by the admin in the Supabase dashboard; invisible to the API.
+create table public.beta_allowlist (
+  email      text primary key check (email = lower(email) and char_length(email) <= 254),
+  note       text,
+  created_at timestamptz not null default now()
 );
-create index email_log_project_idx on public.email_log (project_id, created_at desc);
+create index activity_log_client_idx on public.activity_log (created_at desc) where actor = 'client';
 
 -- ---------------------------------------------------------------------
 -- Immutability
@@ -302,6 +299,11 @@ security definer
 set search_path = ''
 as $$
 begin
+  if exists (select 1 from public.beta_allowlist)
+     and not exists (select 1 from public.beta_allowlist where email = lower(coalesce(new.email, ''))) then
+    raise exception 'ScopeFlow is in private beta. This email is not on the invite list.'
+      using errcode = '42501';
+  end if;
   insert into public.profiles (id, email, full_name)
   values (
     new.id,
@@ -332,15 +334,13 @@ alter table public.change_orders          enable row level security;
 alter table public.change_order_decisions enable row level security;
 alter table public.milestones             enable row level security;
 alter table public.activity_log           enable row level security;
-alter table public.email_log              enable row level security;
+alter table public.beta_allowlist         enable row level security;
 
 create policy "own profile" on public.profiles
   for select to authenticated using (id = (select auth.uid()));
 create policy "own clients" on public.clients
   for select to authenticated using (owner_id = (select auth.uid()));
 create policy "own projects" on public.projects
-  for select to authenticated using (owner_id = (select auth.uid()));
-create policy "own email log" on public.email_log
   for select to authenticated using (owner_id = (select auth.uid()));
 
 -- Child tables: visible when the parent project is visible.
@@ -420,6 +420,18 @@ as $$
   select encode(sha256(convert_to(p_token, 'UTF8')), 'hex');
 $$;
 
+-- 32 bytes from two v4 UUIDs (pg_strong_random): 244 random bits, base64url, 43 chars.
+create or replace function public._new_token()
+returns text
+language sql
+volatile
+set search_path = ''
+as $$
+  select rtrim(translate(encode(decode(
+           replace(gen_random_uuid()::text, '-', '') || replace(gen_random_uuid()::text, '-', ''),
+           'hex'), 'base64'), '+/', '-_'), '=');
+$$;
+
 create or replace function public._portal_project(p_token text, p_lock boolean)
 returns public.projects
 language plpgsql
@@ -427,24 +439,52 @@ set search_path = ''
 as $$
 declare
   v public.projects;
+  v_link public.share_links;
 begin
-  if p_token is null or char_length(p_token) not between 32 and 128 then
+  if p_token is null or p_token !~ '^[A-Za-z0-9_-]{43}$' then
     raise exception 'This link is invalid or has been revoked' using errcode = '28000';
   end if;
-  if p_lock then
-    select p.* into v
-      from public.share_links s join public.projects p on p.id = s.project_id
-     where s.token_hash = public._hash_token(p_token) and s.revoked_at is null
-     for update of p;
-  else
-    select p.* into v
-      from public.share_links s join public.projects p on p.id = s.project_id
-     where s.token_hash = public._hash_token(p_token) and s.revoked_at is null;
-  end if;
+  select s.* into v_link from public.share_links s
+   where s.token_hash = public._hash_token(p_token) and s.revoked_at is null;
   if not found then
     raise exception 'This link is invalid or has been revoked' using errcode = '28000';
   end if;
+  if v_link.expires_at <= now() then
+    raise exception 'This link has expired. Ask your freelancer for a new one.' using errcode = '28000';
+  end if;
+  if p_lock then
+    select * into v from public.projects where id = v_link.project_id for update;
+  else
+    select * into v from public.projects where id = v_link.project_id;
+  end if;
   return v;
+end;
+$$;
+
+-- Approver metadata for audit records, taken from the HTTP request as seen by
+-- Supabase's API gateway (PostgREST exposes it as request.headers). The browser
+-- can't supply these values through function arguments.
+create or replace function public._request_meta()
+returns jsonb
+language plpgsql
+stable
+set search_path = ''
+as $$
+declare
+  h jsonb;
+begin
+  begin
+    h := nullif(current_setting('request.headers', true), '')::jsonb;
+  exception when others then
+    h := null;
+  end;
+  if h is null then
+    return jsonb_build_object('ua', null, 'ip', null);
+  end if;
+  return jsonb_build_object(
+    'ua', left(h ->> 'user-agent', 500),
+    'ip', left(coalesce(h ->> 'cf-connecting-ip', h ->> 'x-real-ip',
+                        nullif(trim(split_part(coalesce(h ->> 'x-forwarded-for', ''), ',', 1)), '')), 64));
 end;
 $$;
 
@@ -626,31 +666,49 @@ begin
 end;
 $$;
 
--- Replace the client link. The app generates the token; the database
--- only ever sees its hash and an encrypted copy.
-create or replace function public.rotate_share_link(
-  p_project_id uuid, p_token_hash text, p_token_ciphertext text)
-returns uuid
+-- Internal: revoke any active link and create a new one. Returns the raw
+-- token exactly once; only its hash is stored.
+create or replace function public._issue_link(p_project_id uuid, p_days integer)
+returns jsonb
+language plpgsql
+set search_path = ''
+as $$
+declare
+  v_token text := public._new_token();
+  v_expires timestamptz;
+  v_had_link boolean;
+begin
+  if p_days is null or p_days not between 1 and 180 then
+    raise exception 'Link validity must be between 1 and 180 days' using errcode = '22023';
+  end if;
+  update public.share_links set revoked_at = now()
+   where project_id = p_project_id and revoked_at is null;
+  v_had_link := found;
+  insert into public.share_links (project_id, token_hash, expires_at)
+  values (p_project_id, public._hash_token(v_token), now() + make_interval(days => p_days))
+  returning expires_at into v_expires;
+  perform public._log(p_project_id, 'freelancer', null,
+    case when v_had_link then 'link.rotated' else 'link.created' end,
+    case when v_had_link then 'New client link created; the previous link no longer works'
+         else 'Client link created' end,
+    jsonb_build_object('expires_at', v_expires));
+  return jsonb_build_object('token', v_token, 'expires_at', v_expires);
+end;
+$$;
+
+create or replace function public.rotate_share_link(p_project_id uuid, p_expires_in_days integer default 30)
+returns jsonb
 language plpgsql
 security definer
 set search_path = ''
 as $$
 declare
   v public.projects := public._owned_project(p_project_id);
-  v_id uuid;
-  v_had_link boolean;
 begin
-  update public.share_links set revoked_at = now()
-   where project_id = v.id and revoked_at is null;
-  v_had_link := found;
-  insert into public.share_links (project_id, token_hash, token_ciphertext)
-  values (v.id, p_token_hash, p_token_ciphertext)
-  returning id into v_id;
-  perform public._log(v.id, 'freelancer', null,
-    case when v_had_link then 'link.rotated' else 'link.created' end,
-    case when v_had_link then 'Client link replaced; the previous link no longer works'
-         else 'Client link created' end);
-  return v_id;
+  if v.status = 'cancelled' then
+    raise exception 'This project is cancelled' using errcode = '55000';
+  end if;
+  return public._issue_link(v.id, p_expires_in_days);
 end;
 $$;
 
@@ -671,7 +729,7 @@ begin
 end;
 $$;
 
-create or replace function public.send_scope(p_project_id uuid)
+create or replace function public.send_scope(p_project_id uuid, p_link_days integer default 30)
 returns jsonb
 language plpgsql
 security definer
@@ -683,15 +741,13 @@ declare
   v_hash text;
   v_version integer;
   v_id uuid;
+  v_link jsonb;
 begin
   if v.status not in ('draft', 'changes_requested') then
     raise exception 'This scope has already been sent' using errcode = '55000';
   end if;
   if not exists (select 1 from public.deliverables where project_id = v.id) then
     raise exception 'Add at least one deliverable before sending' using errcode = '22023';
-  end if;
-  if not exists (select 1 from public.share_links where project_id = v.id and revoked_at is null) then
-    raise exception 'Create a client link before sending' using errcode = '55000';
   end if;
 
   v_data := public._build_scope(v.id);
@@ -708,7 +764,14 @@ begin
     format('Scope v%s sent to client for approval', v_version),
     jsonb_build_object('snapshot_id', v_id, 'version', v_version, 'content_hash', v_hash));
 
-  return jsonb_build_object('snapshot_id', v_id, 'version', v_version, 'content_hash', v_hash);
+  -- Make sure the client has a working link; a new one is returned only if created now.
+  if not exists (select 1 from public.share_links
+                  where project_id = v.id and revoked_at is null and expires_at > now()) then
+    v_link := public._issue_link(v.id, p_link_days);
+  end if;
+
+  return jsonb_build_object('snapshot_id', v_id, 'version', v_version, 'content_hash', v_hash,
+                            'link', v_link);
 end;
 $$;
 
@@ -1028,8 +1091,7 @@ $$;
 
 create or replace function public.portal_decide_scope(
   p_token text, p_snapshot_id uuid, p_decision public.decision,
-  p_client_name text, p_comment text,
-  p_user_agent text default null, p_ip text default null)
+  p_client_name text, p_comment text)
 returns jsonb
 language plpgsql
 security definer
@@ -1056,7 +1118,7 @@ begin
   insert into public.scope_decisions (project_id, snapshot_id, decision, comment, client_name,
                                       content_hash, user_agent, ip_address)
   values (v.id, v_snap.id, p_decision, v_comment, v_name, v_snap.content_hash,
-          left(p_user_agent, 500), left(p_ip, 64));
+          public._request_meta() ->> 'ua', public._request_meta() ->> 'ip');
 
   if p_decision = 'approved' then
     update public.projects set status = 'active', approved_at = now(), updated_at = now() where id = v.id;
@@ -1101,6 +1163,10 @@ begin
   if v_desc is null then
     raise exception 'Please describe the change you need' using errcode = '22023';
   end if;
+  if (select count(*) from public.revision_requests
+       where project_id = v.id and created_at > now() - interval '1 hour') >= 10 then
+    raise exception 'Too many requests in the last hour. Please try again later.' using errcode = '55000';
+  end if;
 
   if p_kind = 'revision' then
     select * into v_del from public.deliverables where id = p_deliverable_id and project_id = v.id;
@@ -1141,8 +1207,7 @@ $$;
 
 create or replace function public.portal_decide_change_order(
   p_token text, p_change_order_id uuid, p_decision public.decision,
-  p_client_name text, p_comment text,
-  p_user_agent text default null, p_ip text default null)
+  p_client_name text, p_comment text)
 returns jsonb
 language plpgsql
 security definer
@@ -1175,7 +1240,7 @@ begin
 
   insert into public.change_order_decisions (change_order_id, project_id, decision, comment, client_name,
                                              terms, user_agent, ip_address)
-  values (co.id, v.id, p_decision, v_comment, v_name, v_terms, left(p_user_agent, 500), left(p_ip, 64));
+  values (co.id, v.id, p_decision, v_comment, v_name, v_terms, public._request_meta() ->> 'ua', public._request_meta() ->> 'ip');
 
   update public.change_orders
      set status = case when p_decision = 'approved' then 'approved' else 'rejected' end::public.change_order_status,
@@ -1212,14 +1277,52 @@ end;
 $$;
 
 -- ---------------------------------------------------------------------
+-- In-app notifications and health check
+-- ---------------------------------------------------------------------
+create or replace function public.unread_notification_count()
+returns integer
+language sql
+stable
+security definer
+set search_path = ''
+as $$
+  select count(*)::integer
+    from public.activity_log a
+    join public.projects p on p.id = a.project_id
+    join public.profiles pr on pr.id = p.owner_id
+   where p.owner_id = auth.uid()
+     and a.actor = 'client'
+     and a.created_at > pr.notifications_seen_at;
+$$;
+
+create or replace function public.mark_notifications_seen()
+returns void
+language sql
+security definer
+set search_path = ''
+as $$
+  update public.profiles set notifications_seen_at = now() where id = auth.uid();
+$$;
+
+-- Used by the Worker's daily cron so the free project isn't paused for inactivity.
+create or replace function public.health()
+returns text
+language sql
+stable
+set search_path = ''
+as $$ select 'ok'::text $$;
+
+-- ---------------------------------------------------------------------
 -- Privileges
 -- ---------------------------------------------------------------------
 revoke all on all tables in schema public from anon, authenticated;
 grant select on
   public.profiles, public.clients, public.projects, public.deliverables, public.scope_snapshots,
-  public.share_links, public.scope_decisions, public.revision_requests, public.change_orders,
-  public.change_order_decisions, public.milestones, public.activity_log, public.email_log
+  public.scope_decisions, public.revision_requests, public.change_orders,
+  public.change_order_decisions, public.milestones, public.activity_log
 to authenticated;
+-- Owners can see link status, never the hash.
+grant select (id, project_id, created_at, expires_at, revoked_at) on public.share_links to authenticated;
 
 revoke execute on all functions in schema public from public, anon, authenticated;
 
@@ -1227,9 +1330,9 @@ grant execute on function
   public.complete_onboarding(text, text, text),
   public.save_project(uuid, jsonb),
   public.delete_draft_project(uuid),
-  public.rotate_share_link(uuid, text, text),
+  public.rotate_share_link(uuid, integer),
   public.revoke_share_link(uuid),
-  public.send_scope(uuid),
+  public.send_scope(uuid, integer),
   public.recall_scope(uuid),
   public.resolve_revision(uuid, text),
   public.create_change_order(uuid, jsonb),
@@ -1237,14 +1340,18 @@ grant execute on function
   public.complete_change_order_work(uuid),
   public.set_milestone_paid(uuid, boolean, text),
   public.complete_project(uuid),
-  public.cancel_project(uuid)
+  public.cancel_project(uuid),
+  public.unread_notification_count(),
+  public.mark_notifications_seen()
 to authenticated;
+
+grant execute on function public.health() to anon, authenticated;
 
 grant execute on function
   public.portal_view(text),
-  public.portal_decide_scope(text, uuid, public.decision, text, text, text, text),
+  public.portal_decide_scope(text, uuid, public.decision, text, text),
   public.portal_request_revision(text, public.revision_kind, uuid, text, text),
-  public.portal_decide_change_order(text, uuid, public.decision, text, text, text, text)
+  public.portal_decide_change_order(text, uuid, public.decision, text, text)
 to anon, authenticated;
 
 -- Functions created later should not be callable by default.

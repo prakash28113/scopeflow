@@ -1,6 +1,7 @@
 import { beforeAll, describe, expect, it } from "vitest";
 import type { PGlite } from "@electric-sql/pglite";
-import { anon, as, createDb, createUser, newToken, service, type Role } from "./harness";
+import { createHash } from "node:crypto";
+import { anon, as, createDb, createUser, type Role } from "./harness";
 
 type Json = Record<string, unknown>;
 
@@ -34,8 +35,7 @@ async function rpc<T = Json>(role: Role, fn: string, args: unknown[]): Promise<T
 
 async function createProject(owner: Role) {
   const id = await rpc<string>(owner, "save_project", [null, JSON.stringify(projectPayload)]);
-  const link = newToken();
-  await rpc(owner, "rotate_share_link", [id, link.hash, "v1.cipher"]);
+  const link = await rpc<{ token: string; expires_at: string }>(owner, "rotate_share_link", [id, 30]);
   return { id, token: link.token };
 }
 
@@ -136,7 +136,14 @@ describe("main workflow", () => {
     const v = await view(token);
     const snap = v.snapshot as Json;
     expect(snap.version).toBe(2);
-    await rpc(anon, "portal_decide_scope", [token, snap.id, "approved", "Dana Client", "", "UA/1.0", "203.0.113.9"]);
+    // Approver metadata comes from the request headers PostgREST exposes, not from arguments.
+    await db.transaction(async (tx) => {
+      await tx.exec("set local role anon");
+      await tx.query("select set_config('request.headers', $1, true)", [
+        JSON.stringify({ "user-agent": "UA/1.0", "cf-connecting-ip": "203.0.113.9", "x-forwarded-for": "198.51.100.1" }),
+      ]);
+      await tx.query("select public.portal_decide_scope($1, $2, 'approved', 'Dana Client', '')", [token, snap.id]);
+    });
 
     const [p] = await as<Json>(db, alice, "select status, approved_at from projects where id = $1", [projectId]);
     expect(p.status).toBe("active");
@@ -145,12 +152,14 @@ describe("main workflow", () => {
     const decisions = await as<Json>(
       db,
       alice,
-      "select decision, client_name, content_hash, ip_address from scope_decisions where project_id = $1 order by created_at",
+      "select decision, client_name, content_hash, ip_address, user_agent from scope_decisions where project_id = $1 order by created_at",
       [projectId],
     );
     expect(decisions.map((d) => d.decision)).toEqual(["rejected", "approved"]);
     expect(decisions[1].content_hash).toBe(snap.content_hash);
     expect(decisions[1].ip_address).toBe("203.0.113.9");
+    expect(decisions[1].user_agent).toBe("UA/1.0");
+    expect(decisions[0].ip_address).toBeNull();
 
     await expect(db.query("update scope_decisions set decision = 'rejected'")).rejects.toThrow(/immutable/);
     await expect(
@@ -315,8 +324,8 @@ describe("main workflow", () => {
   });
 
   it("rotating the link invalidates the old one", async () => {
-    const fresh = newToken();
-    await rpc(alice, "rotate_share_link", [projectId, fresh.hash, "v1.cipher2"]);
+    const fresh = await rpc<{ token: string }>(alice, "rotate_share_link", [projectId, 7]);
+    expect(fresh.token).not.toBe(token);
     await expect(view(token)).rejects.toThrow(/invalid or has been revoked/);
     const v = await view(fresh.token);
     expect((v.project as Json).title).toBe(projectPayload.title);
@@ -358,8 +367,7 @@ describe("security", () => {
     const [p] = await as<Json>(db, alice, "select id from projects limit 1");
     await expect(rpc(bob, "send_scope", [p.id])).rejects.toThrow(/Project not found/);
     await expect(rpc(bob, "cancel_project", [p.id])).rejects.toThrow(/Project not found/);
-    const t = newToken();
-    await expect(rpc(bob, "rotate_share_link", [p.id, t.hash, "x"])).rejects.toThrow(/Project not found/);
+    await expect(rpc(bob, "rotate_share_link", [p.id, 30])).rejects.toThrow(/Project not found/);
   });
 
   it("anon cannot call freelancer functions or internal helpers", async () => {
@@ -372,7 +380,8 @@ describe("security", () => {
 
   it("rejects malformed and guessed tokens", async () => {
     await expect(view("short")).rejects.toThrow(/invalid/);
-    await expect(view(newToken().token)).rejects.toThrow(/invalid/);
+    await expect(view("a".repeat(43))).rejects.toThrow(/invalid/);
+    await expect(view("' or 1=1 --" + "a".repeat(32))).rejects.toThrow(/invalid/);
   });
 
   it("an approval cannot be submitted before the scope is sent", async () => {
@@ -394,14 +403,6 @@ describe("security", () => {
     await expect(rpc(bob, "delete_draft_project", [sent.id])).rejects.toThrow(/Only drafts/);
   });
 
-  it("service role can write the email log", async () => {
-    await as(db, service, "insert into email_log (owner_id, recipient, template, status) values ($1, 'a@b.co', 'test', 'skipped')", [
-      alice.id,
-    ]);
-    const rows = await as(db, alice, "select * from email_log");
-    expect(rows).toHaveLength(1);
-    expect(await as(db, bob, "select * from email_log")).toHaveLength(0);
-  });
 
   it("validates payloads in the database as a last line of defence", async () => {
     const bad = { ...projectPayload, deliverables: [] };
@@ -410,5 +411,109 @@ describe("security", () => {
     await expect(rpc(alice, "save_project", [null, JSON.stringify(badEmail)])).rejects.toThrow(/check constraint/);
     const badDates = { ...projectPayload, start_date: "2026-12-01", due_date: "2026-11-01" };
     await expect(rpc(alice, "save_project", [null, JSON.stringify(badDates)])).rejects.toThrow(/check constraint/);
+  });
+});
+
+describe("client links", () => {
+  it("are generated in the database, returned once, and stored only as a hash", async () => {
+    const id = await rpc<string>(bob, "save_project", [null, JSON.stringify(projectPayload)]);
+    const link = await rpc<{ token: string; expires_at: string }>(bob, "rotate_share_link", [id, 30]);
+    expect(link.token).toMatch(/^[A-Za-z0-9_-]{43}$/);
+    const days = (Date.parse(link.expires_at) - Date.now()) / 86_400_000;
+    expect(days).toBeGreaterThan(29.9);
+    expect(days).toBeLessThan(30.1);
+
+    const rows = await db.query<Json>("select * from share_links where project_id = $1", [id]);
+    expect(rows.rows).toHaveLength(1);
+    const stored = JSON.stringify(rows.rows[0]);
+    expect(stored).not.toContain(link.token);
+    expect(rows.rows[0].token_hash).toBe(createHash("sha256").update(link.token).digest("hex"));
+  });
+
+  it("owners can see link status but never the hash", async () => {
+    const status = await as<Json>(db, bob, "select id, expires_at, revoked_at from share_links");
+    expect(status.length).toBeGreaterThan(0);
+    await expect(as(db, bob, "select token_hash from share_links")).rejects.toThrow(/permission denied/);
+    await expect(as(db, alice, "select id from share_links where project_id in (select id from projects where owner_id <> $1)", [alice.id])).resolves.toHaveLength(0);
+  });
+
+  it("validity must be 1–180 days", async () => {
+    const id = await rpc<string>(bob, "save_project", [null, JSON.stringify(projectPayload)]);
+    await expect(rpc(bob, "rotate_share_link", [id, 0])).rejects.toThrow(/between 1 and 180/);
+    await expect(rpc(bob, "rotate_share_link", [id, 365])).rejects.toThrow(/between 1 and 180/);
+  });
+
+  it("expired links stop working everywhere", async () => {
+    const { id, token } = await createProject(bob);
+    await rpc(bob, "send_scope", [id, 30]);
+    await db.query("update share_links set created_at = now() - interval '40 days', expires_at = now() - interval '1 minute' where project_id = $1", [id]);
+    await expect(view(token)).rejects.toThrow(/has expired/);
+    await expect(
+      rpc(anon, "portal_decide_scope", [token, "00000000-0000-0000-0000-000000000000", "approved", "X", null]),
+    ).rejects.toThrow(/has expired/);
+  });
+
+  it("sending a scope creates a link only when no working link exists", async () => {
+    const id = await rpc<string>(bob, "save_project", [null, JSON.stringify(projectPayload)]);
+    const first = await rpc<{ link: { token: string } | null }>(bob, "send_scope", [id, 7]);
+    expect(first.link?.token).toMatch(/^[A-Za-z0-9_-]{43}$/);
+    await view(first.link!.token);
+    await rpc(bob, "recall_scope", [id]);
+    const second = await rpc<{ link: unknown }>(bob, "send_scope", [id, 7]);
+    expect(second.link).toBeNull();
+    await rpc(bob, "revoke_share_link", [id]);
+    await rpc(bob, "recall_scope", [id]);
+    const third = await rpc<{ link: { token: string } | null }>(bob, "send_scope", [id, 7]);
+    expect(third.link?.token).toBeTruthy();
+    await expect(view(first.link!.token)).rejects.toThrow(/invalid/);
+  });
+});
+
+describe("abuse protection", () => {
+  it("limits client requests to 10 per project per hour", async () => {
+    const { id, token } = await createProject(bob);
+    await rpc(bob, "send_scope", [id, 30]);
+    const v = await view(token);
+    await rpc(anon, "portal_decide_scope", [token, (v.snapshot as Json).id, "approved", "Dana", null]);
+    for (let i = 0; i < 10; i++) {
+      await rpc(anon, "portal_request_revision", [token, "new_work", null, `request ${i}`, "Dana"]);
+    }
+    await expect(
+      rpc(anon, "portal_request_revision", [token, "new_work", null, "one too many", "Dana"]),
+    ).rejects.toThrow(/Too many requests/);
+  });
+
+  it("enforces the beta allowlist at sign-up when it has entries", async () => {
+    await db.query("insert into beta_allowlist (email) values ('invited@example.com')");
+    await expect(createUser(db, "stranger@example.com")).rejects.toThrow(/private beta/);
+    await createUser(db, "Invited@Example.com");
+    await expect(as(db, alice, "select * from beta_allowlist")).rejects.toThrow(/permission denied/);
+    await expect(as(db, anon, "select * from beta_allowlist")).rejects.toThrow(/permission denied/);
+    await db.query("delete from beta_allowlist");
+    await createUser(db, "open@example.com");
+  });
+});
+
+describe("in-app notifications", () => {
+  it("counts unread client activity per owner and clears when seen", async () => {
+    const carol = await createUser(db, "carol@example.com", "Carol");
+    await rpc(carol, "mark_notifications_seen", []);
+    const { id, token } = await createProject(carol);
+    await rpc(carol, "send_scope", [id, 30]);
+    expect(await rpc<number>(carol, "unread_notification_count", [])).toBe(0);
+
+    const v = await view(token);
+    await rpc(anon, "portal_decide_scope", [token, (v.snapshot as Json).id, "approved", "Dana", null]);
+    await rpc(anon, "portal_request_revision", [token, "new_work", null, "extra", "Dana"]);
+    expect(await rpc<number>(carol, "unread_notification_count", [])).toBe(2);
+    expect(await rpc<number>(bob, "unread_notification_count", [])).toBeGreaterThanOrEqual(0);
+
+    await rpc(carol, "mark_notifications_seen", []);
+    expect(await rpc<number>(carol, "unread_notification_count", [])).toBe(0);
+    await expect(as(db, anon, "select public.unread_notification_count()")).rejects.toThrow(/permission denied/);
+  });
+
+  it("health check is public and reveals nothing", async () => {
+    expect(await rpc<string>(anon, "health", [])).toBe("ok");
   });
 });

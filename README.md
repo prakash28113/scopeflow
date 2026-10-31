@@ -1,111 +1,98 @@
 # ScopeFlow
 
 Scope, client approvals, revisions, change orders and payment milestones for freelancers and small studios.
+Built to run at **₹0**: a static React app on Cloudflare Workers Free + Supabase Free. See
+[ARCHITECTURE.md](ARCHITECTURE.md) for how authentication, database access, client links and the Worker work.
 
-**Workflow:** create project → define scope → share client link → client approves (scope is snapshotted and locked) → client requests changes → system checks each request against the approved revision limits → freelancer proposes a priced change order → client approves → budget, due date and milestones update → milestones are marked paid.
+**Workflow:** create project → define scope → send to client (private link) → client approves (scope is
+snapshotted and locked) → client requests changes → each request is checked against the approved revision
+limits → freelancer proposes a priced change order → client approves → budget, due date and milestones
+update → milestones are marked paid (recorded manually).
 
-Stack: Next.js 16 (App Router, TypeScript) · Tailwind CSS 4 · Supabase (Postgres + Auth) · Resend · Vercel. Everything fits in free tiers.
+Stack: Vite · React 19 · React Router 7 · TanStack Query · Tailwind CSS 4 · Supabase (Postgres + Auth) ·
+Cloudflare Workers (static assets + a tiny cron Worker). No email provider, no paid services.
 
 ---
 
-## 1. Setup
+## 1. Supabase (free project)
 
-### Supabase
-1. Create a project at supabase.com (free tier).
-2. **SQL Editor →** paste and run `supabase/migrations/20261031000000_scopeflow_schema.sql`.
-   (Or with the Supabase CLI: `supabase link` then `supabase db push`.)
-3. **Authentication → URL Configuration:**
-   - Site URL: your app URL (e.g. `https://scopeflow.vercel.app`)
-   - Redirect URLs: add `https://YOUR-APP/auth/callback` and `http://localhost:3000/auth/callback`
-4. **Authentication → Providers → Email:** keep "Confirm email" on for production.
-   Supabase's built-in mailer is rate-limited (a few emails/hour). For real use, set custom SMTP
-   (Resend provides SMTP credentials) under **Authentication → Emails → SMTP Settings**.
+1. Create a project at supabase.com.
+2. **SQL Editor →** run `supabase/migrations/20261031000000_scopeflow_schema.sql`.
+3. **Authentication → Sign In / Providers → Email:**
+   - turn **Confirm email OFF** (the beta sends no email),
+   - set **Minimum password length** to 8 (or more).
+4. *(Optional, recommended)* **Private beta allowlist** — while this table has rows, only these emails can sign up:
+   ```sql
+   insert into public.beta_allowlist (email) values ('you@example.com'), ('friend@studio.com');
+   ```
+   Empty the table to open sign-ups.
+5. *(Optional)* **CAPTCHA:** create a free Cloudflare Turnstile widget, then Supabase → Authentication →
+   Bot and Abuse Protection → enable CAPTCHA (Turnstile) with the secret key, and set
+   `VITE_TURNSTILE_SITE_KEY` when building.
 
-### Resend (optional but recommended)
-1. Create an API key. 2. Verify your sending domain. 3. Set `RESEND_API_KEY` and `EMAIL_FROM`.
-Without a key, ScopeFlow still works: notifications are logged as *skipped* and the project page shows the client link to share manually. Nothing claims an email was sent when it wasn't.
+**Resetting a forgotten password** (there's no reset email during the beta) — in the SQL Editor:
+```sql
+update auth.users
+   set encrypted_password = extensions.crypt('a-new-temporary-password', extensions.gen_salt('bf'))
+ where email = 'user@example.com';
+```
+Tell the user the temporary password; they can change it in **Settings**.
 
-### Local
+## 2. Local development
+
 ```bash
-cp .env.example .env.local     # fill in values
+cp .env.example .env.local      # fill in VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY
 npm install
-npm run dev                    # http://localhost:3000
+npm run dev                     # http://localhost:5173
 ```
 
-### Deploy to Vercel
-Import the repo, add every variable from `.env.example` in **Project → Settings → Environment Variables** (set `NEXT_PUBLIC_APP_URL` to the production URL), deploy. Update the Supabase Site URL / redirect URLs to match.
-
-## 2. Environment variables
-
-| Variable | Required | Where it's used |
+| Variable | Required | Notes |
 |---|---|---|
-| `NEXT_PUBLIC_SUPABASE_URL` | yes | Browser + server |
-| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | yes | Browser + server; all user & portal queries (RLS applies) |
-| `SUPABASE_SERVICE_ROLE_KEY` | yes | Server only: freelancer email lookup for notifications, email log writes |
-| `NEXT_PUBLIC_APP_URL` | yes | Client links, auth redirects, email links |
-| `SHARE_TOKEN_SECRET` | yes | AES-256-GCM key for stored client links (`openssl rand -base64 32`) |
-| `RESEND_API_KEY` | no | Sending email; absent → logged as skipped |
-| `EMAIL_FROM` | no | Sender address on your verified domain |
+| `VITE_SUPABASE_URL` | yes | Public. Also pins the Content-Security-Policy to this origin |
+| `VITE_SUPABASE_ANON_KEY` | yes | Public by design; access is enforced by RLS and database functions |
+| `VITE_TURNSTILE_SITE_KEY` | no | Enables the CAPTCHA widget and allows Turnstile in the CSP |
 
-## 3. Architecture
+There are no server secrets. Never put the Supabase **service-role** key in this project.
 
-```
-app/
-  (auth)/          login, signup, password reset, server actions
-  auth/callback    email confirmation / recovery
-  onboarding/      workspace setup + settings
-  (app)/           authenticated area: dashboard, projects, change orders
-  p/[token]/       client portal — no account, token-gated
-lib/               validation (zod), money/pricing maths, tokens, email, Supabase clients
-supabase/migrations/  the entire schema, RLS, and business logic
-proxy.ts           session refresh + redirect for signed-out users (Next 16 "proxy")
-tests/             unit, database (real Postgres via PGlite), end-to-end
-```
+## 3. Deploy to Cloudflare (free) — only when you approve
 
-**Writes happen only through Postgres functions.** Authenticated users can `SELECT` their own rows (RLS) but have no direct `INSERT/UPDATE/DELETE`. Every mutation is a `SECURITY DEFINER` function that checks `auth.uid()`, locks the project row, and enforces the state machine:
+1. In `wrangler.jsonc`, set `vars.SUPABASE_URL` and `vars.SUPABASE_ANON_KEY` (used only by the daily keep-alive).
+2. `npx wrangler login` (free Cloudflare account; no card needed).
+3. `VITE_SUPABASE_URL=… VITE_SUPABASE_ANON_KEY=… npm run deploy`
+4. The app is served at `https://scopeflow.<your-subdomain>.workers.dev`. Add that URL to
+   Supabase → Authentication → URL Configuration (Site URL).
 
-`draft → awaiting_approval → (changes_requested → awaiting_approval)* → active → completed` (or `cancelled`)
+What runs where on the free plan:
+- Pages and files: Workers **static assets** — free, unlimited, no Worker CPU.
+- Worker script: a daily cron that calls `public.health()` so Supabase doesn't pause the project after
+  7 idle days, plus a JSON 404 for stray API calls. ~1 invocation/day of the 100,000/day allowance.
 
-Data model: `profiles · clients · projects · deliverables · milestones · scope_snapshots · scope_decisions · share_links · revision_requests · change_orders · change_order_decisions · activity_log · email_log`.
-
-## 4. Security
-
-- **RLS on every table.** `anon` can read nothing. Tests prove a user can't read or act on another user's data.
-- **Client tokens:** 256-bit random, URL-safe. The database stores only the SHA-256 hash (for lookup) and an AES-GCM ciphertext (so you can re-copy the link). A database leak alone doesn't reveal working links. Links can be rotated or revoked; old ones stop working immediately.
-- **Portal access** goes only through `portal_*` functions that require the token and return just what a client should see.
-- **Immutable records:** scope snapshots, scope decisions, change-order decisions and the activity log reject every `UPDATE` (even from the service role) via triggers. Change-order terms and revision scope classifications can't change after creation.
-- **Snapshots are fingerprinted** (SHA-256 of the exact content). Each approval records the fingerprint, client name, time, user agent and IP.
-- **Server-side authorization** in every server action (`supabase.auth.getUser()`, not session cookies alone), plus the database checks.
-- **Validation twice:** zod on the server, and constraints/checks in Postgres.
-- Money is stored as integer minor units and parsed from strings — no floating-point amounts. The database computes change-order prices; the UI preview uses the same rounding (tested against Postgres).
-- Portal pages send `Referrer-Policy: no-referrer`, `noindex`, `no-store`. Open-redirect-safe `next` parameters; HTML-escaped emails; database error details are never shown to users.
-
-## 5. Tests
+## 4. Tests
 
 ```bash
-npm test          # 52 unit + database tests
+npm test            # unit + database tests (real migration on in-process Postgres)
 npm run typecheck
 npm run build
 ```
 
-- `tests/db/` runs the **real migration** on in-process Postgres (PGlite) with Supabase-equivalent roles and `auth.uid()`: the full workflow, scope checks, pricing, immutability, RLS isolation, privilege checks, token rotation/revocation.
-- `tests/unit/` covers money parsing, pricing (cross-checked against Postgres rounding), token crypto, validation, email escaping, redirects.
-- `tests/e2e/` drives the built app in Chrome through the complete workflow as both freelancer (desktop) and client (phone), plus revoked-link, cross-account and signed-out checks. It runs against a local Supabase stand-in (PGlite + the real PostgREST binary + a small auth shim):
+- `tests/db/` — the whole workflow, scope checks, pricing, immutability, RLS isolation, privilege checks,
+  token hashing/expiry/rotation/revocation, rate limiting, beta allowlist, notifications.
+- `tests/unit/` — money parsing, pricing (cross-checked against Postgres rounding), validation,
+  client-link parsing, redirects, error filtering, the Worker.
+- `tests/e2e/` — the built app in **Cloudflare's runtime** (`wrangler dev`) with Chrome, as freelancer
+  (desktop) and client (phone), plus link replacement/revocation, malformed links, cross-account and
+  signed-out checks, and a no-horizontal-scroll check on mobile. Uses a local Supabase stand-in
+  (PGlite + the real PostgREST binary + a small auth shim):
   ```bash
-  # needs the PostgREST v12 binary: https://github.com/PostgREST/postgrest/releases
-  cd tests/e2e && npm i @electric-sql/pglite @electric-sql/pglite-socket playwright
-  POSTGREST_BIN=/path/to/postgrest node stack.mjs &          # writes keys.json
-  # build & start the app with NEXT_PUBLIC_SUPABASE_URL=http://127.0.0.1:54321,
-  # the anon/service keys from keys.json, NEXT_PUBLIC_APP_URL=http://localhost:3000
-  node workflow.mjs
+  (cd tests/e2e && npm install)
+  # PostgREST v12 binary: https://github.com/PostgREST/postgrest/releases
+  POSTGREST_BIN=/path/to/postgrest CHROME_PATH=/path/to/chrome tests/e2e/run.sh
   ```
 
-## 6. What's not in this MVP (deliberately)
+## 5. Deliberately not in this MVP
 
-- **File uploads / proofs** (Supabase Storage) — the natural next module: attach proofs to deliverables so clients approve the actual files.
-- **Payment processing.** Milestones are tracked; payments are recorded manually. No fake "Pay now" button.
-- **Rate limiting** on the client portal. Tokens are unguessable, but add Vercel/Upstash rate limiting before heavy public use.
-- **Account deletion UI** (the schema cascades correctly; there's no button yet).
-- Team members / multiple seats, invoices, PDF export.
-
-Supabase free projects pause after a week without activity — upgrade or keep it active for production use.
+- Email of any kind (sign-up confirmation, password reset, notifications). Notifications are in-app.
+- File uploads / proofs.
+- Payment processing — payments are recorded manually.
+- Automatic backups (Supabase Free has none) — export from the dashboard periodically.
+- Custom domain (costs money); the free `*.workers.dev` address is used.
