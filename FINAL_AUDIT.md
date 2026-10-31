@@ -126,7 +126,7 @@ Behavioural tests in `tests/db/workflow.test.ts` confirm the same rules in pract
 `npm run audit:secrets` builds the app with a realistic public configuration (an anon-role JWT and a
 Turnstile site key), then scans:
 - **the build output (29 files):** any JWT whose role isn't `anon`, Supabase secret keys, private-key blocks, AWS/Stripe/Resend/GitHub/Slack/Google tokens, database URLs with passwords, names of server-only variables, source maps, dotenv files
-- **all 67 tracked repository files:** the same patterns, plus committed dotenv files
+- **all 68 tracked repository files:** the same patterns, plus committed dotenv files
 
 **Result: no secrets found.** The build contains only:
 - the Supabase URL and anon key, both public by design (access is enforced by RLS and database functions)
