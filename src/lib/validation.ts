@@ -85,10 +85,16 @@ export const projectFormSchema = z
         }),
       )
       .max(50, "Up to 50 milestones"),
+    exclusions: optionalText(4000).default(""),
+    terms: optionalText(4000).default(""),
+    extraRevision: z.string().trim().default(""),
   })
   .superRefine((v, ctx) => {
     if (parseAmount(v.budget, v.currency) === null) {
       ctx.addIssue({ code: "custom", path: ["budget"], message: "Enter a valid amount, e.g. 2500 or 2500.00" });
+    }
+    if (v.extraRevision && parseAmount(v.extraRevision, v.currency) === null) {
+      ctx.addIssue({ code: "custom", path: ["extraRevision"], message: "Enter a valid amount, or leave it empty" });
     }
     v.milestones.forEach((m, i) => {
       const a = parseAmount(m.amount, v.currency);
@@ -123,7 +129,22 @@ export function toProjectPayload(f: ProjectForm) {
       amount_cents: parseAmount(m.amount, f.currency)!,
       due_date: m.dueDate,
     })),
+    exclusions: cleanLines(f.exclusions),
+    terms: f.terms,
+    extra_revision_cents: f.extraRevision ? parseAmount(f.extraRevision, f.currency) : null,
   };
+}
+
+/** One item per line, blank lines and list bullets removed. */
+export function cleanLines(s: string) {
+  return splitLines(s).join("\n");
+}
+
+export function splitLines(s: string | null | undefined): string[] {
+  return String(s ?? "")
+    .split("\n")
+    .map((l) => l.replace(/^\s*(?:[-*•]|\d+[.)])\s+/, "").trim())
+    .filter(Boolean);
 }
 
 // ---------------------------------------------------------------- change orders

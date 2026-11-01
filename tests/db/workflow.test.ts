@@ -534,7 +534,8 @@ describe("in-app notifications", () => {
     const v = await view(token);
     await rpc(anon, "portal_decide_scope", [token, (v.snapshot as Json).id, "approved", "Dana", null]);
     await rpc(anon, "portal_request_revision", [token, "new_work", null, "extra", "Dana"]);
-    expect(await rpc<number>(carol, "unread_notification_count", [])).toBe(2);
+    // Opened (v1.1 "viewed"), approved, change requested.
+    expect(await rpc<number>(carol, "unread_notification_count", [])).toBe(3);
     expect(await rpc<number>(bob, "unread_notification_count", [])).toBeGreaterThanOrEqual(0);
 
     await rpc(carol, "mark_notifications_seen", []);

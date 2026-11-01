@@ -17,6 +17,7 @@ export function ChangeOrderForm({
   originalMinor,
   currentDue,
   request,
+  suggestedAmount = "",
 }: {
   projectId: string;
   currency: string;
@@ -24,6 +25,8 @@ export function ChangeOrderForm({
   originalMinor: number;
   currentDue: string | null;
   request: { id: string; description: string; label: string } | null;
+  /** Pre-fills the fixed price, e.g. the agreed price of an extra revision round. */
+  suggestedAmount?: string;
 }) {
   const action = useAction();
   const fe = action.fieldErrors;
@@ -42,7 +45,7 @@ export function ChangeOrderForm({
     navigate(`/projects/${projectId}`);
   }
   const [type, setType] = useState<"fixed" | "hourly">("fixed");
-  const [amount, setAmount] = useState("");
+  const [amount, setAmount] = useState(suggestedAmount);
   const [hours, setHours] = useState("");
   const [rate, setRate] = useState("");
   const [days, setDays] = useState("0");

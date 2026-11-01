@@ -19,6 +19,7 @@ import {
 import { ActionButton } from "@/components/form-bits";
 import { PageSpinner } from "@/components/app-shell";
 import { ShareLinkDialog } from "@/components/share-link-dialog";
+import { AgreementTerms, RevisionMeter } from "@/components/agreement";
 import { useToast } from "@/components/toast";
 import { useProject, type FullProject } from "@/lib/queries";
 import { supabase } from "@/lib/supabase";
@@ -52,7 +53,8 @@ export default function ProjectPage() {
   const approved = Boolean(p.approved_at);
   const money = projectTotals(Number(p.budget_cents), Number(p.approved_extras_cents), p.milestones);
   const due = currentDueDate(p.due_date, p.extra_days);
-  const used = (dId: string) => revisions.filter((r) => r.deliverable_id === dId && r.kind === "revision" && r.in_scope).length;
+  /** In-scope rounds plus rounds requested beyond the limit. */
+  const requested = (dId: string) => revisions.filter((r) => r.deliverable_id === dId && r.kind === "revision").length;
   const fmt = (n: number) => formatMoney(n, p.currency);
 
   /** Runs a database function, reports the result and refreshes the page data. */
@@ -141,7 +143,6 @@ export default function ProjectPage() {
             {p.summary ? <p className="whitespace-pre-line border-b border-line px-5 py-4 text-sm text-ink-2">{p.summary}</p> : null}
             <ul className="divide-y divide-line">
               {p.deliverables.map((d) => {
-                const u = used(d.id);
                 return (
                   <li key={d.id} className="px-5 py-4">
                     <div className="flex items-start justify-between gap-4">
@@ -150,18 +151,15 @@ export default function ProjectPage() {
                         {d.description ? <p className="mt-0.5 whitespace-pre-line text-[13px] text-muted">{d.description}</p> : null}
                       </div>
                       <p className="num shrink-0 text-[13px] text-ink-2">
-                        {approved ? `${u} / ${d.revisions_included}` : pluralize(d.revisions_included, "revision")}
+                        {approved ? null : pluralize(d.revisions_included, "revision")}
                       </p>
                     </div>
-                    {approved ? (
-                      <div className="mt-3 max-w-xs">
-                        <Meter value={u} max={d.revisions_included} tone={u >= d.revisions_included ? "warning" : "accent"} />
-                      </div>
-                    ) : null}
+                    {approved ? <RevisionMeter used={requested(d.id)} included={d.revisions_included} /> : null}
                   </li>
                 );
               })}
             </ul>
+            <AgreementTerms exclusions={p.exclusions} terms={p.terms} extraRevisionCents={p.extra_revision_cents} currency={p.currency} />
           </Card>
 
           {/* -------------------------------------------- requests */}
@@ -200,7 +198,9 @@ export default function ProjectPage() {
                           <div className="mt-3 flex flex-wrap items-start gap-2">
                             {!r.in_scope ? (
                               <LinkButton size="sm" to={`/projects/${pid}/change-orders/new?request=${r.id}`}>
-                                Propose change order
+                                {r.kind === "revision" && p.extra_revision_cents !== null && p.extra_revision_cents !== undefined
+                                  ? `Charge extra round · ${fmt(Number(p.extra_revision_cents))}`
+                                  : "Propose change order"}
                               </LinkButton>
                             ) : null}
                             <NoteAction
@@ -292,29 +292,40 @@ export default function ProjectPage() {
 
           {/* -------------------------------------------- versions */}
           <Card>
-            <CardHeader title="Scope versions" description="Every version sent is stored permanently with a fingerprint of its exact content." />
+            <CardHeader title="Approval timeline" description="Every version sent is stored permanently with a fingerprint of its exact content." />
             {snapshots.length === 0 ? (
               <p className="px-5 py-6 text-[13px] text-muted">Not sent yet.</p>
             ) : (
               <ul className="divide-y divide-line">
                 {snapshots.map((s) => {
                   const d = decisions.find((x) => x.snapshot_id === s.id);
+                  const opened = activity.find((a) => a.event === "scope.viewed" && a.metadata?.snapshot_id === s.id);
+                  const waiting = !d && s.id === latest?.id && p.status === "awaiting_approval";
                   return (
                     <li key={s.id} className="flex flex-wrap items-start justify-between gap-3 px-5 py-3.5">
                       <div className="min-w-0">
-                        <p className="text-sm font-medium">Version {s.version}</p>
-                        <p className="text-[12px] text-muted">
-                          Sent {formatDateTime(s.created_at)} · <span className="font-mono">{shortHash(s.content_hash)}</span>
+                        <p className="text-sm font-medium">
+                          Version {s.version} <span className="font-mono text-[12px] font-normal text-muted">{shortHash(s.content_hash)}</span>
                         </p>
-                        {d?.comment ? <p className="mt-1 break-words text-[13px] text-ink-2">“{d.comment}”</p> : null}
+                        <ol className="mt-2 space-y-1 text-[12px] text-muted">
+                          <TimelineStep done label={`Sent ${formatDateTime(s.created_at)}`} />
+                          {opened ? (
+                            <TimelineStep done label={`Opened by client ${formatDateTime(opened.created_at)}`} />
+                          ) : waiting ? (
+                            <TimelineStep label="Not opened yet" />
+                          ) : null}
+                          {d ? (
+                            <TimelineStep
+                              done
+                              tone={d.decision === "approved" ? "positive" : "danger"}
+                              label={`${d.decision === "approved" ? "Approved" : "Changes requested"} by ${d.client_name} ${formatDateTime(d.created_at)}`}
+                            />
+                          ) : null}
+                        </ol>
+                        {d?.comment ? <p className="mt-1.5 break-words text-[13px] text-ink-2">“{d.comment}”</p> : null}
                       </div>
                       {d ? (
-                        <div className="text-right">
-                          <Tag tone={d.decision === "approved" ? "positive" : "danger"}>{d.decision === "approved" ? "Approved" : "Changes requested"}</Tag>
-                          <p className="mt-1 text-[12px] text-muted">
-                            {d.client_name} · {formatDateTime(d.created_at)}
-                          </p>
-                        </div>
+                        <Tag tone={d.decision === "approved" ? "positive" : "danger"}>{d.decision === "approved" ? "Approved" : "Changes requested"}</Tag>
                       ) : (
                         <Tag>{s.id === latest?.id && p.status === "awaiting_approval" ? "Awaiting decision" : "Superseded"}</Tag>
                       )}
@@ -664,5 +675,15 @@ function NextStep({
     <div className="mb-6">
       <Alert tone={tone}>{content}</Alert>
     </div>
+  );
+}
+
+function TimelineStep({ label, done = false, tone = "accent" }: { label: string; done?: boolean; tone?: "accent" | "positive" | "danger" }) {
+  const dot = !done ? "border border-line-strong bg-surface" : tone === "positive" ? "bg-positive" : tone === "danger" ? "bg-danger" : "bg-accent";
+  return (
+    <li className="flex items-center gap-2">
+      <span className={`size-2 shrink-0 rounded-full ${dot}`} aria-hidden />
+      <span className={done ? "text-ink-2" : undefined}>{label}</span>
+    </li>
   );
 }

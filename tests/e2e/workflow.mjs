@@ -27,12 +27,18 @@ for (const [who, p] of [["freelancer", f], ["client", c]]) {
 const shot = (p, name, full = true) => p.screenshot({ path: `${OUT}${name}.png`, fullPage: full });
 const step = (s) => console.log(`• ${s}`);
 const accept = (p) => p.once("dialog", (d) => d.accept());
+const SOON = (() => { const d = new Date(Date.now() + 3 * 86_400_000); d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); return d.toISOString().slice(0, 10); })();
 
 try {
   // ---------------------------------------------------------- freelancer onboarding
   step("landing + sign up (no email confirmation)");
   await f.goto(BASE);
-  await f.getByRole("link", { name: "Join the private beta" }).waitFor();
+  await f.getByRole("link", { name: "Start free" }).waitFor();
+  await f.getByRole("link", { name: "Privacy" }).click();
+  await f.getByRole("heading", { name: "Privacy Policy" }).waitFor();
+  await f.goto(`${BASE}/terms`);
+  await f.getByRole("heading", { name: "Terms of Use" }).waitFor();
+  await f.goto(BASE);
   await shot(f, "01-landing", false);
   await f.goto(`${BASE}/signup`);
   await f.getByRole("button", { name: "Create account" }).click();
@@ -74,11 +80,18 @@ try {
   await f.getByRole("button", { name: "Add milestone" }).click();
   await f.getByLabel("Milestone 1").fill("50% deposit");
   await f.locator("#m-amt-0").fill("1600");
+  await f.locator("#m-due-0").fill(SOON);
   await f.getByRole("button", { name: "Add milestone" }).click();
   await f.getByLabel("Milestone 2").fill("Final delivery");
   await f.locator("#m-amt-1").fill("1600");
   await f.locator("#m-due-1").fill("2026-11-27");
   await f.getByText("Scheduled $3,200.00 of $3,200.00").waitFor();
+  // v1.1 scope checker: flags missing exclusions, then goes quiet about them once added.
+  await f.getByText(/Add what's not included/).waitFor();
+  await f.getByLabel("Not included").fill("Copywriting\nStock photo licences\nPrinting");
+  await f.getByLabel("Price per extra revision round (USD)").fill("150");
+  await f.getByLabel("Terms").fill("50% deposit before work starts. Final files after full payment.");
+  await f.getByText(/Add what's not included/).waitFor({ state: "detached" });
   await shot(f, "03-new-project");
   await f.getByRole("button", { name: "Create project" }).click();
   await f.waitForURL(/\/projects\/[0-9a-f-]{36}$/);
@@ -105,6 +118,11 @@ try {
   step("client (phone) requests changes");
   await c.goto(portalUrl);
   await c.getByText("Please review the scope below").waitFor();
+  await c.getByRole("heading", { name: "Not included" }).waitFor();
+  await c.getByText("Stock photo licences").waitFor();
+  await c.getByText("Each extra revision round").waitFor();
+  await c.getByText("$150.00").first().waitFor();
+  await c.getByText("50% deposit before work starts. Final files after full payment.").waitFor();
   await shot(c, "06-portal-review-mobile");
   await c.getByRole("radio", { name: "Request changes" }).click();
   await c.getByRole("button", { name: "Send feedback" }).click();
@@ -115,7 +133,9 @@ try {
 
   step("freelancer sees notification, revises, resends (existing link reused)");
   await f.reload();
-  await f.getByRole("link", { name: /Notifications, 1 unread/ }).waitFor({ timeout: 15000 });
+  // "Opened" (v1.1 timeline) + "asked for changes".
+  await f.getByRole("link", { name: /Notifications, 2 unread/ }).waitFor({ timeout: 15000 });
+  await f.getByText(/Opened by client/).first().waitFor();
   await f.getByText("asked for changes").waitFor();
   await f.getByRole("link", { name: "Edit scope" }).click();
   await f.getByRole("button", { name: "Add deliverable" }).click();
@@ -138,6 +158,12 @@ try {
   await c.getByRole("button", { name: "Approve scope" }).last().click();
   await c.getByText("Request a change").waitFor();
   await c.getByText(/approved by Dana Whitfield/).waitFor();
+  await c.getByText("0 of 2 used · 2 left").waitFor();
+
+  step("dashboard shows upcoming payment dates");
+  await f.goto(`${BASE}/dashboard`);
+  await f.getByText("Payment · 50% deposit · Brand identity for Northwind Coffee").waitFor();
+  await f.getByText(/^In 3 days/).waitFor();
 
   // ---------------------------------------------------------- revisions + scope check
   step("client requests revisions — third exceeds the limit");
@@ -155,7 +181,11 @@ try {
   }
   assert.match(await request("rev", "Primary logo", "Make the wordmark a little bolder."), /covered by the revisions included/);
   assert.match(await request("rev", "Primary logo", "Try the navy from the palette."), /covered/);
+  await c.getByRole("radio", { name: "Revise a deliverable" }).click();
+  await c.getByLabel("Deliverable", { exact: true }).selectOption({ label: "Primary logo" });
+  await c.getByText("All included revisions are used. An extra round is $150.00").waitFor();
   assert.match(await request("rev", "Primary logo", "One more round with a rounder cup icon."), /beyond the agreed scope/);
+  await c.getByText("All 2 used · 1 extra").waitFor();
   assert.match(await request("new", null, "We'd also like a loyalty card design."), /beyond the agreed scope/);
 
   step("freelancer proposes an hourly change order");
@@ -165,6 +195,11 @@ try {
   assert.equal(await f.getByText("Over revision limit").count(), 1);
   assert.equal(await f.getByText("Outside original scope").count(), 1);
   await shot(f, "08-project-requests");
+  // The agreed extra-round price pre-fills the change order for an over-limit revision.
+  await f.getByRole("link", { name: "Charge extra round · $150.00" }).click();
+  await f.waitForURL(/change-orders\/new\?request=/);
+  assert.equal(await f.getByLabel("Price (USD)").inputValue(), "150.00");
+  await f.goto(projectUrl);
   await f.getByRole("link", { name: "Propose change order" }).first().click();
   await f.waitForURL(/change-orders\/new\?request=/);
   await f.getByLabel("Title").fill("Loyalty card design");

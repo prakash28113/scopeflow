@@ -14,6 +14,9 @@ export type Project = {
   start_date: string | null;
   due_date: string | null;
   extra_days: number;
+  exclusions: string | null;
+  terms: string | null;
+  extra_revision_cents: number | null;
   status: ProjectStatus;
   approved_at: string | null;
   completed_at: string | null;
@@ -50,6 +53,10 @@ export type ScopeData = {
   budget_cents: number;
   start_date: string | null;
   due_date: string | null;
+  /** v1.1 — absent on scopes sent before these fields existed. */
+  exclusions?: string | null;
+  terms?: string | null;
+  extra_revision_cents?: number | null;
   /** email is present for the freelancer; the public portal omits it. */
   client: { name: string; company: string | null; email?: string };
   deliverables: { id: string; title: string; description: string | null; revisions_included: number }[];
@@ -115,6 +122,7 @@ export type ActivityEntry = {
   actor_name: string | null;
   event: string;
   summary: string;
+  metadata?: Record<string, unknown>;
   created_at: string;
 };
 
@@ -155,6 +163,8 @@ export type PortalView = {
     description: string | null;
     revisions_included: number;
     revisions_used: number;
+    /** Rounds requested beyond the included ones (v1.1; absent before). */
+    revisions_extra?: number;
   }[];
   revision_requests: {
     id: string;

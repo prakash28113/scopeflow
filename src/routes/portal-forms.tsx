@@ -6,6 +6,7 @@ import { useToast } from "@/components/toast";
 import { changeOrderDecisionSchema, revisionRequestSchema, scopeDecisionSchema } from "@/lib/validation";
 import { useAction } from "@/lib/use-action";
 import { portalRpc } from "@/lib/portal-rpc";
+import { formatMoney } from "@/lib/money";
 
 /** Portal form helper: on success, confirm and refresh the portal so the page shows the new state. */
 function usePortalAction(token: string) {
@@ -164,10 +165,15 @@ export function RevisionRequestForm({
   token,
   clientName,
   deliverables,
+  extraRevisionCents = null,
+  currency,
 }: {
   token: string;
   clientName: string;
   deliverables: { id: string; title: string; revisions_included: number; revisions_used: number }[];
+  /** Agreed price of an extra revision round, from the approved scope. */
+  extraRevisionCents?: number | null;
+  currency: string;
 }) {
   const a = usePortalAction(token);
   const [kind, setKind] = useState<"revision" | "new_work">("revision");
@@ -239,7 +245,9 @@ export function RevisionRequestForm({
               chosen
                 ? remaining! > 0
                   ? `${remaining} of ${chosen.revisions_included} included revision${chosen.revisions_included === 1 ? "" : "s"} left.`
-                  : "All included revisions are used — this one may be quoted as a change order."
+                  : extraRevisionCents !== null && extraRevisionCents !== undefined
+                    ? `All included revisions are used. An extra round is ${formatMoney(Number(extraRevisionCents), currency)}, and your freelancer will ask you to approve it before starting.`
+                    : "All included revisions are used — this one may be quoted as a change order."
                 : undefined
             }
           >

@@ -115,6 +115,13 @@ export async function run(deps) {
   } else if (env.SUPABASE_URL || env.SUPABASE_PUBLISHABLE_KEY) {
     // App-only release: the database was already set up by an earlier run; use its public values.
     ({ supabaseUrl, publishable } = publicSupabaseConfig(env));
+    // Never ship app code that expects database changes that haven't been applied yet.
+    const newest = migrations.map((m) => m.name).sort().at(-1);
+    if (newest && env.SUPABASE_DATABASE_VERSION !== newest) {
+      throw new Error(
+        `Database migration ${newest} hasn't been applied (database is at ${env.SUPABASE_DATABASE_VERSION || "unknown"}). Run the release with SUPABASE_ACCESS_TOKEN so the database is updated first.`,
+      );
+    }
     ok("Using the public Supabase URL and publishable key from config/public-supabase.json (database set up earlier)");
   } else {
     log("::notice::Waiting for the SUPABASE_ACCESS_TOKEN secret — nothing deployed yet.");
@@ -325,7 +332,12 @@ if (isCli) {
   let publicConfig = {};
   try { publicConfig = JSON.parse(readFileSync(join(ROOT, "config/public-supabase.json"), "utf8")); } catch {}
   run({
-    env: { SUPABASE_URL: publicConfig.url, SUPABASE_PUBLISHABLE_KEY: publicConfig.publishableKey, ...process.env },
+    env: {
+      SUPABASE_URL: publicConfig.url,
+      SUPABASE_PUBLISHABLE_KEY: publicConfig.publishableKey,
+      SUPABASE_DATABASE_VERSION: publicConfig.databaseVersion,
+      ...process.env,
+    },
     fetch: globalThis.fetch,
     exec: (cmd, args, opts) => execFileSync(cmd, args, { cwd: ROOT, encoding: "utf8", stdio: ["ignore", "pipe", "inherit"], ...opts }),
     log: (m) => console.log(m),

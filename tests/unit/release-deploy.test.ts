@@ -134,7 +134,12 @@ describe("release automation — deploy and live checks", () => {
 
   it("publishes the app alone from public settings once the database is set up", async () => {
     const w = world();
-    const env = { CLOUDFLARE_API_TOKEN: "cf_secret_value", SUPABASE_URL: SUPA, SUPABASE_PUBLISHABLE_KEY: "sb_publishable_live123" };
+    const env = {
+      CLOUDFLARE_API_TOKEN: "cf_secret_value",
+      SUPABASE_URL: SUPA,
+      SUPABASE_PUBLISHABLE_KEY: "sb_publishable_live123",
+      SUPABASE_DATABASE_VERSION: "20261031000000_scopeflow_schema.sql",
+    };
     expect(await run(w.deps(env))).toBe("deployed");
     expect(w.calls.some((c) => c.url.includes("api.supabase.com"))).toBe(false);
     const deploy = w.execs.find((e) => e.args[0] === "wrangler")!;
@@ -160,5 +165,18 @@ describe("release automation — deploy and live checks", () => {
     const queries = w.calls.filter((c) => c.url.endsWith("/database/query")).map((c) => String((c.body as { query: string }).query));
     expect(queries).toContain("delete from public.beta_allowlist;");
     expect(queries.some((q) => q.includes("insert into public.beta_allowlist"))).toBe(false);
+  });
+
+  it("refuses an app-only release while a database migration is pending", async () => {
+    const w = world();
+    const deps = {
+      ...w.deps({ CLOUDFLARE_API_TOKEN: "cf_secret_value", SUPABASE_URL: SUPA, SUPABASE_PUBLISHABLE_KEY: "sb_publishable_live123", SUPABASE_DATABASE_VERSION: "20261031000000_scopeflow_schema.sql" }),
+      migrations: [
+        { name: "20261031000000_scopeflow_schema.sql", body: "select 1;" },
+        { name: "20261101000000_v1_1_agreement.sql", body: "select 1;" },
+      ],
+    };
+    await expect(run(deps)).rejects.toThrow(/20261101000000_v1_1_agreement\.sql hasn't been applied/);
+    expect(w.execs).toHaveLength(0);
   });
 });

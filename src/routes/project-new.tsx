@@ -19,6 +19,9 @@ export default function NewProject() {
     client: { name: "", email: "", company: "" },
     deliverables: [{ title: "", description: "", revisions: 2 }],
     milestones: [],
+    exclusions: "",
+    terms: "",
+    extraRevision: "",
   };
   return (
     <div className="mx-auto max-w-3xl">

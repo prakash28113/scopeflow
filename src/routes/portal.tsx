@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { Alert, Card, Logo, Meter, Tag } from "@/components/ui";
+import { Alert, Card, Logo, Tag } from "@/components/ui";
+import { AgreementTerms, RevisionMeter } from "@/components/agreement";
 import { PageSpinner } from "@/components/app-shell";
 import { usePortal } from "@/lib/queries";
 import { tokenFromHash } from "@/lib/portal-link";
@@ -101,7 +102,7 @@ export default function PortalPage() {
           <p className="text-sm font-medium">{snapshot ? "The scope is being updated" : "The scope is being prepared"}</p>
           <p className="mx-auto mt-1 max-w-sm text-[13px] text-muted">
             {snapshot?.decision?.decision === "rejected"
-              ? `Thanks for your feedback on ${formatDate(snapshot.decision.created_at)}. You'll get an email when the revised version is ready.`
+              ? `Thanks for your feedback on ${formatDate(snapshot.decision.created_at)}. The revised version will appear on this page; your freelancer will let you know.`
               : `${v.freelancer.name} will share it here for your approval.`}
           </p>
         </Card>
@@ -157,7 +158,13 @@ export default function PortalPage() {
                 <p className="mt-0.5 text-[13px] text-muted">Requests are checked against what you approved.</p>
               </div>
               <div className="px-5 py-5 sm:px-6">
-                <RevisionRequestForm token={token} clientName={v.client.name} deliverables={v.deliverables} />
+                <RevisionRequestForm
+                  token={token}
+                  clientName={v.client.name}
+                  deliverables={v.deliverables}
+                  extraRevisionCents={snapshot?.data.extra_revision_cents ?? null}
+                  currency={v.project.currency}
+                />
               </div>
             </Card>
           ) : null}
@@ -174,13 +181,8 @@ export default function PortalPage() {
                       <p className="text-sm font-medium">{d.title}</p>
                       {d.description ? <p className="mt-0.5 whitespace-pre-line text-[13px] text-muted">{d.description}</p> : null}
                     </div>
-                    <p className="num shrink-0 text-[12px] text-muted">
-                      {d.revisions_used} of {pluralize(d.revisions_included, "revision")} used
-                    </p>
                   </div>
-                  <div className="mt-2.5 max-w-[200px]">
-                    <Meter value={d.revisions_used} max={d.revisions_included} tone={d.revisions_used >= d.revisions_included ? "warning" : "accent"} />
-                  </div>
+                  <RevisionMeter used={d.revisions_used + (d.revisions_extra ?? 0)} included={d.revisions_included} />
                 </li>
               ))}
             </ul>
@@ -356,6 +358,14 @@ function ScopeDocument({
           <p className="mt-0.5 text-base font-semibold">{formatDate(data.due_date)}</p>
         </div>
       </section>
+
+      <AgreementTerms
+        exclusions={data.exclusions}
+        terms={data.terms}
+        extraRevisionCents={data.extra_revision_cents}
+        currency={data.currency}
+        className="border-b border-t-0 [&>section]:sm:px-6"
+      />
 
       {data.milestones.length ? (
         <section className="border-b border-line px-5 py-5 sm:px-6">

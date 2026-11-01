@@ -8,6 +8,7 @@ import { projectFormSchema, toProjectPayload, type ProjectForm as Values } from 
 import { useAction } from "@/lib/use-action";
 import { supabase } from "@/lib/supabase";
 import { useToast } from "@/components/toast";
+import { checkScope } from "@/lib/scope-check";
 
 export type FormValues = Omit<Values, "deliverables"> & {
   deliverables: { title: string; description: string; revisions: number | string }[];
@@ -49,6 +50,7 @@ export function ProjectForm({ projectId, initial }: { projectId: string | null; 
   }, [v.budget, v.milestones, v.currency]);
 
   const defaultRevisions = v.deliverables[0]?.revisions ?? 2;
+  const hints = useMemo(() => checkScope(v), [v]);
 
   return (
     <form onSubmit={onSubmit} className="space-y-6" noValidate>
@@ -63,7 +65,7 @@ export function ProjectForm({ projectId, initial }: { projectId: string | null; 
           <Field label="Client name" htmlFor="client-name" error={fe["client.name"]}>
             <Input id="client-name" value={v.client.name} onChange={(e) => setClient("name", e.target.value)} aria-invalid={!!fe["client.name"]} />
           </Field>
-          <Field label="Client email" htmlFor="client-email" error={fe["client.email"]} hint="Where approval requests are sent.">
+          <Field label="Client email" htmlFor="client-email" error={fe["client.email"]} hint="For your records. ScopeFlow never emails clients; you share their link.">
             <Input id="client-email" type="email" value={v.client.email} onChange={(e) => setClient("email", e.target.value)} aria-invalid={!!fe["client.email"]} />
           </Field>
           <Field label="Company" htmlFor="client-company" error={fe["client.company"]} hint="Optional">
@@ -196,6 +198,58 @@ export function ProjectForm({ projectId, initial }: { projectId: string | null; 
             </p>
           ) : null}
         </div>
+      </Card>
+
+      <Card>
+        <CardHeader
+          title="Agreement terms"
+          description="Your client sees these next to the deliverables and approves them together. They're locked once approved."
+        />
+        <div className="grid gap-5 p-5 sm:grid-cols-2">
+          <Field
+            label="Not included"
+            htmlFor="exclusions"
+            error={fe.exclusions}
+            hint="One item per line, e.g. Copywriting, Stock photo licences, Printing."
+            className="sm:col-span-2"
+          >
+            <Textarea id="exclusions" rows={4} value={v.exclusions} onChange={(e) => set("exclusions", e.target.value)} placeholder={"Copywriting\nStock photo licences\nPrinting costs"} />
+          </Field>
+          <Field
+            label={`Price per extra revision round (${v.currency})`}
+            htmlFor="extra-revision"
+            error={fe.extraRevision}
+            hint="Shown to the client when they've used their included rounds. Optional."
+          >
+            <Input id="extra-revision" inputMode="decimal" value={v.extraRevision} onChange={(e) => set("extraRevision", e.target.value)} placeholder="1500" className="num" aria-invalid={!!fe.extraRevision} />
+          </Field>
+          <div className="hidden sm:block" />
+          <Field label="Terms" htmlFor="terms" error={fe.terms} hint="Payment, ownership, cancellation. Optional." className="sm:col-span-2">
+            <Textarea id="terms" rows={4} value={v.terms} onChange={(e) => set("terms", e.target.value)} placeholder="50% advance before work starts. Final files are delivered after full payment." />
+          </Field>
+        </div>
+      </Card>
+
+      <Card>
+        <CardHeader
+          title="Scope check"
+          description={hints.length ? "Suggestions to make this scope harder to stretch. Optional — you can save anyway." : undefined}
+        />
+        {hints.length ? (
+          <ul className="divide-y divide-line" aria-live="polite">
+            {hints.map((h) => (
+              <li key={h.message} className="flex gap-3 px-5 py-3 text-[13px] leading-relaxed text-ink-2">
+                <span className={cx("mt-1.5 size-2 shrink-0 rounded-full", h.level === "warn" ? "bg-warning" : "bg-line-strong")} aria-hidden />
+                <span>
+                  <span className="sr-only">{h.level === "warn" ? "Warning: " : "Tip: "}</span>
+                  {h.message}
+                </span>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="px-5 py-4 text-[13px] text-positive">Looks solid: clear deliverables, exclusions, terms and limits.</p>
+        )}
       </Card>
 
       <div className="flex items-center justify-end gap-3">

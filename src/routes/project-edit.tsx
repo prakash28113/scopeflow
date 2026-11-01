@@ -24,6 +24,9 @@ export default function EditProject() {
     client: { name: p.clients.name, email: p.clients.email, company: p.clients.company ?? "" },
     deliverables: p.deliverables.map((d) => ({ title: d.title, description: d.description ?? "", revisions: d.revisions_included })),
     milestones: p.milestones.map((m) => ({ title: m.title, amount: toInputAmount(Number(m.amount_cents), p.currency), dueDate: m.due_date ?? "" })),
+    exclusions: p.exclusions ?? "",
+    terms: p.terms ?? "",
+    extraRevision: p.extra_revision_cents === null || p.extra_revision_cents === undefined ? "" : toInputAmount(Number(p.extra_revision_cents), p.currency),
   };
   return (
     <div className="mx-auto max-w-3xl">

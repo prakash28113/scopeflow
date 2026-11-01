@@ -6,6 +6,7 @@ import { useDashboard } from "@/lib/queries";
 import { formatMoney } from "@/lib/money";
 import { formatDate, formatDateTime } from "@/lib/format";
 import { currentDueDate } from "@/lib/pricing";
+import { localToday, upcomingItems, whenLabel } from "@/lib/upcoming";
 import type { ProjectStatus } from "@/lib/types";
 
 const OPEN: ProjectStatus[] = ["draft", "awaiting_approval", "changes_requested", "active"];
@@ -35,6 +36,7 @@ export default function Dashboard() {
   const collected = sumByCurrency(live.map((p) => ({ currency: p.currency, amount: paidOf(p) })));
   const firstName = (profile.data?.full_name ?? "").split(" ")[0];
   const pendingCount = awaitingScope.length + changeOrders.length;
+  const upcoming = upcomingItems(projects, localToday());
 
   return (
     <>
@@ -88,6 +90,31 @@ export default function Dashboard() {
             </Card>
 
             <div className="space-y-6">
+              <Card>
+                <CardHeader title="Upcoming" description="Overdue and due in the next 14 days." />
+                {upcoming.length === 0 ? (
+                  <p className="px-5 py-6 text-[13px] text-muted">Nothing due in the next two weeks.</p>
+                ) : (
+                  <ul className="divide-y divide-line">
+                    {upcoming.map((u) => (
+                      <li key={u.key}>
+                        <Link to={`/projects/${u.projectId}`} className="flex items-start gap-3 px-5 py-3 hover:bg-sunken/60">
+                          <div className="min-w-0 flex-1">
+                            <p className="truncate text-[13px] font-medium">
+                              {u.kind === "payment" ? `Payment · ${u.label}` : u.label} · {u.projectTitle}
+                            </p>
+                            <p className={u.daysAway < 0 ? "text-[12px] text-danger" : "text-[12px] text-muted"}>
+                              {whenLabel(u.daysAway)} · {formatDate(u.date)}
+                            </p>
+                          </div>
+                          {u.amountCents !== undefined ? <span className="num shrink-0 text-[13px] text-ink-2">{formatMoney(u.amountCents, u.currency)}</span> : null}
+                        </Link>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </Card>
+
               <Card>
                 <CardHeader title="Pending approvals" description="Waiting for a client decision." />
                 {pendingCount === 0 ? (

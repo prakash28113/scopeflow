@@ -3,6 +3,7 @@ import { Alert, PageHeader } from "@/components/ui";
 import { PageSpinner } from "@/components/app-shell";
 import { useProject } from "@/lib/queries";
 import { currentDueDate } from "@/lib/pricing";
+import { toInputAmount } from "@/lib/money";
 import NotFound from "./not-found";
 import { ChangeOrderForm } from "./change-order-form";
 
@@ -25,6 +26,11 @@ export default function NewChangeOrder() {
         label: rr.kind === "revision" ? `Extra revision · ${p.deliverables.find((d) => d.id === rr.deliverable_id)?.title ?? ""}` : `New work from ${rr.requested_by}`,
       }
     : null;
+  // An extra revision round has an agreed price in the approved scope: start from it.
+  const suggestedAmount =
+    rr?.kind === "revision" && p.extra_revision_cents !== null && p.extra_revision_cents !== undefined
+      ? toInputAmount(Number(p.extra_revision_cents), p.currency)
+      : "";
 
   return (
     <div className="mx-auto max-w-3xl">
@@ -44,6 +50,7 @@ export default function NewChangeOrder() {
         contractMinor={Number(p.budget_cents) + Number(p.approved_extras_cents)}
         currentDue={currentDueDate(p.due_date, p.extra_days)}
         request={request}
+        suggestedAmount={suggestedAmount}
       />
     </div>
   );

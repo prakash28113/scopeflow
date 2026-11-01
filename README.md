@@ -11,7 +11,7 @@ update → milestones are marked paid (recorded manually).
 
 Stack: Vite · React 19 · React Router 7 · TanStack Query · Tailwind CSS 4 · Supabase (Postgres + Auth) ·
 Cloudflare Workers (static assets + a tiny cron Worker). No email provider, no paid services.
-Security review and verification: [FINAL_AUDIT.md](FINAL_AUDIT.md).
+Security review and verification: [FINAL_AUDIT.md](FINAL_AUDIT.md). What changed in each version: [CHANGELOG.md](CHANGELOG.md).
 **Deploying the private beta:** the GitHub Actions workflow deploys everything automatically once two
 secrets are added — see *Automatic deployment* in **[DEPLOYMENT.md](DEPLOYMENT.md)** (Supabase setup, migration, allowlist,
 Cloudflare commands, verification, backups, rollback and a step-by-step checklist).
@@ -21,7 +21,7 @@ Cloudflare commands, verification, backups, rollback and a step-by-step checklis
 ## 1. Supabase (free project)
 
 1. Create a project at supabase.com.
-2. **SQL Editor →** run `supabase/migrations/20261031000000_scopeflow_schema.sql`.
+2. **SQL Editor →** run each file in `supabase/migrations/` in name order (the release automation does this for you).
 3. **Authentication → Sign In / Providers → Email:**
    - turn **Confirm email OFF** (the beta sends no email),
    - set **Minimum password length** to 8 (or more).
@@ -73,7 +73,7 @@ What runs where on the free plan:
 
 ```bash
 npm run verify         # all of the below except e2e
-npm test               # 106 unit + database tests (real migration on in-process Postgres)
+npm test               # 131 unit + database tests (real migration on in-process Postgres)
 npm run typecheck
 npm run audit:secrets  # build with a public test config, scan build output + repo for secrets
 npm run audit:deps     # licences, paid-service SDKs, external hosts in the bundle
