@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Alert, Card, Logo, Tag } from "@/components/ui";
 import { AgreementTerms, RevisionMeter } from "@/components/agreement";
+import { PrintButton, QuoteTable } from "@/components/quote";
 import { PageSpinner } from "@/components/app-shell";
 import { usePortal } from "@/lib/queries";
 import { tokenFromHash } from "@/lib/portal-link";
@@ -323,7 +324,7 @@ function ScopeDocument({
 }) {
   const fmt = (n: number) => formatMoney(Number(n), data.currency);
   return (
-    <article className={flat ? "" : "mt-6 rounded-[var(--radius-card)] border border-line bg-surface"}>
+    <article data-print-scope className={flat ? "" : "mt-6 rounded-[var(--radius-card)] border border-line bg-surface"}>
       {data.summary ? <p className="whitespace-pre-line border-b border-line px-5 py-5 text-sm leading-relaxed text-ink-2 sm:px-6">{data.summary}</p> : null}
 
       <section className="border-b border-line px-5 py-5 sm:px-6">
@@ -343,6 +344,13 @@ function ScopeDocument({
           ))}
         </ol>
       </section>
+
+      {data.pricing ? (
+        <section className="border-b border-line px-5 py-5 sm:px-6">
+          <h3 className="mb-3 text-[12px] font-semibold uppercase tracking-[0.06em] text-muted">Quote</h3>
+          <QuoteTable lines={data.deliverables} pricing={data.pricing} currency={data.currency} />
+        </section>
+      ) : null}
 
       <section className="grid grid-cols-2 gap-4 border-b border-line px-5 py-5 text-[13px] sm:grid-cols-3 sm:px-6">
         <div>
@@ -384,9 +392,12 @@ function ScopeDocument({
         </section>
       ) : null}
 
-      <p className="px-5 py-3.5 text-[11px] text-muted sm:px-6">
-        Version {version} · sent {formatDateTime(sentAt)} · fingerprint <span className="font-mono">{shortHash(hash)}</span>
-      </p>
+      <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-3.5 sm:px-6">
+        <p className="text-[11px] text-muted">
+          Version {version} · sent {formatDateTime(sentAt)} · fingerprint <span className="font-mono">{shortHash(hash)}</span>
+        </p>
+        <PrintButton />
+      </div>
     </article>
   );
 }

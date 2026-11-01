@@ -1,6 +1,17 @@
 export type ProjectStatus = "draft" | "awaiting_approval" | "changes_requested" | "active" | "completed" | "cancelled";
 
-export type Client = { id: string; name: string; email: string; company: string | null };
+export type Client = { id: string; name: string; email: string; company: string | null; phone?: string | null; notes?: string | null };
+
+export type PricingType = "fixed" | "hourly";
+export type QuotePricing = {
+  subtotal_cents: number;
+  discount_bps: number;
+  discount_cents: number;
+  tax_label: string | null;
+  tax_bps: number;
+  tax_cents: number;
+  total_cents: number;
+};
 
 export type Project = {
   id: string;
@@ -17,6 +28,9 @@ export type Project = {
   exclusions: string | null;
   terms: string | null;
   extra_revision_cents: number | null;
+  discount_bps?: number | null;
+  tax_bps?: number | null;
+  tax_label?: string | null;
   status: ProjectStatus;
   approved_at: string | null;
   completed_at: string | null;
@@ -31,6 +45,10 @@ export type Deliverable = {
   title: string;
   description: string | null;
   revisions_included: number;
+  pricing_type?: PricingType | null;
+  hours?: string | number | null;
+  rate_cents?: number | null;
+  amount_cents?: number | null;
 };
 
 export type Milestone = {
@@ -57,9 +75,20 @@ export type ScopeData = {
   exclusions?: string | null;
   terms?: string | null;
   extra_revision_cents?: number | null;
+  /** v1.2 — itemised quote totals; null/absent when deliverables aren't priced. */
+  pricing?: QuotePricing | null;
   /** email is present for the freelancer; the public portal omits it. */
   client: { name: string; company: string | null; email?: string };
-  deliverables: { id: string; title: string; description: string | null; revisions_included: number }[];
+  deliverables: {
+    id: string;
+    title: string;
+    description: string | null;
+    revisions_included: number;
+    pricing_type?: PricingType | null;
+    hours?: string | number | null;
+    rate_cents?: number | null;
+    amount_cents?: number | null;
+  }[];
   milestones: { title: string; amount_cents: number; due_date: string | null }[];
 };
 

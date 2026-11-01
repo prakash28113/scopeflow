@@ -81,7 +81,7 @@ export function AppShell() {
   const nav = ({ isActive }: { isActive: boolean }) => cx(buttonClass("ghost", "sm"), isActive && "bg-sunken text-ink");
   return (
     <div className="min-h-dvh">
-      <header className="sticky top-0 z-20 border-b border-line bg-canvas/90 backdrop-blur">
+      <header className="sticky top-0 z-20 border-b border-line bg-canvas/90 backdrop-blur print:hidden">
         <div className="mx-auto flex h-14 max-w-6xl items-center justify-between gap-3 px-4 sm:px-6">
           <div className="flex items-center gap-5">
             <Link to="/dashboard" aria-label="ScopeFlow dashboard" className="flex items-center gap-2">
@@ -91,6 +91,9 @@ export function AppShell() {
             <nav className="hidden items-center gap-1 sm:flex" aria-label="Main">
               <NavLink to="/dashboard" className={nav}>
                 Dashboard
+              </NavLink>
+              <NavLink to="/clients" className={nav}>
+                Clients
               </NavLink>
               <NavLink to="/plan" className={nav}>
                 Plan
@@ -120,6 +123,9 @@ export function AppShell() {
               <div className="absolute right-0 mt-2 w-48 rounded-lg border border-line bg-surface p-1 shadow-[0_12px_32px_-16px_rgba(22,24,29,0.3)]">
                 <Link to="/dashboard" className="block rounded-md px-3 py-2 text-sm hover:bg-sunken sm:hidden">
                   Dashboard
+                </Link>
+                <Link to="/clients" className="block rounded-md px-3 py-2 text-sm hover:bg-sunken sm:hidden">
+                  Clients
                 </Link>
                 <Link to="/plan" className="block rounded-md px-3 py-2 text-sm hover:bg-sunken sm:hidden">
                   Plan & usage
