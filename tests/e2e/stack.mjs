@@ -1,7 +1,9 @@
 // Usage: POSTGREST_BIN=/path/to/postgrest node tests/e2e/stack.mjs
 // Local Supabase stand-in for end-to-end testing:
 //   PGlite (real Postgres 17) over the wire protocol -> real PostgREST 12 -> gateway at :54321
-//   plus a minimal GoTrue-compatible auth shim (password grant, /user, signup, refresh, logout).
+//   plus a minimal GoTrue-compatible auth shim (password grant, /user, signup, refresh, logout,
+//   password recovery). Recovery "emails" are kept in memory and read by the walkthrough via
+//   GET /auth/v1/__test/recovery?email=… (local test stand-in only; never part of the app).
 import { PGlite } from "@electric-sql/pglite";
 import { PGLiteSocketServer } from "@electric-sql/pglite-socket";
 import { createHmac, randomUUID } from "node:crypto";
@@ -109,6 +111,7 @@ function json(res, status, obj) {
   res.end(JSON.stringify(obj));
 }
 
+const outbox = new Map();
 async function auth(req, res, url) {
   const path = url.pathname.replace("/auth/v1", "");
   if (path === "/signup" && req.method === "POST") {
@@ -143,7 +146,29 @@ async function auth(req, res, url) {
     return json(res, 200, userObj(r.rows[0]));
   }
   if (path === "/logout") { res.writeHead(204, CORS); return res.end(); }
-  if (path === "/recover") return json(res, 200, {});
+  if (path === "/recover" && req.method === "POST") {
+    const b = await body(req);
+    const r = await q("select * from auth.users where email = $1", [String(b.email ?? "").toLowerCase()]);
+    const back = url.searchParams.get("redirect_to");
+    if (r.rows.length && back) {
+      const s = session(r.rows[0]);
+      outbox.set(r.rows[0].email, `${back}#access_token=${s.access_token}&expires_at=${s.expires_at}&expires_in=3600&refresh_token=${s.refresh_token}&token_type=bearer&type=recovery`);
+    }
+    return json(res, 200, {}); // same answer whether or not the account exists, like Supabase
+  }
+  if (path === "/__test/recovery" && req.method === "GET") {
+    const link = outbox.get(url.searchParams.get("email"));
+    outbox.delete(url.searchParams.get("email"));
+    return link ? json(res, 200, { link }) : json(res, 404, { msg: "no recovery email" });
+  }
+  if (path === "/user" && req.method === "PUT") {
+    const claims = verify((req.headers.authorization || "").replace(/^Bearer /, ""));
+    if (!claims?.sub) return json(res, 401, { code: 401, error_code: "bad_jwt", msg: "invalid JWT" });
+    const b = await body(req);
+    if (typeof b.password === "string" && b.password.length < 8) return json(res, 422, { code: 422, error_code: "weak_password", msg: "Password should be at least 8 characters." });
+    const r = await q("update auth.users set encrypted_password = coalesce($2, encrypted_password) where id = $1 returning *", [claims.sub, b.password ?? null]);
+    return json(res, 200, userObj(r.rows[0]));
+  }
   return json(res, 404, { msg: `auth shim: ${req.method} ${path} not implemented` });
 }
 
