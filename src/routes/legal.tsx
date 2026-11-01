@@ -43,7 +43,7 @@ export function PrivacyPage() {
       <section>
         <h2>What we store</h2>
         <ul>
-          <li><strong>Your account:</strong> name, email address and a securely hashed password. We never see your password.</li>
+          <li><strong>Your account:</strong> name, email address and a securely hashed password. We never see your password. If you continue with Google, Google shares only your name, email address and profile picture with us, and we never see your Google password.</li>
           <li><strong>Your business details:</strong> what you enter in onboarding and settings, such as business name and currency.</li>
           <li><strong>Your projects:</strong> client names and email addresses, deliverables, prices, dates, milestones, change orders and payments you record.</li>
           <li>
@@ -58,6 +58,7 @@ export function PrivacyPage() {
         <h2>What we don&apos;t do</h2>
         <ul>
           <li>No advertising, tracking or analytics cookies. Your browser only keeps your sign-in session.</li>
+          <li>We count visits with Cloudflare Web Analytics, which uses no cookies, doesn&apos;t follow you across other websites and doesn&apos;t identify you.</li>
           <li>We don&apos;t sell or share your data, and we don&apos;t email your clients. You share client links yourself.</li>
           <li>We don&apos;t process payments or store card details.</li>
         </ul>

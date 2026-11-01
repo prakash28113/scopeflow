@@ -131,6 +131,19 @@ async function auth(req, res, url) {
       if (!r.rows.length) return json(res, 400, { code: 400, error_code: "invalid_credentials", msg: "Invalid login credentials" });
       return json(res, 200, session(r.rows[0]));
     }
+    if (grant === "id_token") {
+      // Test stand-in for Sign in with Google: accepts only "test-google:<email>:<name>" with a nonce.
+      const m = /^test-google:([^:]+):(.+)$/.exec(String(b.id_token ?? ""));
+      if (b.provider !== "google" || !m || !b.nonce) return json(res, 400, { code: 400, error_code: "bad_oauth_callback", msg: "Bad ID token" });
+      const email = m[1].toLowerCase();
+      let r = await q("select * from auth.users where email = $1", [email]);
+      if (!r.rows.length) {
+        r = await q("insert into auth.users (email, encrypted_password, raw_user_meta_data) values ($1, $2, $3) returning *", [
+          email, `google-only-${randomUUID()}`, JSON.stringify({ full_name: m[2], name: m[2], email_verified: true }),
+        ]);
+      }
+      return json(res, 200, session(r.rows[0]));
+    }
     if (grant === "refresh_token") {
       const id = String(b.refresh_token || "").split("_")[1];
       const r = await q("select * from auth.users where id::text = $1", [id]);

@@ -62,7 +62,7 @@ describe("worker", () => {
     const res = await worker.fetch(req("/projects/1", "text/html,*/*"), env);
     expect(res.status).toBe(200);
     expect(await res.text()).toContain("app");
-    expect(res.headers.get("content-security-policy")).toContain("connect-src 'self' https://abcdefghijklmnopqrst.supabase.co");
+    expect(res.headers.get("content-security-policy")).toContain("connect-src 'self' https://abcdefghijklmnopqrst.supabase.co https://cloudflareinsights.com");
     expect(res.headers.get("content-security-policy")).not.toContain("challenges.cloudflare.com");
     expect(res.headers.get("x-frame-options")).toBe("DENY");
     expect(res.headers.get("x-robots-tag")).toBeNull();

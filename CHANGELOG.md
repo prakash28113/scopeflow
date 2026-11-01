@@ -1,5 +1,30 @@
 # Changelog
 
+## Sign in with Google — live 1 Nov 2026 (button appears once the Google Client ID is added)
+
+- **"Continue with Google"** on the sign-in and sign-up pages:
+  - uses Google's official button and popup, so Google shows "ScopeFlow", not the Supabase address;
+  - signs in through Supabase with a per-visit nonce, so a Google token can't be replayed;
+  - new users go to onboarding with their name filled in;
+  - existing email users with the same Google email land in the same account;
+  - email and password sign-in is unchanged.
+- **Off until configured.** The button and all Google-related security changes turn on only when `googleClientId` in `config/public-site.json` is a real `…apps.googleusercontent.com` ID. The client secret goes only into Supabase → Authentication → Providers → Google.
+- **Security, when on:**
+  - the policy allows only Google's sign-in paths (`accounts.google.com/gsi/client`, `/gsi/`, `/gsi/style`);
+  - the opener policy becomes `same-origin-allow-popups` so the popup can report back;
+  - the referrer policy becomes `strict-origin` (the site address only, never a page path). Client-link secrets sit after `#` and are never sent.
+- **Privacy Policy:** Google shares only name, email and profile picture.
+- **Tests:**
+  - new unit tests;
+  - the browser walkthrough is now **28 steps**, with a new Google step: sign-up → onboarding with the name filled in → returning sign-in to the dashboard. It also checks the headers and the nonce.
+  - Every test browser uses a stand-in for Google's script, so tests never contact Google.
+
+## Visitor stats — live 1 Nov 2026
+
+- The security policy now allows Cloudflare Web Analytics (free, cookieless): scripts from `https://static.cloudflareinsights.com` and beacons to `https://cloudflareinsights.com`. Nothing else is added.
+- The Privacy Policy mentions it: no cookies, no cross-site tracking, nobody identified.
+- Turned on by the owner in Cloudflare → Web Analytics (automatic setup for scopeflow.in).
+
 ## Feedback link — live 1 Nov 2026 (release run 41314127613)
 
 - **Send feedback** in the account menu, and a short line at the bottom of every app page. It opens the user's own email app, addressed to support, with a short prompt and the page path. Project ids are replaced with `:id`, and no project data is included.

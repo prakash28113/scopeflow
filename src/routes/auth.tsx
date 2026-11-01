@@ -10,6 +10,7 @@ import { PASSWORD_RESET_EMAIL, SUPPORT_EMAIL, supportMailto } from "@/lib/site";
 import { BetaBadge } from "@/components/site-footer";
 import { issuesToFieldErrors, newPasswordSchema, resetRequestSchema, signInSchema, signUpSchema, type FieldErrors } from "@/lib/validation";
 import { readRecoveryHash } from "@/lib/recovery";
+import { GoogleSignIn } from "@/components/google-signin";
 
 function AuthLayout({ children }: { children: ReactNode }) {
   return (
@@ -32,7 +33,16 @@ function useAuthForm() {
   const [error, setError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const [captcha, setCaptcha] = useState<string | null>(null);
-  return { pending, setPending, error, setError, fieldErrors, setFieldErrors, captcha, setCaptcha };
+  return {
+    pending,
+    setPending,
+    error,
+    setError,
+    fieldErrors,
+    setFieldErrors,
+    captcha,
+    setCaptcha,
+  };
 }
 
 export function LoginPage() {
@@ -64,6 +74,9 @@ export function LoginPage() {
     <AuthLayout>
       <h1 className="text-2xl font-semibold tracking-[-0.02em]">Welcome back</h1>
       <p className="mb-8 mt-1.5 text-sm text-muted">Sign in to manage your projects.</p>
+      <div className="mb-4">
+        <GoogleSignIn context="signin" onSignedIn={() => navigate(next, { replace: true })} onError={f.setError} />
+      </div>
       <form onSubmit={onSubmit} className="space-y-4" noValidate>
         {f.error ? <Alert>{f.error}</Alert> : null}
         <Field label="Email" htmlFor="email" error={f.fieldErrors.email}>
@@ -110,13 +123,17 @@ export function SignupPage() {
     const { data, error } = await supabase.auth.signUp({
       email: parsed.data.email,
       password: parsed.data.password,
-      options: { data: { full_name: parsed.data.fullName }, captchaToken: f.captcha ?? undefined },
+      options: {
+        data: { full_name: parsed.data.fullName },
+        captchaToken: f.captcha ?? undefined,
+      },
     });
     f.setPending(false);
     if (error) {
       const msg = error.message ?? "";
       if (/already registered|already exists/i.test(msg)) return f.setError("An account with this email already exists.");
-      if (/database error saving new user/i.test(msg)) return f.setError(`Sign-ups are invite-only right now. Email ${SUPPORT_EMAIL} to request access.`);
+      if (/database error saving new user/i.test(msg))
+        return f.setError(`Sign-ups are invite-only right now. Email ${SUPPORT_EMAIL} to request access.`);
       if (/password/i.test(msg)) return f.setError(msg);
       return f.setError("Couldn't create the account. Please try again.");
     }
@@ -131,27 +148,64 @@ export function SignupPage() {
       {notice ? (
         <Alert tone="info">{notice}</Alert>
       ) : (
-        <form onSubmit={onSubmit} className="space-y-4" noValidate>
-          {f.error ? <Alert>{f.error}</Alert> : null}
-          <Field label="Your name" htmlFor="fullName" error={f.fieldErrors.fullName}>
-            <Input id="fullName" name="fullName" autoComplete="name" required />
-          </Field>
-          <Field label="Email" htmlFor="email" error={f.fieldErrors.email}>
-            <Input id="email" name="email" type="email" autoComplete="email" required />
-          </Field>
-          <Field label="Password" htmlFor="password" error={f.fieldErrors.password} hint={PASSWORD_RESET_EMAIL ? "At least 8 characters." : "At least 8 characters. Keep it safe: password resets go through support during the beta."}>
-            <Input id="password" name="password" type="password" autoComplete="new-password" required />
-          </Field>
-          <Captcha onToken={f.setCaptcha} />
-          <SubmitButton className="w-full" pending={f.pending} pendingLabel="Creating account…">
-            Create account
-          </SubmitButton>
-          <p className="text-[12px] leading-relaxed text-muted">
-            By creating an account you agree to the{" "}
-            <Link to="/terms" className="underline hover:text-ink">Terms &amp; Conditions</Link> and{" "}
-            <Link to="/privacy" className="underline hover:text-ink">Privacy Policy</Link>.
-          </p>
-        </form>
+        <>
+          <div className="mb-4">
+            <GoogleSignIn
+              context="signup"
+              onSignedIn={() => navigate("/onboarding", { replace: true })}
+              onError={f.setError}
+              note={
+                <>
+                  By continuing with Google you agree to the{" "}
+                  <Link to="/terms" className="underline hover:text-ink">
+                    Terms &amp; Conditions
+                  </Link>{" "}
+                  and{" "}
+                  <Link to="/privacy" className="underline hover:text-ink">
+                    Privacy Policy
+                  </Link>
+                  .
+                </>
+              }
+            />
+          </div>
+          <form onSubmit={onSubmit} className="space-y-4" noValidate>
+            {f.error ? <Alert>{f.error}</Alert> : null}
+            <Field label="Your name" htmlFor="fullName" error={f.fieldErrors.fullName}>
+              <Input id="fullName" name="fullName" autoComplete="name" required />
+            </Field>
+            <Field label="Email" htmlFor="email" error={f.fieldErrors.email}>
+              <Input id="email" name="email" type="email" autoComplete="email" required />
+            </Field>
+            <Field
+              label="Password"
+              htmlFor="password"
+              error={f.fieldErrors.password}
+              hint={
+                PASSWORD_RESET_EMAIL
+                  ? "At least 8 characters."
+                  : "At least 8 characters. Keep it safe: password resets go through support during the beta."
+              }
+            >
+              <Input id="password" name="password" type="password" autoComplete="new-password" required />
+            </Field>
+            <Captcha onToken={f.setCaptcha} />
+            <SubmitButton className="w-full" pending={f.pending} pendingLabel="Creating account…">
+              Create account
+            </SubmitButton>
+            <p className="text-[12px] leading-relaxed text-muted">
+              By creating an account you agree to the{" "}
+              <Link to="/terms" className="underline hover:text-ink">
+                Terms &amp; Conditions
+              </Link>{" "}
+              and{" "}
+              <Link to="/privacy" className="underline hover:text-ink">
+                Privacy Policy
+              </Link>
+              .
+            </p>
+          </form>
+        </>
       )}
       <p className="mt-6 text-center text-sm text-muted">
         Already have an account?{" "}
@@ -208,12 +262,15 @@ export function ForgotPasswordPage() {
       ) : sent ? (
         <div className="mt-6" data-testid="reset-sent">
           <Alert tone="info">
-            If an account exists for {sent}, a reset link is on its way. It works once and expires in an hour. Check your spam folder if it doesn&apos;t arrive.
+            If an account exists for {sent}, a reset link is on its way. It works once and expires in an hour. Check your spam folder if it
+            doesn&apos;t arrive.
           </Alert>
         </div>
       ) : (
         <>
-          <p className="mb-8 mt-1.5 text-sm text-muted">Enter your account email and we&apos;ll send you a link to choose a new password.</p>
+          <p className="mb-8 mt-1.5 text-sm text-muted">
+            Enter your account email and we&apos;ll send you a link to choose a new password.
+          </p>
           <form onSubmit={onSubmit} className="space-y-4" noValidate>
             {f.error ? <Alert>{f.error}</Alert> : null}
             <Field label="Email" htmlFor="email" error={f.fieldErrors.email}>
@@ -250,11 +307,24 @@ export function ResetPasswordPage() {
     (async () => {
       if (link.kind === "error") return setState({ status: "invalid", message: link.message });
       if (link.kind === "tokens") {
-        const { error } = await supabase.auth.setSession({ access_token: link.accessToken, refresh_token: link.refreshToken });
+        const { error } = await supabase.auth.setSession({
+          access_token: link.accessToken,
+          refresh_token: link.refreshToken,
+        });
         if (cancelled) return;
-        return setState(error ? { status: "invalid", message: "This reset link has expired or was already used." } : { status: "ready" });
+        return setState(
+          error
+            ? {
+                status: "invalid",
+                message: "This reset link has expired or was already used.",
+              }
+            : { status: "ready" },
+        );
       }
-      setState({ status: "invalid", message: "Open the reset link from your email to choose a new password." });
+      setState({
+        status: "invalid",
+        message: "Open the reset link from your email to choose a new password.",
+      });
     })();
     return () => {
       cancelled = true;
@@ -268,9 +338,16 @@ export function ResetPasswordPage() {
     f.setFieldErrors({});
     f.setError(null);
     f.setPending(true);
-    const { error } = await supabase.auth.updateUser({ password: parsed.data.password });
+    const { error } = await supabase.auth.updateUser({
+      password: parsed.data.password,
+    });
     f.setPending(false);
-    if (error) return f.setError(/different from the old/i.test(error.message) ? "Choose a password different from your old one." : "Couldn't update the password. Request a new link and try again.");
+    if (error)
+      return f.setError(
+        /different from the old/i.test(error.message)
+          ? "Choose a password different from your old one."
+          : "Couldn't update the password. Request a new link and try again.",
+      );
     navigate("/dashboard", { replace: true });
   }
 

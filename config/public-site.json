@@ -1,8 +1,9 @@
 {
-  "_note": "Public site settings. customDomains: the first is the main address; add a domain only after Cloudflare shows it as Active (Websites → the domain). The workers.dev address keeps working. passwordResetEmail: turn on only after a free SMTP provider (e.g. Brevo) is set up in Supabase → Authentication → Emails → SMTP, because Supabase's built-in email only reaches project team members.",
+  "_note": "Public site settings. customDomains: the first is the main address; add a domain only after Cloudflare shows it as Active (Websites → the domain). The workers.dev address keeps working. passwordResetEmail: turn on only after a free SMTP provider (e.g. Brevo) is set up in Supabase → Authentication → Emails → SMTP, because Supabase's built-in email only reaches project team members. googleClientId: the public OAuth Client ID from Google Cloud (ends in .apps.googleusercontent.com); empty hides the Google button. The client secret never goes here: it goes only into Supabase → Authentication → Providers → Google.",
   "customDomains": [
     "scopeflow.in",
     "www.scopeflow.in"
   ],
-  "passwordResetEmail": true
+  "passwordResetEmail": true,
+  "googleClientId": ""
 }
