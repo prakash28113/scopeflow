@@ -5,11 +5,24 @@ set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(cd "$HERE/../.." && pwd)"
 LOGS="$HERE/.logs"; mkdir -p "$LOGS"
-cleanup() { [[ -n "${STACK_PID:-}" ]] && kill "$STACK_PID" 2>/dev/null || true; [[ -n "${WRANGLER_PID:-}" ]] && kill "$WRANGLER_PID" 2>/dev/null || true; }
+cleanup() {
+  status=$?
+  if [[ $status -ne 0 ]]; then
+    echo "----- stack.log (tail) -----"; tail -n 60 "$LOGS/stack.log" 2>/dev/null || true
+    echo "----- wrangler.log (tail) -----"; tail -n 40 "$LOGS/wrangler.log" 2>/dev/null || true
+  fi
+  [[ -n "${STACK_PID:-}" ]] && kill "$STACK_PID" 2>/dev/null || true
+  [[ -n "${WRANGLER_PID:-}" ]] && kill "$WRANGLER_PID" 2>/dev/null || true
+}
 trap cleanup EXIT
 
 node "$HERE/stack.mjs" > "$LOGS/stack.log" 2>&1 & STACK_PID=$!
-for _ in $(seq 1 40); do grep -q "Schema cache loaded in" "$LOGS/stack.log" 2>/dev/null && break; sleep 0.5; done
+ready=""
+for _ in $(seq 1 120); do
+  if grep -q "Schema cache loaded in" "$LOGS/stack.log" 2>/dev/null && curl -s -o /dev/null http://127.0.0.1:54321/; then ready=1; break; fi
+  sleep 0.5
+done
+[[ -n "$ready" ]] || { echo "Local Supabase stand-in did not start"; exit 1; }
 ANON=$(node -e "console.log(JSON.parse(require('fs').readFileSync('$HERE/keys.json')).anon)")
 
 cd "$ROOT"
