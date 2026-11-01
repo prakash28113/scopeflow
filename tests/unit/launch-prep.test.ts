@@ -49,9 +49,9 @@ describe("password reset", () => {
       "https://scopeflow.in/reset-password,https://www.scopeflow.in/reset-password",
     );
   });
-  it("reset email stays off until real email is set up", () => {
+  it("reset email is on (Brevo SMTP is set up in Supabase; see docs/EMAIL-SETUP.md)", () => {
     const site = JSON.parse(readFileSync("config/public-site.json", "utf8"));
-    expect(site.passwordResetEmail).toBe(false);
+    expect(site.passwordResetEmail).toBe(true);
   });
   it("reset pages and client links are never indexed or cached", () => {
     const file = buildHeadersFile({ supabaseUrl: "https://x.supabase.co", turnstile: false });

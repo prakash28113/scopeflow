@@ -393,20 +393,48 @@ try {
   // One UPI button per unpaid milestone (rupee projects only; USD is covered in tests/db/upi.test.ts).
   assert.equal(await c.getByTestId("upi-pay").count(), 1);
 
-  step("launch prep: password reset pages (support fallback until email is set up)");
+  step("password reset by email: request, open the link, choose a new password, sign in with it");
   const resetCtx = await browser.newContext();
   const a = await resetCtx.newPage();
+  a.on("pageerror", (e) => errors.push(`reset pageerror: ${e.message}`));
   await a.goto(`${BASE}/login`);
   await a.getByRole("link", { name: "Forgot your password?" }).click();
   await a.waitForURL("**/forgot-password");
-  await a.getByRole("heading", { name: "Reset your password" }).waitFor();
-  await a.getByText(/from your account email and we'll help you back in/).waitFor();
+  await a.getByRole("button", { name: "Send reset link" }).click();
+  await a.getByText("Enter a valid email").waitFor();
+  // Unknown accounts get exactly the same answer (no account probing).
+  await a.getByLabel("Email").fill("nobody@studio.test");
+  await a.getByRole("button", { name: "Send reset link" }).click();
+  await a.getByTestId("reset-sent").getByText(/If an account exists for nobody@studio\.test/).waitFor();
+  await a.goto(`${BASE}/forgot-password`);
+  await a.getByLabel("Email").fill("priya@studio.test");
+  await a.getByRole("button", { name: "Send reset link" }).click();
+  await a.getByTestId("reset-sent").waitFor();
+  await shot(a, "25-reset-sent", false);
+  const AUTH = "http://127.0.0.1:54321/auth/v1";
+  assert.equal((await fetch(`${AUTH}/__test/recovery?email=nobody@studio.test`)).status, 404);
+  const { link } = await (await fetch(`${AUTH}/__test/recovery?email=priya@studio.test`)).json();
+  assert.ok(link.startsWith(`${BASE}/reset-password#access_token=`), link);
+  await a.goto(link);
+  await a.getByLabel("New password", { exact: true }).waitFor();
+  assert.equal(new URL(a.url()).hash, "", "one-time link data is removed from the address bar");
+  await a.getByLabel("New password", { exact: true }).fill("new-horse-42");
+  await a.getByLabel("Repeat new password").fill("new-horse-43");
+  await a.getByRole("button", { name: "Save new password" }).click();
+  await a.getByText("The passwords don't match").waitFor();
+  await a.getByLabel("Repeat new password").fill("new-horse-42");
+  await shot(a, "26-reset-new-password", false);
+  await a.getByRole("button", { name: "Save new password" }).click();
+  await a.waitForURL("**/dashboard");
+  await a.getByText("Hello, Priya").waitFor();
+  // An expired or used link is handled clearly, and its data is removed too.
   await a.goto(`${BASE}/reset-password#error=access_denied&error_code=otp_expired&error_description=Email+link+is+invalid+or+has+expired`);
   await a.getByText("This reset link has expired or was already used.").waitFor();
-  assert.equal(new URL(a.url()).hash, "", "one-time link data is removed from the address bar");
+  assert.equal(new URL(a.url()).hash, "");
   await a.goto(`${BASE}/reset-password`);
   await a.getByText("Open the reset link from your email to choose a new password.").waitFor();
   await resetCtx.close();
+  const PASSWORD = "new-horse-42";
 
   step("clients: profile, history and private notes");
   await f.goto(`${BASE}/clients`);
@@ -444,10 +472,10 @@ try {
   await f.getByRole("button", { name: "Sign out" }).click();
   await f.waitForURL(/\/login/);
   await f.getByLabel("Email").fill("priya@studio.test");
-  await f.getByLabel("Password").fill("wrong-password");
+  await f.getByLabel("Password").fill("correct-horse-9"); // the old password no longer works
   await f.getByRole("button", { name: "Sign in" }).click();
   await f.getByText("Incorrect email or password.").waitFor();
-  await f.getByLabel("Password").fill("correct-horse-9");
+  await f.getByLabel("Password").fill(PASSWORD);
   await f.getByRole("button", { name: "Sign in" }).click();
   await f.waitForURL("**/dashboard");
 
@@ -455,7 +483,7 @@ try {
   const fm = await phone.newPage();
   await fm.goto(`${BASE}/login`);
   await fm.getByLabel("Email").fill("priya@studio.test");
-  await fm.getByLabel("Password").fill("correct-horse-9");
+  await fm.getByLabel("Password").fill(PASSWORD);
   await fm.getByRole("button", { name: "Sign in" }).click();
   await fm.waitForURL("**/dashboard");
   await fm.goto(projectUrl);

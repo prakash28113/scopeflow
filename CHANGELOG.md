@@ -1,5 +1,18 @@
 # Changelog
 
+## Password reset on — ready for review (not released)
+
+- **"Forgot your password?" now emails a reset link**, sent by free Brevo SMTP (set up in Supabase; see `docs/EMAIL-SETUP.md`). `passwordResetEmail` is now `true`.
+- **Privacy policy:** names Brevo, which receives only the email address and the reset link.
+- **Terms:** say plainly that UPI payments go straight to the freelancer, and that ScopeFlow never receives or confirms them.
+- **Walkthrough:** the browser walkthrough now tests the whole reset flow:
+  - an unknown email gets the same answer as a real one;
+  - the emailed link opens the reset page and the one-time code is removed from the address bar;
+  - mismatched passwords are caught;
+  - the new password signs you in, and the old one stops working.
+- **Test stand-in:** the local auth stand-in keeps reset "emails" in memory so the walkthrough can open them. This is test-only and never part of the app.
+- No database change.
+
 ## Launch prep — live 1 Nov 2026 (release run 41304518542)
 
 - **Get paid by UPI.** Freelancers add their UPI ID in **Settings → Getting paid**. On rupee projects the client's page shows **Pay via UPI** on every unpaid milestone: it opens GPay, PhonePe, Paytm or BHIM with the amount filled in. There's also a QR code for desktop (made in the browser, no outside service) and **Copy UPI ID**. Money goes straight to the freelancer; ScopeFlow never handles payments and charges nothing. Non-rupee projects and accounts without a UPI ID see no button.

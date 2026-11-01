@@ -65,7 +65,7 @@ export function PrivacyPage() {
       <section>
         <h2>Where it&apos;s kept</h2>
         <p>
-          Data is stored with Supabase (database and sign-in) and the app is served by Cloudflare. Both may process data outside India.
+          Data is stored with Supabase (database and sign-in) and the app is served by Cloudflare. Password-reset emails are sent through Brevo, which receives only your email address and the reset link. These providers may process data outside India.
           Access to your data is restricted by database security rules: only you can see your projects, and a client link shows only that
           one project&apos;s client-facing details.
         </p>
@@ -109,13 +109,13 @@ export function TermsPage() {
         <ul>
           <li>ScopeFlow is a free beta. Features may change, and the service may be paused or discontinued with reasonable notice where possible.</li>
           <li>It is provided &ldquo;as is&rdquo;, without guarantees of availability or fitness for a particular purpose.</li>
-          <li>ScopeFlow records agreements and payments you enter. It isn&apos;t a payment processor, a law firm or a substitute for a written contract or legal advice.</li>
+          <li>ScopeFlow records agreements and payments you enter. It isn&apos;t a payment processor, a law firm or a substitute for a written contract or legal advice. UPI payments go directly from your client to your UPI ID; ScopeFlow never receives, holds or confirms them, so check your bank app and mark payments as received yourself.</li>
         </ul>
       </section>
       <section>
         <h2>Your account</h2>
         <ul>
-          <li>Use your own email address and keep your password safe. During the beta there is no automatic password reset; contact us if you&apos;re locked out.</li>
+          <li>Use your own email address and keep your password safe. If you forget it, use “Forgot your password?” on the sign-in page; the reset link is sent to your account email.</li>
           <li>You&apos;re responsible for what you and your clients enter, and for having the right to share client details with us.</li>
           <li>Keep client links private. Anyone with a link can view and act on that project until you replace or revoke it.</li>
         </ul>
