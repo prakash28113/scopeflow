@@ -1,6 +1,6 @@
 # Changelog
 
-## Subscription plans, Phase 1–2 (branch `feature/subscription-plans`, after v1.1)
+## Subscription plans, Phase 1–2 — live 1 Nov 2026 (release run 41293215454)
 
 - **Plans in the database** (`plans`): Free ($0; 2 active projects, 5 clients), Solo ($9/mo, $90/yr), Studio ($19/mo, $190/yr). Prices are hypotheses; none is purchasable yet.
 - **Limits enforced by the database** inside `save_project` (error `SF402` with usage). Editing, approvals, change orders, payments and client links are never limited, on any plan or after a downgrade. Completed and cancelled projects don't count.
@@ -11,7 +11,7 @@
 - **Database:** `supabase/migrations/20261102000000_subscription_plans.sql` (re-runnable) · rollback `supabase/rollback/20261102000000_subscription_plans_down.sql` (tested twice in a row).
 - **Tests:** 17 new database tests, plan helper unit tests, a real-PostgreSQL race (6 simultaneous creations on Free → exactly 2), and 2 new walkthrough checks (pricing page; limit, plan page, early access).
 
-## v1.1 — Clear agreements, visible revisions (not yet deployed)
+## v1.1 — Clear agreements, visible revisions — live 1 Nov 2026 (release run 41292859363)
 
 **For freelancers**
 - **Agreement terms** on every project: *Not included* (one item per line), *price per extra revision round*, and *Terms* (payment, ownership, cancellation). They're part of the scope the client approves, stored in the locked scope version and covered by its fingerprint.
