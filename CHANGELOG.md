@@ -1,6 +1,11 @@
 # Changelog
 
-## Brand colours — ready for review (not released)
+## Feedback link — ready for review (not released)
+
+- **Send feedback** in the account menu, and a short line at the bottom of every app page. It opens the user's own email app, addressed to support, with a short prompt and the page path. Project ids are replaced with `:id`, and no project data is included.
+- Home page banner: "Start free: 2 active projects, no card needed." (was "free during the beta").
+
+## Brand colours — live 1 Nov 2026 (release run 41313441972)
 
 - The app's blue (buttons, links, badges, home page, checkboxes, link preview) now matches the logo: `#005DD4`, with hover `#004CB0`, soft `#EBF3FE` and line `#C2D9F7`. Text contrast is 5.3–6.0:1, which passes WCAG AA.
 - The link preview image is re-rendered as `og.png?v=3`.
