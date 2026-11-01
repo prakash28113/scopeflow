@@ -96,7 +96,7 @@ export function ScopeDecisionForm({ token, snapshotId, clientName }: { token: st
             <Textarea id="scope-comment" name="comment" rows={2} maxLength={4000} />
           </Field>
           <label className="flex items-start gap-3 rounded-lg border border-line bg-sunken/60 p-3.5 text-[13px] text-ink-2">
-            <input type="checkbox" name="confirm" className="mt-0.5 size-4 shrink-0 accent-[#3F6FD1]" />
+            <input type="checkbox" name="confirm" className="mt-0.5 size-4 shrink-0 accent-[#005DD4]" />
             <span>I approve this scope, budget and payment schedule. I understand work beyond it will be quoted separately as a change order.</span>
           </label>
           {fe.confirm ? <p className="-mt-3 text-[13px] text-danger">{fe.confirm}</p> : null}
