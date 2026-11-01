@@ -63,7 +63,7 @@ describe("password reset", () => {
 describe("link previews and search", () => {
   const html = readFileSync("index.html", "utf8");
   it("has Open Graph and Twitter tags pointing at the live site", () => {
-    for (const tag of ['property="og:title"', 'property="og:description"', 'property="og:image" content="https://scopeflow.in/og.png"', 'property="og:url" content="https://scopeflow.in/"', 'name="twitter:card" content="summary_large_image"'])
+    for (const tag of ['property="og:title"', 'property="og:description"', 'property="og:image" content="https://scopeflow.in/og.png?v=2"', 'property="og:url" content="https://scopeflow.in/"', 'name="twitter:card" content="summary_large_image"'])
       expect(html).toContain(tag);
   });
   it("ships a 1200×630 preview image", () => {

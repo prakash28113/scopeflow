@@ -1,4 +1,5 @@
 import { Link } from "react-router";
+import { LogoFull } from "./brand";
 import type { ComponentProps, ReactNode } from "react";
 import type { ProjectStatus } from "@/lib/types";
 import { STATUS_LABEL } from "@/lib/format";
@@ -179,14 +180,11 @@ export function Tag({ tone = "neutral", children }: { tone?: "neutral" | "accent
   return <span className={cx("inline-flex items-center rounded-md px-1.5 py-0.5 text-[12px] font-medium", tones[tone])}>{children}</span>;
 }
 
+/** The official ScopeFlow logo. Its height follows the font size (1.65em), so `text-[15px]` ≈ 25px tall. */
 export function Logo({ className }: { className?: string }) {
   return (
-    <span className={cx("inline-flex items-center gap-2 font-semibold tracking-[-0.02em]", className)}>
-      <svg width="22" height="22" viewBox="0 0 22 22" aria-hidden>
-        <path d="M2 7V2h5M15 2h5v5M20 15v5h-5M7 20H2v-5" fill="none" stroke="#3F6FD1" strokeWidth="2" strokeLinecap="round" />
-        <rect x="7" y="7" width="8" height="8" rx="1.5" fill="#16181D" />
-      </svg>
-      ScopeFlow
+    <span className={cx("inline-flex items-center", className)}>
+      <LogoFull className="h-[1.65em] w-auto" />
     </span>
   );
 }

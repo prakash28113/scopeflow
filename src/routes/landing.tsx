@@ -2,6 +2,7 @@ import "@fontsource-variable/bricolage-grotesque/opsz.css";
 import { useState, type ReactNode } from "react";
 import { Link } from "react-router";
 import { cx } from "@/components/ui";
+import { LogoFull } from "@/components/brand";
 import { SiteFooter } from "@/components/site-footer";
 
 /**
@@ -45,12 +46,8 @@ function Nav() {
   return (
     <header className="sticky top-0 z-30 bg-white/80 backdrop-blur">
       <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4 sm:px-6">
-        <Link to="/" aria-label="ScopeFlow home" className="inline-flex items-center gap-2 text-[16px] font-semibold tracking-[-0.02em]">
-          <svg width="24" height="24" viewBox="0 0 22 22" aria-hidden>
-            <path d="M2 7V2h5M15 2h5v5M20 15v5h-5M7 20H2v-5" fill="none" stroke="var(--lp-cobalt)" strokeWidth="2" strokeLinecap="round" />
-            <rect x="7" y="7" width="8" height="8" rx="1.5" fill="var(--lp-ink)" />
-          </svg>
-          ScopeFlow
+        <Link to="/" aria-label="ScopeFlow home" className="inline-flex items-center">
+          <LogoFull className="h-7 w-auto sm:h-8" />
         </Link>
         <nav className="flex items-center gap-1 sm:gap-2" aria-label="Main">
           <a href="#how" className="hidden rounded-full px-3 py-2 text-[14px] font-medium text-[var(--lp-body)] hover:text-[var(--lp-ink)] md:block">

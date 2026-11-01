@@ -297,7 +297,7 @@ function Shell({ children, from }: { children: React.ReactNode; from?: string })
         <footer className="mt-14 flex flex-wrap items-center justify-between gap-3 border-t border-line pt-6 text-[12px] text-muted">
           <span>{from ? `Shared privately by ${from}. Please don't forward this link.` : ""}</span>
           <span className="inline-flex items-center gap-1.5">
-            Powered by <Logo className="text-[12px] text-ink-2 [&_svg]:size-3.5" />
+            Powered by <Logo className="text-[11px]" />
           </span>
         </footer>
       </div>
