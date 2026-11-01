@@ -67,6 +67,22 @@ export function migrationSql(name, body) {
   return `begin;\n${body}\ninsert into scopeflow_admin.applied_migrations (name) values (${quote(name)});\ncommit;`;
 }
 
+/** Validates public Supabase settings for an app-only release. Refuses anything that looks secret. */
+export function publicSupabaseConfig(env) {
+  const url = String(env.SUPABASE_URL ?? "").trim().replace(/\/+$/, "");
+  const key = String(env.SUPABASE_PUBLISHABLE_KEY ?? "").trim();
+  if (!/^https:\/\/[a-z0-9]{20}\.supabase\.co$/.test(url)) throw new Error("SUPABASE_URL must look like https://<project-ref>.supabase.co");
+  if (/^sb_secret_/.test(key)) throw new Error("That is a SECRET key — never use it here. Use the publishable key.");
+  if (key.startsWith("eyJ")) {
+    let role;
+    try { role = JSON.parse(Buffer.from(key.split(".")[1], "base64url").toString()).role; } catch {}
+    if (role !== "anon") throw new Error("Only the public anon key may be used here, never service_role.");
+  } else if (!/^sb_publishable_[A-Za-z0-9_-]{6,}$/.test(key)) {
+    throw new Error("SUPABASE_PUBLISHABLE_KEY must be the publishable key (sb_publishable_…).");
+  }
+  return { supabaseUrl: url, publishable: key };
+}
+
 const short = (s) => String(s).replace(/\s+/g, " ").slice(0, 300);
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -86,10 +102,19 @@ export async function run(deps) {
 
   // ------------------------------------------------------------------ Supabase
   const sbToken = env.SUPABASE_ACCESS_TOKEN;
-  if (!sbToken) {
+  let supabaseUrl, publishable, setSiteUrl;
+  if (sbToken) {
+    ({ supabaseUrl, publishable, setSiteUrl } = await setUpSupabase());
+  } else if (env.SUPABASE_URL || env.SUPABASE_PUBLISHABLE_KEY) {
+    // App-only release: the database was already set up by an earlier run; use its public values.
+    ({ supabaseUrl, publishable } = publicSupabaseConfig(env));
+    ok("Using the public Supabase URL and publishable key from config/public-supabase.json (database set up earlier)");
+  } else {
     log("::notice::Waiting for the SUPABASE_ACCESS_TOKEN secret — nothing deployed yet.");
     return finish("waiting-supabase", ["", "⏳ **Waiting for setup:** add the `SUPABASE_ACCESS_TOKEN` secret (see DEPLOYMENT.md, *Automatic deployment*)."]);
   }
+
+  async function setUpSupabase() {
   const sb = async (path, { method = "GET", body } = {}) => {
     const res = await fetch(SUPABASE_API + path, {
       method,
@@ -162,6 +187,15 @@ revoke all on all tables in schema scopeflow_admin from public, anon, authentica
   const publishable = keys.find((k) => k.type === "publishable")?.api_key ?? keys.find((k) => k.name === "anon")?.api_key;
   if (!publishable || /[*•·]/.test(publishable)) throw new Error("Could not read the project's publishable (anon) key.");
   ok("Read the public Supabase URL and publishable key");
+  return {
+    supabaseUrl,
+    publishable,
+    setSiteUrl: async (appUrl) => {
+      await sb(`/projects/${ref}/config/auth`, { method: "PATCH", body: { site_url: appUrl } });
+      ok("Supabase Site URL set to the live address");
+    },
+  };
+  }
 
   // ------------------------------------------------------------------ Cloudflare
   const cfToken = env.CLOUDFLARE_API_TOKEN;
@@ -214,8 +248,7 @@ revoke all on all tables in schema scopeflow_admin from public, anon, authentica
   const appUrl = (String(out).match(/https:\/\/scopeflow\.[a-z0-9-]+\.workers\.dev/) ?? [`https://scopeflow.${subdomain}.workers.dev`])[0];
   ok(`Deployed to Cloudflare Workers Free: ${appUrl}`);
 
-  await sb(`/projects/${ref}/config/auth`, { method: "PATCH", body: { site_url: appUrl } });
-  ok("Supabase Site URL set to the live address");
+  if (setSiteUrl) await setSiteUrl(appUrl);
 
   // ------------------------------------------------------------------ live smoke tests
   const checks = await smokeTest({ fetch, wait, appUrl, supabaseUrl, publishable });
@@ -276,8 +309,10 @@ if (isCli) {
     .map((name) => ({ name, body: readFileSync(join(dir, name), "utf8") }));
   let allowlistFile = "";
   try { allowlistFile = readFileSync(join(ROOT, "config/beta-allowlist.txt"), "utf8"); } catch {}
+  let publicConfig = {};
+  try { publicConfig = JSON.parse(readFileSync(join(ROOT, "config/public-supabase.json"), "utf8")); } catch {}
   run({
-    env: process.env,
+    env: { SUPABASE_URL: publicConfig.url, SUPABASE_PUBLISHABLE_KEY: publicConfig.publishableKey, ...process.env },
     fetch: globalThis.fetch,
     exec: (cmd, args, opts) => execFileSync(cmd, args, { cwd: ROOT, encoding: "utf8", stdio: ["ignore", "pipe", "inherit"], ...opts }),
     log: (m) => console.log(m),

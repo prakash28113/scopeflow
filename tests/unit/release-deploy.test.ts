@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 // @ts-expect-error — plain ESM script
-import { run } from "../../scripts/ci/release.mjs";
+import { run, publicSupabaseConfig } from "../../scripts/ci/release.mjs";
 
 const REF = "abcdefghijklmnopqrst";
 const SUPA = `https://${REF}.supabase.co`;
@@ -130,5 +130,23 @@ describe("release automation — deploy and live checks", () => {
 
   it("fails loudly if anonymous visitors could read project data", async () => {
     await expect(run(world({ leak: true }).deps(BOTH))).rejects.toThrow(/SECURITY/);
+  });
+
+  it("publishes the app alone from public settings once the database is set up", async () => {
+    const w = world();
+    const env = { CLOUDFLARE_API_TOKEN: "cf_secret_value", SUPABASE_URL: SUPA, SUPABASE_PUBLISHABLE_KEY: "sb_publishable_live123" };
+    expect(await run(w.deps(env))).toBe("deployed");
+    expect(w.calls.some((c) => c.url.includes("api.supabase.com"))).toBe(false);
+    const deploy = w.execs.find((e) => e.args[0] === "wrangler")!;
+    expect(deploy.args).toContain(`SUPABASE_URL:${SUPA}`);
+    expect(w.summary()).toContain(`**Live:** ${APP}`);
+  });
+
+  it("refuses secret or malformed keys in the public settings", () => {
+    expect(() => publicSupabaseConfig({ SUPABASE_URL: SUPA, SUPABASE_PUBLISHABLE_KEY: ["sb", "secret", "abcdefghijkl"].join("_") })).toThrow(/SECRET/);
+    const jwt = (role: string) => `eyJhbGciOiJIUzI1NiJ9.${Buffer.from(JSON.stringify({ role })).toString("base64url")}.sig`;
+    expect(() => publicSupabaseConfig({ SUPABASE_URL: SUPA, SUPABASE_PUBLISHABLE_KEY: jwt("service_role") })).toThrow(/service_role/);
+    expect(publicSupabaseConfig({ SUPABASE_URL: SUPA + "/", SUPABASE_PUBLISHABLE_KEY: jwt("anon") }).supabaseUrl).toBe(SUPA);
+    expect(() => publicSupabaseConfig({ SUPABASE_URL: "https://evil.example.com", SUPABASE_PUBLISHABLE_KEY: "sb_publishable_live123" })).toThrow(/SUPABASE_URL/);
   });
 });
