@@ -60,8 +60,21 @@ try {
   // ---------------------------------------------------------- freelancer onboarding
   step("landing + sign up (no email confirmation)");
   await f.goto(BASE);
-  await f.getByRole("heading", { name: /Just one small change/ }).waitFor();
+  await f.getByRole("heading", { name: "Every client job, on the record." }).waitFor();
   await f.getByRole("link", { name: "Start free" }).first().waitFor();
+  assert.equal(await f.locator(".lp-row").count(), 7); // the example job record
+  await f.getByText("Does ScopeFlow take payments?").click();
+  await f.getByText("It records the payments you receive.").waitFor();
+  {
+    // The home page on a phone: readable, nothing sideways.
+    const lp = await phone.newPage();
+    await lp.goto(BASE);
+    await lp.getByRole("heading", { name: "Every client job, on the record." }).waitFor();
+    assert.equal(await lp.evaluate(() => document.documentElement.scrollWidth > window.innerWidth || window.innerWidth > 390), false, "home page scrolls sideways on a phone");
+    await lp.waitForTimeout(3500); // let the record finish writing in
+    await shot(lp, "00-landing-mobile");
+    await lp.close();
+  }
   await f.getByRole("link", { name: "Privacy" }).click();
   await f.getByRole("heading", { name: "Privacy Policy" }).waitFor();
   await f.goto(`${BASE}/terms`);
