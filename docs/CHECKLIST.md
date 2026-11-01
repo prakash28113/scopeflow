@@ -1,6 +1,6 @@
 # ScopeFlow — Product checklist status
 
-Audited 1 November 2026 against the live app (scopeflow.in) and the codebase, then updated after batches A–E and F–H (built 1 November, **not live yet**). Evidence comes from:
+Audited 1 November 2026 against the live app (scopeflow.in) and the codebase, then updated after batches A–E and F–H (live since 1 November, release 41330819240). Evidence comes from:
 
 - 300 automated tests;
 - 9 race tests on real PostgreSQL;
@@ -119,7 +119,7 @@ Audited 1 November 2026 against the live app (scopeflow.in) and the codebase, th
 
 ## Bugs and risks
 
-Items marked "fixed" are fixed in batches A–E or F–H (not live yet).
+Items marked "fixed" were fixed in batches A–E or F–H (live).
 
 1. ✅ Fixed: **Dashboard "Upcoming" showed a part-paid payment's full amount.** It now shows the balance.
 2. ⛔ **No automatic database backups:** the weekly encrypted backup is built and tested, but it needs your `BACKUP_PASSPHRASE` secret.
@@ -133,7 +133,7 @@ Items marked "fixed" are fixed in batches A–E or F–H (not live yet).
 
 ## Mobile UX issues
 
-All four are fixed in A–E (not live yet):
+All four are fixed in A–E (live):
 
 1. Dashboard totals: one line per currency.
 2. Analytics chart: readable on a phone.
