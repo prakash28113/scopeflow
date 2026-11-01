@@ -1,6 +1,6 @@
 # Changelog
 
-## Approval record + client history — ready for review (not released)
+## Approval record + client history — live 1 Nov 2026 (release run 41325083933)
 
 - **Approval record** (project page → *Approval record*, printable / Save as PDF): proof of everything agreed on a project:
   - a summary of the money (contract, received, outstanding);
