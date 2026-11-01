@@ -1,50 +1,42 @@
 import "@fontsource-variable/bricolage-grotesque/opsz.css";
-import { useState, type ReactNode } from "react";
+import { useMemo, type ReactNode } from "react";
 import { Link } from "react-router";
 import { cx } from "@/components/ui";
 import { LogoFull } from "@/components/brand";
 import { SiteFooter } from "@/components/site-footer";
 
 /**
- * Home page. Bright and airy: soft colour washes, a large product picture with small
- * floating cards that play out ScopeFlow's core moment once, then calm feature rows.
- * Everything shown is a feature that exists today; no invented customers or numbers.
+ * Home page. The idea: every client job gets one record, like a ruled account book (khata):
+ * blue ink on ruled paper, a red margin mark where something steps outside the agreement.
+ * One moment of motion: the hero ledger writes itself in, in the order a real job happens.
+ * Everything shown exists in the product today; example data is fictional; no invented customers or numbers.
  */
 export default function Landing() {
   return (
-    <div className="landing min-h-dvh bg-white text-[var(--lp-ink)]">
-      <AnnouncementBar />
+    <div className="landing min-h-dvh bg-[var(--lp-paper)] text-[var(--lp-ink)]">
       <Nav />
-      <Hero />
-      <BuiltFor />
-      <Features />
-      <BeforeAfter />
-      <Disciplines />
-      <Closing />
+      <main>
+        <Hero />
+        <Steps />
+        <Money />
+        <ClientSide />
+        <Safe />
+        <Questions />
+        <Closing />
+      </main>
       <SiteFooter />
     </div>
   );
 }
 
 const btnPrimary =
-  "inline-flex items-center justify-center whitespace-nowrap rounded-full bg-[var(--lp-cobalt)] px-6 py-3 text-[15px] font-semibold text-white shadow-[0_8px_24px_-10px_rgba(0,93,212,0.7)] transition hover:bg-[#004cb0]";
-const btnSecondary =
-  "inline-flex items-center justify-center whitespace-nowrap rounded-full bg-white px-6 py-3 text-[15px] font-semibold text-[var(--lp-ink)] ring-1 ring-[var(--lp-line)] transition hover:ring-[#c7cdd8]";
-
-function AnnouncementBar() {
-  return (
-    <div className="bg-[var(--lp-ink)] px-4 py-2 text-center text-[13px] text-white/85">
-      Start free: 2 active projects, no card needed.{" "}
-      <Link to="/pricing" className="font-semibold text-white underline decoration-white/40 underline-offset-4 hover:decoration-white">
-        See what's included
-      </Link>
-    </div>
-  );
-}
+  "inline-flex items-center justify-center whitespace-nowrap rounded-full bg-[var(--lp-blue)] px-6 py-3 text-[15px] font-semibold text-white transition hover:bg-[#004cb0] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--lp-blue)]";
+const btnQuiet =
+  "inline-flex items-center justify-center whitespace-nowrap rounded-full px-5 py-3 text-[15px] font-semibold text-[var(--lp-ink)] ring-1 ring-[var(--lp-rule-strong)] transition hover:bg-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--lp-blue)]";
 
 function Nav() {
   return (
-    <header className="sticky top-0 z-30 bg-white/80 backdrop-blur">
+    <header className="sticky top-0 z-30 border-b border-[var(--lp-rule)] bg-[var(--lp-paper)]/90 backdrop-blur">
       <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4 sm:px-6">
         <Link to="/" aria-label="ScopeFlow home" className="inline-flex items-center">
           <LogoFull className="h-7 w-auto sm:h-8" />
@@ -68,304 +60,291 @@ function Nav() {
   );
 }
 
+// ---------------------------------------------------------------- hero: the ledger
+
+type Entry = { date: string; what: ReactNode; note?: string; amount?: string; mark?: "ok" | "out" | "paid" };
+const LEDGER: Entry[] = [
+  { date: "2 Nov", what: "Quote sent: 3 deliverables, GST included", note: "Valid until 16 Nov", amount: "₹45,000" },
+  { date: "4 Nov", what: "Scope approved by Meera", note: "Locked, with a fingerprint", mark: "ok" },
+  { date: "9 Nov", what: "“Can we try the logo in navy?”", note: "By WhatsApp, logged. Revision 2 of 2", mark: "ok" },
+  { date: "11 Nov", what: "“Could you also do a website banner?”", note: "Outside the approved scope", mark: "out" },
+  { date: "12 Nov", what: "Change order #1 approved", note: "Banner in 3 sizes, 2 extra days", amount: "+₹6,000" },
+  { date: "15 Nov", what: "Invoice RS-2026-004, CGST + SGST", note: "50% advance", amount: "₹25,500" },
+  { date: "16 Nov", what: "Paid by UPI", note: "UTR 4471 0938", amount: "₹25,500", mark: "paid" },
+];
+
 function Hero() {
   return (
-    <section className="relative overflow-hidden">
-      <div className="lp-wash lp-wash-hero" aria-hidden />
-      <div className="relative mx-auto max-w-6xl px-4 pb-12 pt-14 text-center sm:px-6 sm:pt-20">
-        <h1 className="lp-display mx-auto max-w-4xl text-[44px] leading-[1.02] sm:text-[64px] lg:text-[80px]">“Just one small change” now comes with a price.</h1>
-        <p className="mx-auto mt-6 max-w-2xl text-[17px] leading-relaxed text-[var(--lp-body)] sm:text-[19px]">
-          ScopeFlow keeps the scope your client approved on record, checks every request against it, and turns extras into change
-          orders they approve before you start.
-        </p>
-        <div className="mt-9 flex flex-wrap justify-center gap-3">
-          <Link to="/signup" className={btnPrimary}>
-            Start free
-          </Link>
-          <a href="#how" className={btnSecondary}>
-            See how it works
-          </a>
-        </div>
-        <p className="mt-4 text-[13px] text-[var(--lp-body)]">Free for 2 active projects. No card. Your clients never need an account.</p>
-      </div>
-      <HeroProduct />
-    </section>
-  );
-}
-
-/** Large product picture with floating cards that appear in order, once. */
-function HeroProduct() {
-  const [run, setRun] = useState(0);
-  return (
-    <div className="relative mx-auto max-w-6xl px-4 pb-20 sm:px-6 sm:pb-28">
-      <div
-        key={run}
-        className="lp-stage relative mx-auto max-w-[920px]"
-        role="img"
-        aria-label="A ScopeFlow project: the approved scope, a client request flagged as outside scope, a priced change order approved, and the payment received"
-      >
-        <AppWindow />
-        <Chip className="lp-c1 sm:left-[4%] sm:top-[-30px]" tone="mint" icon="check">
-          <b>Approved by Meera</b>
-          <span>Scope v2 locked, Tue 9:15</span>
-        </Chip>
-        <Chip className="lp-c2 sm:right-[4%] sm:top-[-30px]" tone="sky" icon="loop">
-          <b>Revision 2 of 2 used</b>
-          <span>Logo and colour palette</span>
-        </Chip>
-        <Chip className="lp-c3 sm:bottom-[-30px] sm:left-[3%] lg:left-[-44px]" tone="amber" icon="alert">
-          <b>“Can you also do a banner?”</b>
-          <span>Outside the approved scope</span>
-        </Chip>
-        <Chip className="lp-c4 sm:bottom-[-30px] sm:right-[3%] lg:right-[-36px]" tone="ink" icon="plus">
-          <b>Change order #1 approved</b>
-          <span>+₹6,000 and 2 extra days</span>
-        </Chip>
-      </div>
-      <div className="mt-12 text-center">
-        <button type="button" onClick={() => setRun((r) => r + 1)} className="text-[13px] font-medium text-[var(--lp-body)] underline-offset-4 hover:text-[var(--lp-ink)] hover:underline">
-          Play again
-        </button>
-      </div>
-    </div>
-  );
-}
-
-function Chip({ className, tone, icon, children }: { className: string; tone: "mint" | "sky" | "amber" | "ink"; icon: "check" | "loop" | "alert" | "plus"; children: ReactNode }) {
-  const tones = {
-    mint: "bg-white text-[var(--lp-ink)] [--chip:var(--lp-mint)]",
-    sky: "bg-white text-[var(--lp-ink)] [--chip:var(--lp-cobalt)]",
-    amber: "bg-white text-[var(--lp-ink)] [--chip:var(--lp-amber)]",
-    ink: "bg-[var(--lp-ink)] text-white [--chip:var(--lp-amber)]",
-  };
-  const paths = {
-    check: <path d="M4 8.5 6.8 11 12 5.5" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />,
-    loop: <path d="M11.5 6A4 4 0 1 0 12 9M12 3.5V6.5H9" fill="none" stroke="#fff" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />,
-    alert: <path d="M8 4.5v4M8 11.2v.3" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" />,
-    plus: <path d="M8 4.5v7M4.5 8h7" fill="none" stroke="var(--lp-ink)" strokeWidth="2" strokeLinecap="round" />,
-  };
-  return (
-    <div className={cx("lp-chip relative z-10 mt-3 flex items-center gap-3 rounded-2xl px-3.5 py-3 text-left shadow-[0_18px_40px_-18px_rgba(16,24,40,0.45)] ring-1 ring-black/5 sm:absolute sm:mt-0", tones[tone], className)}>
-      <svg width="30" height="30" viewBox="0 0 16 16" className="shrink-0" aria-hidden>
-        <rect width="16" height="16" rx="5" fill="var(--chip)" />
-        {paths[icon]}
-      </svg>
-      <span className="grid text-[13px] leading-tight [&>b]:font-semibold [&>span]:mt-0.5 [&>span]:opacity-70">{children}</span>
-    </div>
-  );
-}
-
-function AppWindow() {
-  return (
-    <div className="overflow-hidden rounded-[22px] bg-white text-left shadow-[0_40px_90px_-40px_rgba(16,24,40,0.5)] ring-1 ring-black/5">
-      <div className="flex items-center gap-1.5 border-b border-[var(--lp-line)] px-4 py-3" aria-hidden>
-        <i className="size-2.5 rounded-full bg-[#f04438]/70" />
-        <i className="size-2.5 rounded-full bg-[#f5a524]/70" />
-        <i className="size-2.5 rounded-full bg-[#12b76a]/70" />
-        <span className="ml-3 truncate rounded-md bg-[#f2f4f7] px-3 py-1 text-[11px] text-[var(--lp-body)]">scopeflow.in/projects/brand-kit</span>
-      </div>
-      <div className="grid gap-5 p-5 sm:grid-cols-[1.5fr_1fr] sm:p-7 sm:pb-14 sm:pt-12">
+    <section className="relative overflow-hidden border-b border-[var(--lp-rule)]">
+      <div className="mx-auto grid max-w-6xl grid-cols-1 gap-12 px-4 pb-16 pt-12 sm:px-6 sm:pt-16 lg:grid-cols-[1fr_1.05fr] lg:items-center lg:gap-14 lg:pb-24 lg:pt-20">
         <div>
-          <p className="text-[12px] text-[var(--lp-body)]">Chai &amp; Co.</p>
-          <div className="mt-0.5 flex flex-wrap items-center gap-2">
-            <p className="lp-display text-[24px] leading-tight sm:text-[28px]">Brand kit</p>
-            <span className="rounded-full bg-[var(--lp-sky)] px-2.5 py-0.5 text-[12px] font-semibold text-[var(--lp-cobalt)]">In progress</span>
+          <h1 className="lp-display text-[46px] leading-[0.98] sm:text-[68px] lg:text-[76px]">Every client job, on the record.</h1>
+          <p className="mt-6 max-w-[34rem] text-[17px] leading-relaxed text-[var(--lp-body)] sm:text-[19px]">
+            Quote it, get it approved, check every “small change” against it, invoice with GST and see what you actually earned. One
+            record per job, from the first quote to the last payment.
+          </p>
+          <div className="mt-8 flex flex-wrap gap-3">
+            <Link to="/signup" className={btnPrimary}>
+              Start free
+            </Link>
+            <a href="#how" className={btnQuiet}>
+              See how a job runs
+            </a>
           </div>
-          <div className="mt-5 space-y-3">
-            <Row title="Logo and colour palette" used={2} of={2} />
-            <Row title="Packaging label" used={1} of={1} />
-            <Row title="Social templates" used={0} of={2} />
-          </div>
-          <div className="mt-5 rounded-xl bg-[#f9fafb] p-3.5 text-[13px]">
-            <p className="font-semibold">Not included</p>
-            <p className="mt-0.5 text-[var(--lp-body)]">Printing, copywriting, stock photo licences</p>
-          </div>
+          <p className="mt-4 max-w-[34rem] text-[13px] leading-relaxed text-[var(--lp-body)]">
+            Free for 2 active projects, no card. Your clients never need an account. Made for designers, developers, editors and
+            other independent creatives.
+          </p>
         </div>
-        <div className="rounded-2xl bg-[#f9fafb] p-4 text-[13px]">
-          <p className="font-semibold">Payments</p>
-          <dl className="mt-3 space-y-2 tabular-nums">
-            <div className="flex justify-between">
-              <dt className="text-[var(--lp-body)]">Original budget</dt>
-              <dd>₹45,000</dd>
-            </div>
-            <div className="flex justify-between">
-              <dt className="text-[var(--lp-body)]">Approved changes</dt>
-              <dd>+₹6,000</dd>
-            </div>
-            <div className="flex justify-between border-t border-[var(--lp-line)] pt-2 font-semibold">
-              <dt>Contract total</dt>
-              <dd>₹51,000</dd>
-            </div>
-          </dl>
-          <div className="mt-4 h-2 overflow-hidden rounded-full bg-[var(--lp-line)]">
-            <div className="lp-paid h-full w-1/2 rounded-full bg-[var(--lp-mint)]" />
-          </div>
-          <p className="mt-2 text-[12px] text-[var(--lp-body)]">₹25,500 received of ₹51,000</p>
-          <ul className="mt-4 space-y-2">
-            <li className="flex items-center justify-between">
-              <span>50% advance</span>
-              <span className="rounded-full bg-[var(--lp-mint-soft)] px-2 py-0.5 text-[11px] font-semibold text-[#067647]">Paid</span>
-            </li>
-            <li className="flex items-center justify-between">
-              <span>Final delivery</span>
-              <span className="rounded-full bg-[#f2f4f7] px-2 py-0.5 text-[11px] font-semibold text-[var(--lp-body)]">Due Nov 30</span>
-            </li>
-          </ul>
-        </div>
+        <LedgerSheet />
       </div>
-    </div>
+    </section>
   );
 }
 
-function Row({ title, used, of }: { title: string; used: number; of: number }) {
+function Mark({ kind }: { kind: Entry["mark"] }) {
+  if (!kind) return null;
+  const label = kind === "out" ? "Outside scope" : kind === "paid" ? "Paid" : "Within scope";
   return (
-    <div className="flex items-center justify-between gap-3 text-[14px]">
-      <span>{title}</span>
-      <span className="flex items-center gap-2">
-        <span className="hidden gap-1 sm:flex" aria-hidden>
-          {Array.from({ length: of }, (_, i) => (
-            <i key={i} className={cx("h-1.5 w-5 rounded-full", i < used ? (used >= of ? "bg-[var(--lp-amber)]" : "bg-[var(--lp-cobalt)]") : "bg-[var(--lp-line)]")} />
-          ))}
+    <span className={cx("lp-mark", `lp-mark-${kind}`)} title={label}>
+      <span className="sr-only">{label}</span>
+      <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden>
+        {kind === "out" ? (
+          <path d="M8 3.5v5.2M8 11.6v.6" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" />
+        ) : (
+          <path d="M3.8 8.4 6.7 11.2 12.3 5" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
+        )}
+      </svg>
+    </span>
+  );
+}
+
+/** The record of one job, written in line by line (once; instantly with reduced motion). */
+function LedgerSheet() {
+  return (
+    <figure className="lp-sheet relative" aria-label="Example record of one job: quote, approval, a request by WhatsApp, a request outside the scope, a change order, a GST invoice and a UPI payment, with profit so far">
+      <figcaption className="flex items-baseline justify-between gap-3 px-5 pb-3 pt-5 sm:px-6">
+        <span>
+          <span className="lp-display block text-[22px] leading-tight sm:text-[24px]">Brand kit</span>
+          <span className="text-[13px] text-[var(--lp-body)]">Chai &amp; Co., for Raman Studio</span>
         </span>
-        <span className="whitespace-nowrap text-[12px] tabular-nums text-[var(--lp-body)]">
-          {used} of {of} rounds
-        </span>
+        <span className="rounded-full bg-[var(--lp-blue-soft)] px-2.5 py-1 text-[12px] font-semibold text-[var(--lp-blue)]">In progress</span>
+      </figcaption>
+      <ol className="lp-rows">
+        {LEDGER.map((e, i) => (
+          <li key={i} className={cx("lp-row", e.mark === "out" && "lp-row-out")} style={{ ["--i" as string]: i }}>
+            <span className="lp-date tabular-nums">{e.date}</span>
+            <span className="lp-margin">
+              <Mark kind={e.mark} />
+            </span>
+            <span className="min-w-0">
+              <span className="block text-[14px] font-medium leading-snug">{e.what}</span>
+              {e.note ? <span className={cx("block text-[12px] leading-snug", e.mark === "out" ? "font-semibold text-[var(--lp-red)]" : "text-[var(--lp-body)]")}>{e.note}</span> : null}
+            </span>
+            <span className={cx("lp-amt tabular-nums", e.mark === "paid" && "text-[var(--lp-green)]")}>{e.amount ?? ""}</span>
+          </li>
+        ))}
+      </ol>
+      <dl className="lp-total grid grid-cols-2 gap-x-4 gap-y-1 px-5 py-4 text-[13px] tabular-nums sm:grid-cols-4 sm:px-6" style={{ ["--i" as string]: LEDGER.length }}>
+        <div>
+          <dt className="text-[var(--lp-body)]">Contract</dt>
+          <dd className="font-semibold">₹51,000</dd>
+        </div>
+        <div>
+          <dt className="text-[var(--lp-body)]">Received</dt>
+          <dd className="font-semibold">₹25,500</dd>
+        </div>
+        <div>
+          <dt className="text-[var(--lp-body)]">Expenses</dt>
+          <dd className="font-semibold">−₹2,400</dd>
+        </div>
+        <div>
+          <dt className="text-[var(--lp-body)]">Profit so far</dt>
+          <dd className="font-semibold text-[var(--lp-green)]">₹23,100</dd>
+        </div>
+      </dl>
+    </figure>
+  );
+}
+
+// ---------------------------------------------------------------- the job, step by step
+
+function Steps() {
+  return (
+    <section id="how" className="scroll-mt-16 border-b border-[var(--lp-rule)]">
+      <div className="mx-auto max-w-6xl px-4 py-20 sm:px-6 lg:py-28">
+        <div className="max-w-2xl">
+          <h2 className="lp-display text-[36px] leading-[1.02] sm:text-[52px]">How a job runs, start to finish.</h2>
+          <p className="mt-5 text-[17px] leading-relaxed text-[var(--lp-body)]">
+            Five steps, one record. Each step builds on the one before, so nobody has to remember what was agreed.
+          </p>
+        </div>
+        <ol className="mt-14 border-t border-[var(--lp-rule-strong)]">
+          <Step
+            n={1}
+            title="Quote the work"
+            body="List the deliverables, how many revision rounds each gets, and what's not included. Price each line as a fixed fee, by the hour or per unit, add a discount and GST, and set how long the quote stays open."
+            facts={["Start from a template, or save your own", "Scope check flags vague words like “etc.” before you send", "Download the quote as a PDF"]}
+            visual={<QuoteVisual />}
+          />
+          <Step
+            n={2}
+            title="Get it approved"
+            body="Share one private link on WhatsApp or by email. Your client reads the scope on their phone and approves it, or asks for changes. No account, no app."
+            facts={["Each approved version is locked and fingerprinted", "Name, time and device are recorded with every approval"]}
+            visual={<ApproveVisual />}
+          />
+          <Step
+            n={3}
+            title="Check every request against it"
+            body="Requests from the client link are counted against the rounds they approved. When they ask on WhatsApp, on a call or by email, log it in a few taps and it's counted the same way."
+            facts={["Anything beyond the rounds, or outside the deliverables, is flagged", "Deliverable due dates, with reminders before they slip"]}
+            visual={<RequestVisual />}
+          />
+          <Step
+            n={4}
+            title="Price the extras"
+            body="Turn an out-of-scope request into a change order: a fixed price or hours, plus any extra days. When your client approves it, the budget, due dates and payment schedule update by themselves."
+            facts={["Your client approves before you start the extra work", "Every change stays in the project's history"]}
+            visual={<ChangeOrderVisual />}
+          />
+          <Step
+            n={5}
+            title="Invoice and get paid"
+            body="Create a GST tax invoice from any payment in a tap, with a UPI QR code your client can scan. Record full or part payments with the date and method, and see what's still owed."
+            facts={["CGST and SGST or IGST worked out for you", "One-tap PDF for you and your client", "ScopeFlow tracks payments. It never holds your money"]}
+            visual={<InvoiceVisual />}
+            last
+          />
+        </ol>
+      </div>
+    </section>
+  );
+}
+
+function Step({ n, title, body, facts, visual, last }: { n: number; title: string; body: string; facts: string[]; visual: ReactNode; last?: boolean }) {
+  return (
+    <li className={cx("lp-step grid grid-cols-[32px_minmax(0,1fr)] gap-x-3 gap-y-8 py-12 lg:grid-cols-[64px_1fr_1fr] lg:gap-10 lg:py-16", !last && "border-b border-[var(--lp-rule)]")}>
+      <span className="lp-display pt-0.5 text-[30px] leading-none text-[var(--lp-blue)] lg:text-[48px]" aria-hidden>
+        {n}
       </span>
-    </div>
-  );
-}
-
-const WHO = ["Graphic designers", "Brand studios", "Web developers", "UI/UX designers", "Video editors", "Social media marketers", "Illustrators", "Copywriters", "Photographers", "Consultants"];
-
-function BuiltFor() {
-  return (
-    <section className="border-y border-[var(--lp-line)] py-7" aria-label="Who ScopeFlow is for">
-      <p className="text-center text-[13px] font-medium text-[var(--lp-body)]">Made for independent creatives and small studios</p>
-      <div className="lp-marquee mt-4 overflow-hidden">
-        <ul className="lp-marquee-track flex w-max gap-3">
-          {[...WHO, ...WHO].map((w, i) => (
-            <li key={i} aria-hidden={i >= WHO.length} className="whitespace-nowrap rounded-full bg-[#f9fafb] px-4 py-2 text-[14px] font-medium ring-1 ring-[var(--lp-line)]">
-              {w}
-            </li>
-          ))}
-        </ul>
-      </div>
-    </section>
-  );
-}
-
-function Features() {
-  return (
-    <section id="how" className="mx-auto max-w-6xl scroll-mt-20 space-y-24 px-4 py-24 sm:px-6 lg:space-y-32 lg:py-32">
-      <div className="mx-auto max-w-3xl text-center">
-        <h2 className="lp-display text-[36px] leading-[1.05] sm:text-[52px]">Agree once. Point to it every time.</h2>
-        <p className="mt-5 text-[17px] leading-relaxed text-[var(--lp-body)]">Three steps that take the awkwardness out of “that wasn't part of the deal”.</p>
-      </div>
-      <FeatureRow
-        wash="sky"
-        title="Send a scope your client actually reads"
-        body="List the deliverables, how many revision rounds each includes, what's not included and your payment terms. Your client opens one private link on their phone and approves it — no account, no app."
-        points={["Scope check flags vague words like “etc.” before you send", "Each approved version is locked and fingerprinted"]}
-        visual={<ApproveVisual />}
-      />
-      <FeatureRow
-        flip
-        wash="butter"
-        title="Every request is checked against it"
-        body="When your client asks for a revision, ScopeFlow counts it against the rounds they approved. Anything beyond those rounds, or outside the deliverables, is flagged the moment it arrives."
-        points={["Clients see how many rounds are left, and what an extra one costs", "You decide: do it anyway, or price it"]}
-        visual={<RequestVisual />}
-      />
-      <FeatureRow
-        wash="mint"
-        title="Extras become priced change orders"
-        body="Price extra work as fixed or hourly, add the days it needs, and send it. When your client approves, the budget, due date and payment schedule update on their own."
-        points={["Mark payments received and see what's overdue", "Everything lands in one timeline you can both see"]}
-        visual={<ChangeOrderVisual />}
-      />
-    </section>
-  );
-}
-
-function FeatureRow({ title, body, points, visual, flip, wash }: { title: string; body: string; points: string[]; visual: ReactNode; flip?: boolean; wash: "sky" | "butter" | "mint" }) {
-  return (
-    <div className="grid items-center gap-10 lg:grid-cols-2 lg:gap-16">
-      <div className={cx(flip && "lg:order-2")}>
-        <h3 className="lp-display text-[30px] leading-[1.08] sm:text-[38px]">{title}</h3>
-        <p className="mt-4 text-[17px] leading-relaxed text-[var(--lp-body)]">{body}</p>
-        <ul className="mt-6 space-y-3">
-          {points.map((p) => (
-            <li key={p} className="flex gap-3 text-[15px]">
-              <svg width="20" height="20" viewBox="0 0 20 20" className="mt-0.5 shrink-0" aria-hidden>
-                <circle cx="10" cy="10" r="10" fill="var(--lp-sky)" />
-                <path d="M6 10.4 8.6 13 14 7.5" fill="none" stroke="var(--lp-cobalt)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+      <div className="max-w-[34rem]">
+        <h3 className="lp-display text-[28px] leading-[1.08] sm:text-[34px]">{title}</h3>
+        <p className="mt-4 text-[16px] leading-relaxed text-[var(--lp-body)] sm:text-[17px]">{body}</p>
+        <ul className="mt-5 space-y-2.5">
+          {facts.map((f) => (
+            <li key={f} className="flex gap-3 text-[15px]">
+              <svg width="18" height="18" viewBox="0 0 16 16" className="mt-[3px] shrink-0 text-[var(--lp-blue)]" aria-hidden>
+                <path d="M3.8 8.4 6.7 11.2 12.3 5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
               </svg>
-              {p}
+              {f}
             </li>
           ))}
         </ul>
       </div>
-      <div className={cx("lp-panel relative overflow-hidden rounded-[32px] p-6 sm:p-10", `lp-panel-${wash}`)}>
-        <div className="relative">{visual}</div>
-      </div>
-    </div>
+      <div className="col-span-2 min-w-0 lg:col-span-1">{visual}</div>
+    </li>
+  );
+}
+
+/** A slip of ruled paper that the step visuals sit on. */
+function Slip({ children, className }: { children: ReactNode; className?: string }) {
+  return <div className={cx("lp-slip mx-auto w-full max-w-[400px] p-5", className)}>{children}</div>;
+}
+
+function QuoteVisual() {
+  const lines: [string, string, string][] = [
+    ["Social post designs", "10 posts × ₹500", "₹5,000"],
+    ["Launch reel edit", "6 h × ₹1,200", "₹7,200"],
+    ["Content calendar", "Fixed", "₹3,000"],
+  ];
+  return (
+    <Slip>
+      <p className="lp-display text-[20px]">Quote</p>
+      <table className="mt-3 w-full text-[13px] tabular-nums">
+        <caption className="sr-only">Example quote</caption>
+        <tbody>
+          {lines.map(([t, b, a]) => (
+            <tr key={t} className="border-t border-[var(--lp-rule)] align-top">
+              <td className="py-2 pr-3">
+                {t}
+                <span className="block text-[12px] text-[var(--lp-body)]">{b}</span>
+              </td>
+              <td className="py-2 text-right">{a}</td>
+            </tr>
+          ))}
+          <tr className="border-t border-[var(--lp-rule)] text-[var(--lp-body)]">
+            <td className="py-1.5">GST 18%</td>
+            <td className="py-1.5 text-right">₹2,736</td>
+          </tr>
+          <tr className="border-t-2 border-[var(--lp-ink)] font-semibold">
+            <td className="pt-2">Total</td>
+            <td className="pt-2 text-right">₹17,936</td>
+          </tr>
+        </tbody>
+      </table>
+      <p className="mt-3 text-[12px] text-[var(--lp-body)]">Quote valid until 16 Nov</p>
+    </Slip>
   );
 }
 
 function ApproveVisual() {
   return (
-    <div className="mx-auto max-w-[360px] rounded-3xl bg-white p-5 shadow-[0_24px_50px_-28px_rgba(16,24,40,0.45)]">
-      <p className="text-[12px] text-[var(--lp-body)]">Raman Studio, for Chai &amp; Co.</p>
-      <p className="lp-display mt-1 text-[22px]">Brand kit</p>
-      <ul className="mt-4 space-y-2.5 text-[13px]">
-        <li className="flex justify-between">
-          <span>Logo and colour palette</span>
-          <span className="text-[var(--lp-body)]">2 rounds</span>
-        </li>
-        <li className="flex justify-between">
-          <span>Packaging label</span>
-          <span className="text-[var(--lp-body)]">1 round</span>
-        </li>
-        <li className="flex justify-between text-[var(--lp-body)]">
-          <span>Not included</span>
-          <span>Printing</span>
-        </li>
-      </ul>
-      <div className="mt-5 flex items-baseline justify-between border-t border-[var(--lp-line)] pt-3 text-[13px]">
-        <span className="text-[var(--lp-body)]">Total</span>
-        <span className="lp-display text-[22px]">₹45,000</span>
+    <div className="lp-phone mx-auto w-[260px]">
+      <div className="rounded-[26px] bg-white p-4 pt-6">
+        <p className="text-[11px] text-[var(--lp-body)]">Raman Studio sent you a scope to review</p>
+        <p className="lp-display mt-1 text-[19px] leading-tight">Brand kit</p>
+        <ul className="mt-3 space-y-2 text-[12px]">
+          <li className="flex justify-between gap-2">
+            <span>Logo and colours</span>
+            <span className="text-[var(--lp-body)]">2 rounds</span>
+          </li>
+          <li className="flex justify-between gap-2">
+            <span>Packaging label</span>
+            <span className="text-[var(--lp-body)]">1 round</span>
+          </li>
+          <li className="flex justify-between gap-2 text-[var(--lp-body)]">
+            <span>Not included</span>
+            <span>Printing</span>
+          </li>
+        </ul>
+        <p className="mt-3 flex justify-between border-t border-[var(--lp-rule)] pt-2 text-[12px] font-semibold tabular-nums">
+          <span>Total</span>
+          <span>₹45,000</span>
+        </p>
+        <div className="mt-3 rounded-full bg-[var(--lp-blue)] py-2 text-center text-[13px] font-semibold text-white">Approve scope</div>
+        <div className="mt-2 rounded-full py-2 text-center text-[13px] font-semibold ring-1 ring-[var(--lp-rule-strong)]">Request changes</div>
       </div>
-      <div className="mt-4 rounded-full bg-[var(--lp-cobalt)] py-2.5 text-center text-[14px] font-semibold text-white">Approve scope</div>
     </div>
   );
 }
 
 function RequestVisual() {
   return (
-    <div className="mx-auto max-w-[380px] space-y-3">
-      <Bubble text="Could we try the logo in navy?" tag="Included, round 2 of 2" tone="sky" />
-      <Bubble text="One more round with a rounder cup icon?" tag="Beyond the 2 rounds included" tone="amber" />
-      <Bubble text="Can you also do a website banner?" tag="Outside the approved scope" tone="amber" />
-    </div>
+    <Slip className="space-y-3">
+      <Req text="Can we try the logo in navy?" how="By WhatsApp on 9 Nov, logged" tag="Revision 2 of 2" tone="ok" />
+      <Req text="One more round with a rounder cup?" how="From the client link" tag="Beyond the 2 rounds agreed" tone="out" />
+      <Req text="Could you also do a website banner?" how="On a call, logged" tag="Outside the approved scope" tone="out" />
+    </Slip>
   );
 }
 
-function Bubble({ text, tag, tone }: { text: string; tag: string; tone: "sky" | "amber" }) {
+function Req({ text, how, tag, tone }: { text: string; how: string; tag: string; tone: "ok" | "out" }) {
   return (
-    <div className="rounded-2xl rounded-tl-md bg-white p-4 shadow-[0_18px_40px_-26px_rgba(16,24,40,0.5)]">
-      <p className="text-[12px] text-[var(--lp-body)]">Meera</p>
-      <p className="mt-0.5 text-[14px]">{text}</p>
-      <span className={cx("mt-2.5 inline-block rounded-full px-2.5 py-1 text-[12px] font-semibold", tone === "sky" ? "bg-[var(--lp-sky)] text-[var(--lp-cobalt)]" : "bg-[#fef0c7] text-[#93370d]")}>{tag}</span>
+    <div className={cx("rounded-xl border-l-[3px] bg-white py-2.5 pl-3 pr-3", tone === "out" ? "border-[var(--lp-red)]" : "border-[var(--lp-blue)]")}>
+      <p className="text-[14px]">“{text}”</p>
+      <p className="mt-0.5 text-[12px] text-[var(--lp-body)]">{how}</p>
+      <p className={cx("mt-1 text-[12px] font-semibold", tone === "out" ? "text-[var(--lp-red)]" : "text-[var(--lp-blue)]")}>{tag}</p>
     </div>
   );
 }
 
 function ChangeOrderVisual() {
   return (
-    <div className="mx-auto max-w-[360px] rounded-3xl bg-white p-5 shadow-[0_24px_50px_-28px_rgba(16,24,40,0.45)]">
+    <Slip>
       <p className="text-[12px] text-[var(--lp-body)]">Change order #1</p>
       <p className="mt-0.5 text-[16px] font-semibold">Website banner, 3 sizes</p>
-      <dl className="mt-4 space-y-2 text-[13px] tabular-nums">
+      <dl className="mt-3 space-y-1.5 text-[13px] tabular-nums">
         <div className="flex justify-between">
           <dt className="text-[var(--lp-body)]">Price</dt>
           <dd className="font-semibold">₹6,000</dd>
@@ -374,67 +353,173 @@ function ChangeOrderVisual() {
           <dt className="text-[var(--lp-body)]">Extra time</dt>
           <dd>2 days</dd>
         </div>
-        <div className="flex justify-between">
-          <dt className="text-[var(--lp-body)]">New due date</dt>
-          <dd>Nov 30</dd>
-        </div>
-        <div className="flex justify-between border-t border-[var(--lp-line)] pt-2 font-semibold">
-          <dt>New contract total</dt>
-          <dd>₹51,000</dd>
+        <div className="flex justify-between border-t border-[var(--lp-rule)] pt-1.5">
+          <dt className="text-[var(--lp-body)]">Contract total</dt>
+          <dd>
+            <s className="mr-2 text-[var(--lp-body)]">₹45,000</s>
+            <b>₹51,000</b>
+          </dd>
         </div>
       </dl>
-      <div className="mt-4 flex items-center gap-2 rounded-xl bg-[var(--lp-mint-soft)] px-3 py-2 text-[13px] font-semibold text-[#067647]">
+      <p className="mt-3 flex items-center gap-2 text-[13px] font-semibold text-[var(--lp-green)]">
         <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden>
-          <path d="M4 8.5 6.8 11 12 5.5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+          <path d="M3.8 8.4 6.7 11.2 12.3 5" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
         </svg>
-        Approved by Meera, Fri 11:05
-      </div>
-    </div>
+        Approved by Meera on 12 Nov
+      </p>
+    </Slip>
   );
 }
 
-function BeforeAfter() {
-  const without = [
-    "The scope lives in a WhatsApp thread nobody can find",
-    "“Small changes” pile up and eat your weekends",
-    "Asking for more money feels awkward",
-    "Payments slip because nobody tracks the dates",
+/** A decorative QR-like pattern (deliberately not scannable: no real payment details on a marketing page). */
+function FauxQr() {
+  const cells = useMemo(() => {
+    const out: [number, number][] = [];
+    let seed = 7;
+    for (let y = 0; y < 21; y++)
+      for (let x = 0; x < 21; x++) {
+        const finder = (x < 8 && y < 8) || (x > 12 && y < 8) || (x < 8 && y > 12);
+        seed = (seed * 9301 + 49297) % 233280;
+        if (!finder && seed / 233280 > 0.55) out.push([x, y]);
+      }
+    return out;
+  }, []);
+  const finder = (x: number, y: number) => (
+    <g key={`${x}-${y}`}>
+      <rect x={x} y={y} width="7" height="7" fill="var(--lp-ink)" />
+      <rect x={x + 1} y={y + 1} width="5" height="5" fill="#fff" />
+      <rect x={x + 2} y={y + 2} width="3" height="3" fill="var(--lp-ink)" />
+    </g>
+  );
+  return (
+    <svg viewBox="-1 -1 23 23" width="76" height="76" aria-hidden className="shrink-0 rounded bg-white">
+      {cells.map(([x, y]) => (
+        <rect key={`${x}.${y}`} x={x} y={y} width="1" height="1" fill="var(--lp-ink)" />
+      ))}
+      {finder(0, 0)}
+      {finder(14, 0)}
+      {finder(0, 14)}
+    </svg>
+  );
+}
+
+function InvoiceVisual() {
+  return (
+    <Slip>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="text-[12px] font-semibold text-[var(--lp-blue)]">Tax invoice</p>
+          <p className="lp-display text-[20px] tabular-nums">RS-2026-004</p>
+        </div>
+        <span className="rounded-full bg-[var(--lp-green-soft)] px-2.5 py-1 text-[12px] font-semibold text-[var(--lp-green)]">Paid by UPI</span>
+      </div>
+      <dl className="mt-3 space-y-1.5 text-[13px] tabular-nums">
+        <div className="flex justify-between">
+          <dt className="text-[var(--lp-body)]">Taxable value</dt>
+          <dd>₹21,610</dd>
+        </div>
+        <div className="flex justify-between">
+          <dt className="text-[var(--lp-body)]">CGST 9%</dt>
+          <dd>₹1,945</dd>
+        </div>
+        <div className="flex justify-between">
+          <dt className="text-[var(--lp-body)]">SGST 9%</dt>
+          <dd>₹1,945</dd>
+        </div>
+        <div className="flex justify-between border-t-2 border-[var(--lp-ink)] pt-1.5 font-semibold">
+          <dt>Total</dt>
+          <dd>₹25,500</dd>
+        </div>
+      </dl>
+      <div className="mt-4 flex items-center gap-3 rounded-xl bg-[var(--lp-paper)] p-3">
+        <FauxQr />
+        <p className="text-[12px] leading-snug text-[var(--lp-body)]">
+          <span className="block font-semibold text-[var(--lp-ink)]">Scan to pay with any UPI app</span>
+          The invoice number goes in as the payment note.
+        </p>
+      </div>
+    </Slip>
+  );
+}
+
+// ---------------------------------------------------------------- money
+
+function Money() {
+  const rows: [string, string, string, string][] = [
+    ["Brand kit", "₹25,500", "−₹2,400", "₹23,100"],
+    ["Menu card", "₹18,000", "−₹600", "₹17,400"],
+    ["Launch reel", "₹12,000", "−₹4,800", "₹7,200"],
   ];
-  const withSf = [
-    "One approved, locked scope you can both point to",
-    "Every request counted against the rounds agreed",
-    "Extras arrive as change orders with a price",
-    "Milestones, due dates and what's overdue in one place",
+  const reminders: [string, string, "out" | "warn" | "info"][] = [
+    ["Invoice RS-2026-003 is overdue", "₹9,000 due 4 days ago", "out"],
+    ["Follow up with Chai & Co.", "Scope sent 3 days ago, not approved yet", "warn"],
+    ["“Packaging label” is due tomorrow", "Brand kit", "info"],
   ];
   return (
-    <section className="bg-[#f9fafb] py-24 lg:py-32">
-      <div className="mx-auto max-w-6xl px-4 sm:px-6">
-        <h2 className="lp-display mx-auto max-w-3xl text-center text-[36px] leading-[1.05] sm:text-[52px]">The difference shows up on your first project.</h2>
-        <div className="mt-14 grid gap-5 lg:grid-cols-2">
-          <div className="rounded-[28px] bg-white p-7 ring-1 ring-[var(--lp-line)] sm:p-9">
-            <h3 className="text-[18px] font-semibold text-[var(--lp-body)]">Without ScopeFlow</h3>
-            <ul className="mt-6 space-y-4">
-              {without.map((t) => (
-                <li key={t} className="flex gap-3 text-[16px] text-[var(--lp-body)]">
-                  <svg width="22" height="22" viewBox="0 0 22 22" className="shrink-0" aria-hidden>
-                    <circle cx="11" cy="11" r="11" fill="#f2f4f7" />
-                    <path d="M7.5 7.5l7 7M14.5 7.5l-7 7" stroke="#98a2b3" strokeWidth="1.8" strokeLinecap="round" />
-                  </svg>
-                  {t}
-                </li>
-              ))}
-            </ul>
+    <section className="border-b border-[var(--lp-rule)] bg-white">
+      <div className="mx-auto grid max-w-6xl grid-cols-1 gap-12 px-4 py-20 sm:px-6 lg:grid-cols-[0.9fr_1.1fr] lg:items-start lg:gap-16 lg:py-28">
+        <div className="max-w-[32rem]">
+          <h2 className="lp-display text-[36px] leading-[1.02] sm:text-[52px]">Know what you actually earned.</h2>
+          <p className="mt-5 text-[17px] leading-relaxed text-[var(--lp-body)]">
+            Log what you spend for work and link it to a project. ScopeFlow shows money received, invoiced and spent, and the profit on
+            every project, by month, quarter or financial year.
+          </p>
+          <ul className="mt-6 space-y-2.5 text-[15px]">
+            {[
+              "April-to-March financial years and their quarters",
+              "Profit and margin for each project",
+              "Reminders for overdue invoices, late payments, waiting approvals and deadlines",
+              "Your own follow-ups, on the day you set",
+            ].map((f) => (
+              <li key={f} className="flex gap-3">
+                <svg width="18" height="18" viewBox="0 0 16 16" className="mt-[3px] shrink-0 text-[var(--lp-blue)]" aria-hidden>
+                  <path d="M3.8 8.4 6.7 11.2 12.3 5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+                {f}
+              </li>
+            ))}
+          </ul>
+        </div>
+        <div className="space-y-5">
+          <div className="lp-slip p-5 sm:p-6">
+            <div className="flex flex-wrap items-baseline justify-between gap-2">
+              <p className="lp-display text-[20px]">Profit by project</p>
+              <p className="text-[13px] text-[var(--lp-body)]">Q3 FY 2026–27</p>
+            </div>
+            <div className="mt-3">
+              <table className="w-full text-[12px] tabular-nums sm:text-[13px]">
+                <caption className="sr-only">Example: profit by project</caption>
+                <thead className="text-left text-[12px] text-[var(--lp-body)]">
+                  <tr>
+                    <th scope="col" className="pb-2 font-medium">Project</th>
+                    <th scope="col" className="pb-2 text-right font-medium">Received</th>
+                    <th scope="col" className="pb-2 text-right font-medium">Expenses</th>
+                    <th scope="col" className="pb-2 text-right font-medium">Profit</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {rows.map(([p, r, e, pr]) => (
+                    <tr key={p} className="border-t border-[var(--lp-rule)]">
+                      <td className="py-2 font-medium">{p}</td>
+                      <td className="py-2 text-right">{r}</td>
+                      <td className="py-2 text-right text-[var(--lp-body)]">{e}</td>
+                      <td className="py-2 text-right font-semibold">{pr}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
-          <div className="lp-panel lp-panel-mint relative overflow-hidden rounded-[28px] p-7 sm:p-9">
-            <h3 className="relative text-[18px] font-semibold">With ScopeFlow</h3>
-            <ul className="relative mt-6 space-y-4">
-              {withSf.map((t) => (
-                <li key={t} className="flex gap-3 text-[16px]">
-                  <svg width="22" height="22" viewBox="0 0 22 22" className="shrink-0" aria-hidden>
-                    <circle cx="11" cy="11" r="11" fill="var(--lp-mint)" />
-                    <path d="M6.8 11.4 9.6 14.2 15.2 8.4" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                  </svg>
-                  {t}
+          <div className="lp-slip p-5 sm:p-6">
+            <p className="lp-display text-[20px]">Needs you today</p>
+            <ul className="mt-3">
+              {reminders.map(([t, d, tone]) => (
+                <li key={t} className="flex gap-3 border-t border-[var(--lp-rule)] py-2.5 first:border-t-0">
+                  <span className={cx("mt-1.5 size-2 shrink-0 rounded-full", tone === "out" ? "bg-[var(--lp-red)]" : tone === "warn" ? "bg-[#dc6803]" : "bg-[var(--lp-blue)]")} aria-hidden />
+                  <span>
+                    <span className="block text-[14px] font-medium">{t}</span>
+                    <span className="block text-[12px] text-[var(--lp-body)]">{d}</span>
+                  </span>
                 </li>
               ))}
             </ul>
@@ -445,55 +530,68 @@ function BeforeAfter() {
   );
 }
 
-const EXAMPLES: { id: string; label: string; title: string; items: [string, string][]; not: string }[] = [
-  { id: "design", label: "Design", title: "Brand identity", items: [["Logo, colour and mono versions", "2 rounds"], ["Colour palette and type", "1 round"], ["10-page brand guide", "1 round"]], not: "Trademark registration, website design, font licences" },
-  { id: "web", label: "Websites", title: "Marketing website", items: [["Designs for up to 5 pages", "2 rounds"], ["Responsive build", "1 round"], ["Launch and basic SEO", "No rounds"]], not: "Hosting and domain fees, copywriting, ongoing maintenance" },
-  { id: "video", label: "Video", title: "Launch video", items: [["3-minute main edit", "2 rounds"], ["3 vertical social clips", "1 round"]], not: "Filming, voice-over artists, premium stock footage" },
-  { id: "social", label: "Social media", title: "Monthly content", items: [["Content calendar for 2 channels", "1 round"], ["12 post designs and captions", "2 rounds"], ["Monthly report", "No rounds"]], not: "Paid ad spend, community replies, influencer fees" },
-];
+// ---------------------------------------------------------------- the client's side
 
-function Disciplines() {
-  const [tab, setTab] = useState(EXAMPLES[0].id);
-  const ex = EXAMPLES.find((e) => e.id === tab)!;
+function ClientSide() {
   return (
-    <section className="mx-auto max-w-6xl px-4 py-24 sm:px-6 lg:py-32">
-      <div className="grid items-center gap-12 lg:grid-cols-[1fr_1.1fr]">
-        <div>
-          <h2 className="lp-display text-[36px] leading-[1.05] sm:text-[48px]">However you work, the scope is clear.</h2>
-          <p className="mt-5 max-w-lg text-[17px] leading-relaxed text-[var(--lp-body)]">
-            Deliverables with their own revision rounds, and a plain list of what's not included. Here's what a scope looks like for
-            different kinds of work.
+    <section className="border-b border-[var(--lp-rule)]">
+      <div className="mx-auto grid max-w-6xl grid-cols-1 gap-12 px-4 py-20 sm:px-6 lg:grid-cols-2 lg:items-center lg:gap-16 lg:py-28">
+        <div className="lg:order-2">
+          <h2 className="lp-display text-[36px] leading-[1.02] sm:text-[52px]">Your client needs only the link.</h2>
+          <p className="mt-5 max-w-[32rem] text-[17px] leading-relaxed text-[var(--lp-body)]">
+            One private page per project, made for phones. It shows exactly what was agreed and where things stand, so there's less
+            to explain on calls.
           </p>
-          <div role="tablist" aria-label="Kinds of work" className="mt-8 flex flex-wrap gap-2">
-            {EXAMPLES.map((e) => (
-              <button
-                key={e.id}
-                role="tab"
-                type="button"
-                aria-selected={tab === e.id}
-                aria-controls="lp-example"
-                onClick={() => setTab(e.id)}
-                className={cx("rounded-full px-4 py-2 text-[14px] font-semibold transition", tab === e.id ? "bg-[var(--lp-ink)] text-white" : "bg-[#f2f4f7] hover:bg-[#eaecf0]")}
-              >
-                {e.label}
-              </button>
+          <dl className="mt-8 grid max-w-[34rem] gap-x-8 gap-y-5 sm:grid-cols-2">
+            {[
+              ["Approve or ask for changes", "The scope, change orders and extra revision rounds"],
+              ["See what's left", "Revision rounds used and left, and deliverable progress"],
+              ["Pay you directly", "Invoices with a UPI QR code. Money goes straight to you"],
+              ["Keep a copy", "Download the scope and invoices as PDFs"],
+            ].map(([t, d]) => (
+              <div key={t} className="border-t-2 border-[var(--lp-ink)] pt-3">
+                <dt className="text-[15px] font-semibold">{t}</dt>
+                <dd className="mt-1 text-[14px] leading-relaxed text-[var(--lp-body)]">{d}</dd>
+              </div>
             ))}
-          </div>
+          </dl>
         </div>
-        <div id="lp-example" role="tabpanel" className="lp-panel lp-panel-sky relative overflow-hidden rounded-[32px] p-6 sm:p-10">
-          <div className="relative rounded-3xl bg-white p-6 shadow-[0_24px_50px_-28px_rgba(16,24,40,0.45)]">
-            <p className="lp-display text-[24px]">{ex.title}</p>
-            <ul className="mt-4 divide-y divide-[var(--lp-line)] text-[14px]">
-              {ex.items.map(([t, r]) => (
-                <li key={t} className="flex justify-between gap-4 py-3">
-                  <span>{t}</span>
-                  <span className="whitespace-nowrap text-[var(--lp-body)]">{r}</span>
-                </li>
-              ))}
-            </ul>
-            <div className="mt-3 rounded-xl bg-[#f9fafb] p-3.5 text-[13px]">
-              <p className="font-semibold">Not included</p>
-              <p className="mt-0.5 text-[var(--lp-body)]">{ex.not}</p>
+        <div className="lg:order-1">
+          <div className="lp-phone mx-auto w-[280px]">
+            <div className="rounded-[26px] bg-white p-4 pt-6 text-[12px]">
+              <p className="text-[11px] text-[var(--lp-body)]">Raman Studio</p>
+              <p className="lp-display mt-0.5 text-[19px] leading-tight">Brand kit</p>
+              <p className="mt-1 inline-block rounded-full bg-[var(--lp-blue-soft)] px-2 py-0.5 text-[11px] font-semibold text-[var(--lp-blue)]">In progress</p>
+              <div className="mt-4 space-y-3">
+                {[
+                  ["Logo and colours", 2, 2, "Delivered"],
+                  ["Packaging label", 0, 1, "In progress"],
+                  ["Banner, 3 sizes", 0, 1, "Not started"],
+                ].map(([t, used, of, s]) => (
+                  <div key={t as string}>
+                    <p className="flex justify-between gap-2">
+                      <span className="font-medium">{t}</span>
+                      <span className="text-[var(--lp-body)]">{s}</span>
+                    </p>
+                    <p className="mt-1 flex items-center gap-1" aria-hidden>
+                      {Array.from({ length: of as number }, (_, i) => (
+                        <i key={i} className={cx("h-1.5 w-6 rounded-full", i < (used as number) ? "bg-[var(--lp-blue)]" : "bg-[var(--lp-rule)]")} />
+                      ))}
+                      <span className="ml-1 text-[11px] text-[var(--lp-body)]">
+                        {used} of {of} rounds used
+                      </span>
+                    </p>
+                  </div>
+                ))}
+              </div>
+              <div className="mt-4 rounded-xl bg-[var(--lp-paper)] p-3">
+                <p className="flex justify-between font-semibold tabular-nums">
+                  <span>Final delivery</span>
+                  <span>₹25,500</span>
+                </p>
+                <p className="mt-0.5 text-[11px] text-[var(--lp-body)]">Due 30 Nov</p>
+                <div className="mt-2 rounded-full bg-[var(--lp-blue)] py-1.5 text-center text-[12px] font-semibold text-white">Pay with UPI</div>
+              </div>
             </div>
           </div>
         </div>
@@ -502,20 +600,81 @@ function Disciplines() {
   );
 }
 
+// ---------------------------------------------------------------- safety
+
+function Safe() {
+  const items: [string, string][] = [
+    ["Agreements can't be changed afterwards", "Each approved version is stored with a fingerprint of its exact content, plus who approved it and when. The approval record downloads as a PDF."],
+    ["Only you see your business", "Your clients see only their own project page. Expenses, notes and your other clients stay private to you."],
+    ["Backed up every week", "The whole database is encrypted and backed up weekly, and every backup is checked by restoring it."],
+    ["Your money never passes through us", "ScopeFlow records payments; clients pay you directly by UPI or however you agree."],
+  ];
+  return (
+    <section className="border-b border-[var(--lp-rule)] bg-white">
+      <div className="mx-auto max-w-6xl px-4 py-20 sm:px-6 lg:py-24">
+        <h2 className="lp-display max-w-2xl text-[32px] leading-[1.05] sm:text-[44px]">A record you can rely on.</h2>
+        <dl className="mt-10 grid gap-x-10 gap-y-8 sm:grid-cols-2 lg:grid-cols-4">
+          {items.map(([t, d]) => (
+            <div key={t} className="border-t border-[var(--lp-rule-strong)] pt-4">
+              <dt className="text-[16px] font-semibold leading-snug">{t}</dt>
+              <dd className="mt-2 text-[14px] leading-relaxed text-[var(--lp-body)]">{d}</dd>
+            </div>
+          ))}
+        </dl>
+      </div>
+    </section>
+  );
+}
+
+// ---------------------------------------------------------------- questions
+
+const QA: [string, string][] = [
+  ["Does my client need an account?", "No. They open a private link on any phone or computer, review the scope and approve it, or ask for changes."],
+  ["Is it free?", "Yes, for 2 active projects and 5 clients at a time, with every core feature: scopes, approvals, revision tracking, change orders, quotes, invoices and payment tracking. Expenses and analytics are free for everyone during the beta. No card needed."],
+  ["Can I make GST invoices?", "Yes. Add your GSTIN and address once, then create a tax invoice from any payment. CGST and SGST, or IGST, are worked out for you, and numbering stays in order."],
+  ["What if my client asks for changes on WhatsApp?", "Log the request on the project in a few taps. It's checked against the approved scope like any other request, and your client sees it on their page."],
+  ["Does ScopeFlow take payments?", "No. It records the payments you receive. Your client pays you directly, for example by scanning the UPI QR code on the invoice."],
+  ["Can I use it on my phone?", "Yes. Everything works on a phone, for you and for your clients."],
+];
+
+function Questions() {
+  return (
+    <section className="border-b border-[var(--lp-rule)]">
+      <div className="mx-auto grid max-w-6xl grid-cols-1 gap-10 px-4 py-20 sm:px-6 lg:grid-cols-[0.8fr_1.2fr] lg:gap-16 lg:py-24">
+        <h2 className="lp-display text-[32px] leading-[1.05] sm:text-[44px]">Questions freelancers ask.</h2>
+        <div className="border-t border-[var(--lp-rule-strong)]">
+          {QA.map(([q, a]) => (
+            <details key={q} className="lp-qa group border-b border-[var(--lp-rule)]">
+              <summary className="flex cursor-pointer list-none items-center justify-between gap-4 py-4 text-[16px] font-semibold">
+                {q}
+                <svg width="18" height="18" viewBox="0 0 16 16" className="shrink-0 text-[var(--lp-body)] transition-transform group-open:rotate-45" aria-hidden>
+                  <path d="M8 3v10M3 8h10" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+                </svg>
+              </summary>
+              <p className="max-w-[40rem] pb-5 text-[15px] leading-relaxed text-[var(--lp-body)]">{a}</p>
+            </details>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+// ---------------------------------------------------------------- closing
+
 function Closing() {
   return (
-    <section className="px-4 pb-16 sm:px-6">
-      <div className="relative mx-auto max-w-6xl overflow-hidden rounded-[36px] bg-[var(--lp-ink)] px-6 py-16 text-center text-white sm:px-14 sm:py-24">
-        <div className="lp-wash lp-wash-dark" aria-hidden />
-        <h2 className="lp-display relative mx-auto max-w-3xl text-[38px] leading-[1.03] sm:text-[60px]">Stop doing extra work for free.</h2>
-        <p className="relative mx-auto mt-5 max-w-xl text-[17px] leading-relaxed text-white/80">
-          Free for 2 active projects at a time, with every core feature. Set up your first scope in minutes.
+    <section className="px-4 py-16 sm:px-6 sm:py-20">
+      <div className="lp-closing relative mx-auto max-w-6xl overflow-hidden rounded-[28px] bg-[var(--lp-blue)] px-6 py-14 text-white sm:px-12 sm:py-20">
+        <h2 className="lp-display relative max-w-3xl text-[38px] leading-[1.02] sm:text-[60px]">Start your next job on the record.</h2>
+        <p className="relative mt-5 max-w-xl text-[17px] leading-relaxed text-white/85">
+          Set up your first scope in a few minutes. Free for 2 active projects, no card needed.
         </p>
-        <div className="relative mt-9 flex flex-wrap justify-center gap-3">
-          <Link to="/signup" className="inline-flex items-center justify-center rounded-full bg-white px-6 py-3 text-[15px] font-semibold text-[var(--lp-ink)] hover:bg-white/90">
+        <div className="relative mt-8 flex flex-wrap gap-3">
+          <Link to="/signup" className="inline-flex items-center justify-center rounded-full bg-white px-6 py-3 text-[15px] font-semibold text-[var(--lp-blue)] hover:bg-white/90">
             Start free
           </Link>
-          <Link to="/pricing" className="inline-flex items-center justify-center rounded-full px-6 py-3 text-[15px] font-semibold text-white ring-1 ring-white/35 hover:ring-white/70">
+          <Link to="/pricing" className="inline-flex items-center justify-center rounded-full px-6 py-3 text-[15px] font-semibold text-white ring-1 ring-white/45 hover:ring-white">
             See pricing
           </Link>
         </div>
