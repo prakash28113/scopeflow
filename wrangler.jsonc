@@ -3,6 +3,9 @@
   "name": "scopeflow",
   "main": "worker/index.ts",
   "compatibility_date": "2026-10-01",
+  // Keep the free *.workers.dev address live even after a custom domain is added,
+  // so links already shared with clients keep working.
+  "workers_dev": true,
   // Pages and files are served straight from static assets (free, unlimited,
   // no Worker CPU). Unknown page paths get index.html for client-side routing.
   "assets": {

@@ -90,6 +90,17 @@ export function publicSupabaseConfig(env) {
   return { supabaseUrl: url, publishable: key };
 }
 
+const HOSTNAME = /^(?=.{4,253}$)([a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/;
+
+/** Custom domains from config/public-site.json, e.g. "scopeflow.in, www.scopeflow.in". First = primary. */
+export function parseDomains(text) {
+  const list = String(text ?? "").split(/[\s,]+/).map((d) => d.trim().toLowerCase()).filter(Boolean);
+  for (const d of list) {
+    if (!HOSTNAME.test(d) || d.endsWith(".workers.dev")) throw new Error(`Not a valid custom domain: "${d}"`);
+  }
+  return [...new Set(list)];
+}
+
 const short = (s) => String(s).replace(/\s+/g, " ").slice(0, 300);
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -282,11 +293,15 @@ revoke all on all tables in schema scopeflow_admin from public, anon, authentica
   exec("node", ["scripts/predeploy-check.mjs"], { env: buildEnv });
   ok("Built the app and passed the pre-deploy check");
 
-  const out = exec("npx", ["wrangler", "deploy", "--var", `SUPABASE_URL:${supabaseUrl}`, "--var", `SUPABASE_ANON_KEY:${publishable}`, "--var", `TURNSTILE_ENABLED:${env.VITE_TURNSTILE_SITE_KEY ? "true" : "false"}`], {
+  const domains = parseDomains(env.CUSTOM_DOMAINS);
+  const domainArgs = domains.flatMap((d) => ["--domain", d]);
+  const out = exec("npx", ["wrangler", "deploy", "--var", `SUPABASE_URL:${supabaseUrl}`, "--var", `SUPABASE_ANON_KEY:${publishable}`, "--var", `TURNSTILE_ENABLED:${env.VITE_TURNSTILE_SITE_KEY ? "true" : "false"}`, ...domainArgs], {
     env: { ...buildEnv, CLOUDFLARE_API_TOKEN: cfToken, CLOUDFLARE_ACCOUNT_ID: accountId, WRANGLER_SEND_METRICS: "false" },
   });
-  const appUrl = (String(out).match(/https:\/\/scopeflow\.[a-z0-9-]+\.workers\.dev/) ?? [`https://scopeflow.${subdomain}.workers.dev`])[0];
-  ok(`Deployed to Cloudflare Workers Free: ${appUrl}`);
+  const workersUrl = (String(out).match(/https:\/\/scopeflow\.[a-z0-9-]+\.workers\.dev/) ?? [`https://scopeflow.${subdomain}.workers.dev`])[0];
+  // The custom domain (when configured) is the address people use; workers.dev keeps working for old links.
+  const appUrl = domains.length ? `https://${domains[0]}` : workersUrl;
+  ok(`Deployed to Cloudflare Workers Free: ${appUrl}${domains.length ? ` (also ${domains.slice(1).map((d) => `https://${d}`).concat(workersUrl).join(", ")})` : ""}`);
 
   if (setSiteUrl) await setSiteUrl(appUrl);
 
@@ -351,11 +366,14 @@ if (isCli) {
   try { allowlistFile = readFileSync(join(ROOT, "config/beta-allowlist.txt"), "utf8"); } catch {}
   let publicConfig = {};
   try { publicConfig = JSON.parse(readFileSync(join(ROOT, "config/public-supabase.json"), "utf8")); } catch {}
+  let site = {};
+  try { site = JSON.parse(readFileSync(join(ROOT, "config/public-site.json"), "utf8")); } catch {}
   run({
     env: {
       SUPABASE_URL: publicConfig.url,
       SUPABASE_PUBLISHABLE_KEY: publicConfig.publishableKey,
       SUPABASE_DATABASE_VERSION: publicConfig.databaseVersion,
+      CUSTOM_DOMAINS: (site.customDomains ?? []).join(","),
       ...process.env,
     },
     fetch: globalThis.fetch,

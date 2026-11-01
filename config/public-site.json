@@ -1,0 +1,4 @@
+{
+  "_note": "Public site settings. customDomains: the first is the main address; add a domain only after Cloudflare shows it as Active (Websites → the domain). The workers.dev address keeps working.",
+  "customDomains": []
+}

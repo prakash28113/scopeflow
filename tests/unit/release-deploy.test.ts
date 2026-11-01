@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 // @ts-expect-error — plain ESM script
-import { run, publicSupabaseConfig, signupsOpen, parseEmails } from "../../scripts/ci/release.mjs";
+import { run, publicSupabaseConfig, signupsOpen, parseEmails, parseDomains } from "../../scripts/ci/release.mjs";
 
 const REF = "abcdefghijklmnopqrst";
 const SUPA = `https://${REF}.supabase.co`;
@@ -43,7 +43,7 @@ function world(opts: { subdomain?: string | null; leak?: boolean; badCsp?: boole
       }
     }
     // Live site
-    if (url.startsWith(APP) || url.startsWith("https://scopeflow.scopeflow-")) {
+    if (url.startsWith(APP) || url.startsWith("https://scopeflow.scopeflow-") || url.startsWith("https://scopeflow.in")) {
       const headers: Record<string, string> = {
         "content-security-policy": opts.badCsp ? "default-src *" : `default-src 'self'; connect-src 'self' ${SUPA}`,
         "x-frame-options": "DENY",
@@ -199,5 +199,23 @@ describe("release automation — deploy and live checks", () => {
     expect(supabaseCalls.filter((p) => p.endsWith("/database/query")).length).toBeGreaterThan(2);
     expect(w.summary()).toMatch(/skipped \(token not scoped for Auth config/);
     expect(w.summary()).toContain(`**Live:** ${APP}`);
+  });
+
+  it("deploys to the custom domain when configured and uses it as the main address", async () => {
+    const w = world();
+    expect(await run(w.deps({ ...BOTH, CUSTOM_DOMAINS: "scopeflow.in, www.scopeflow.in" }))).toBe("deployed");
+    const deploy = w.execs.find((e) => e.args[0] === "wrangler")!;
+    expect(deploy.args.slice(-4)).toEqual(["--domain", "scopeflow.in", "--domain", "www.scopeflow.in"]);
+    const siteUrl = w.calls.find((c) => c.url.endsWith("/config/auth") && (c.body as { site_url?: string })?.site_url);
+    expect((siteUrl!.body as { site_url: string }).site_url).toBe("https://scopeflow.in");
+    expect(w.calls.some((c) => c.url.startsWith("https://scopeflow.in/p"))).toBe(true);
+    expect(w.summary()).toContain("**Live:** https://scopeflow.in");
+  });
+
+  it("validates custom domains", () => {
+    expect(parseDomains("")).toEqual([]);
+    expect(parseDomains("ScopeFlow.in,www.scopeflow.in scopeflow.in")).toEqual(["scopeflow.in", "www.scopeflow.in"]);
+    expect(() => parseDomains("scopeflow.in/evil")).toThrow(/Not a valid custom domain/);
+    expect(() => parseDomains("x.workers.dev")).toThrow(/Not a valid/);
   });
 });
