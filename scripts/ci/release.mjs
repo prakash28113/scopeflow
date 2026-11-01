@@ -118,6 +118,10 @@ export async function run(deps) {
     // Never ship app code that expects database changes that haven't been applied yet.
     const newest = migrations.map((m) => m.name).sort().at(-1);
     if (newest && env.SUPABASE_DATABASE_VERSION !== newest) {
+      if (!env.CLOUDFLARE_API_TOKEN) {
+        log(`::notice::Database migration ${newest} is waiting to be applied — nothing deployed.`);
+        return finish("waiting-supabase", ["", `⏳ **Database update pending:** \`${newest}\` needs a run with SUPABASE_ACCESS_TOKEN before the app can be published.`]);
+      }
       throw new Error(
         `Database migration ${newest} hasn't been applied (database is at ${env.SUPABASE_DATABASE_VERSION || "unknown"}). Run the release with SUPABASE_ACCESS_TOKEN so the database is updated first.`,
       );

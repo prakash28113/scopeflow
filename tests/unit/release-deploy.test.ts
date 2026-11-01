@@ -179,4 +179,14 @@ describe("release automation — deploy and live checks", () => {
     await expect(run(deps)).rejects.toThrow(/20261101000000_v1_1_agreement\.sql hasn't been applied/);
     expect(w.execs).toHaveLength(0);
   });
+
+  it("just waits (no failure) when a migration is pending and nothing could be deployed anyway", async () => {
+    const w = world();
+    const deps = {
+      ...w.deps({ SUPABASE_URL: SUPA, SUPABASE_PUBLISHABLE_KEY: "sb_publishable_live123", SUPABASE_DATABASE_VERSION: "20261031000000_scopeflow_schema.sql" }),
+      migrations: [{ name: "20261101000000_v1_1_agreement.sql", body: "select 1;" }],
+    };
+    expect(await run(deps)).toBe("waiting-supabase");
+    expect(w.summary()).toMatch(/Database update pending/);
+  });
 });
