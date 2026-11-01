@@ -1,6 +1,6 @@
 {
-  "_note": "Public values only (they ship in the app's JavaScript). Never put a secret key here \u2014 the release refuses one. databaseVersion = newest migration applied to this database; app-only releases refuse to run ahead of it.",
+  "_note": "Public values only (they ship in the app's JavaScript). Never put a secret key here — the release refuses one. databaseVersion = newest migration applied to this database; app-only releases refuse to run ahead of it.",
   "url": "https://esixrjouserdayxxezid.supabase.co",
   "publishableKey": "sb_publishable_CZYfjCvxMR25z-j6ii5Dsg_pG46XYBV",
-  "databaseVersion": "20261103000000_v1_2_business_tools.sql"
+  "databaseVersion": "20261104000000_upi_payments.sql"
 }

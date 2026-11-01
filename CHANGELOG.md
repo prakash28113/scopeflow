@@ -1,6 +1,6 @@
 # Changelog
 
-## Launch prep — ready for review (not released)
+## Launch prep — live 1 Nov 2026 (release run 41304518542)
 
 - **Get paid by UPI.** Freelancers add their UPI ID in **Settings → Getting paid**. On rupee projects the client's page shows **Pay via UPI** on every unpaid milestone: it opens GPay, PhonePe, Paytm or BHIM with the amount filled in. There's also a QR code for desktop (made in the browser, no outside service) and **Copy UPI ID**. Money goes straight to the freelancer; ScopeFlow never handles payments and charges nothing. Non-rupee projects and accounts without a UPI ID see no button.
 - **Share on WhatsApp or by email** from the "Client link ready" dialog, with the ready-made message and link (free `wa.me` / `mailto:` links; nothing is sent by ScopeFlow).
