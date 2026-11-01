@@ -1,6 +1,6 @@
 # Changelog
 
-## Public launch — sign-ups open
+## Public launch — sign-ups open — live 1 Nov 2026 (release run 41310079526)
 
 - `config/beta-allowlist.txt` is now `*`: anyone can create an account (Free plan by default; paid plans remain early access, nothing can be charged). Approved by the owner on 1 Nov 2026.
 - Sign-up page: "Start free. No card needed."
