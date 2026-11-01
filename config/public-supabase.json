@@ -2,5 +2,5 @@
   "_note": "Public values only (they ship in the app's JavaScript). Never put a secret key here \u2014 the release refuses one. databaseVersion = newest migration applied to this database; app-only releases refuse to run ahead of it.",
   "url": "https://esixrjouserdayxxezid.supabase.co",
   "publishableKey": "sb_publishable_CZYfjCvxMR25z-j6ii5Dsg_pG46XYBV",
-  "databaseVersion": "20261031000000_scopeflow_schema.sql"
+  "databaseVersion": "20261101000000_v1_1_agreement.sql"
 }
