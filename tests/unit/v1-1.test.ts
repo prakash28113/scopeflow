@@ -172,3 +172,27 @@ describe("plan display helpers", () => {
     expect(planLimitFrom(null)).toBeNull();
   });
 });
+
+describe("upcoming payments after part payments", () => {
+  it("shows what is still due, not the full amount", () => {
+    const items = upcomingItems(
+      [{ id: "p", title: "Menu", currency: "INR", status: "active", due_date: null, extra_days: 0, milestones: [{ id: "m", title: "Advance", amount_cents: 20650, paid_cents: 10000, status: "pending", due_date: "2026-11-05" }] }],
+      "2026-11-01",
+    );
+    expect(items.map((i) => i.amountCents)).toEqual([10650]);
+  });
+});
+
+describe("deliverable due dates in the scope check", () => {
+  it("warns when a deliverable is due after the project or before it starts", () => {
+    const hints = checkScope({ ...solid, startDate: "2026-11-02", dueDate: "2026-12-01", deliverables: [
+      { title: "Logo", description: "SVG", revisions: 2, dueDate: "2026-12-05" },
+      { title: "Card", description: "PDF", revisions: 2, dueDate: "2026-11-01" },
+      { title: "Guide", description: "PDF", revisions: 2, dueDate: "2026-11-20" },
+    ] });
+    const warn = hints.filter((h) => h.level === "warn").map((h) => h.message);
+    expect(warn).toContain("“Logo” is due after the project's due date. Move it earlier, or the project date later.");
+    expect(warn).toContain("“Card” is due before the project starts.");
+    expect(warn.some((m) => m.includes("Guide"))).toBe(false);
+  });
+});

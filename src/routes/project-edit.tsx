@@ -31,6 +31,7 @@ export default function EditProject() {
       amount: d.pricing_type === "fixed" && d.amount_cents != null ? toInputAmount(Number(d.amount_cents), p.currency) : "",
       hours: d.hours != null ? String(Number(d.hours)) : "",
       rate: d.rate_cents != null ? toInputAmount(Number(d.rate_cents), p.currency) : "",
+      dueDate: d.due_date ?? "",
     })),
     milestones: p.milestones.map((m) => ({ title: m.title, amount: toInputAmount(Number(m.amount_cents), p.currency), dueDate: m.due_date ?? "" })),
     exclusions: p.exclusions ?? "",

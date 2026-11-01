@@ -1,10 +1,10 @@
 # ScopeFlow — Product checklist status
 
-Audited 1 November 2026 against the live app (scopeflow.in) and the codebase. Evidence comes from:
+Audited 1 November 2026 against the live app (scopeflow.in) and the codebase, then updated after batches A–E (built 1 November, **not live yet**). Evidence comes from:
 
-- 260 automated tests;
-- 8 race tests on real PostgreSQL;
-- the 34-step browser walkthrough, with a phone pass of every main screen;
+- 274 automated tests;
+- 9 race tests on real PostgreSQL;
+- the 35-step browser walkthrough, with a phone pass of every main screen;
 - release smoke tests on the live site.
 
 **Legend:**
@@ -33,7 +33,7 @@ Audited 1 November 2026 against the live app (scopeflow.in) and the codebase. Ev
 | Approval history and timestamps | ✅ | Name, time, browser and IP; approval timeline |
 | Detect vague or incomplete scope | ✅ | Scope checker |
 | Track revisions used / remaining | ✅ | |
-| Record revision requests | 🟡 | **Clients only.** You can't log a request that came by WhatsApp, a call or email |
+| Record revision requests | ✅ (A–E) | From the client link, or logged by you when it came by WhatsApp, call, email or a meeting: same scope check, same limits, race-tested, and the client sees it |
 | Identify out-of-scope requests | ✅ | Automatic, race-tested |
 | Create change orders | ✅ | Fixed or hourly |
 | Extra charges and timeline extensions | ✅ | |
@@ -41,15 +41,15 @@ Audited 1 November 2026 against the live app (scopeflow.in) and the codebase. Ev
 | Complete change history | ✅ | Activity log and the Approval record PDF |
 | Project dashboard | ✅ | |
 | Project status and milestones | ✅ | Plus deliverable progress |
-| Deliverable deadlines | ❌ | Deadlines exist per project only |
+| Deliverable deadlines | ✅ (A–E) | Optional due date per deliverable: part of the approved scope, moved by change-order extensions, with late or due-soon tags and reminders |
 | Activity timelines | ✅ | Filterable project timeline |
-| Upcoming and overdue deadlines | ✅ | Dashboard Upcoming and Reminders (per project) |
+| Upcoming and overdue deadlines | ✅ | Dashboard Upcoming and Reminders, per project and (A–E) per deliverable |
 
 ## Phase 2 — Clients, quotations, invoices
 
 | Item | Status | Evidence / notes |
 |---|---|---|
-| Create and edit client profiles | 🟡 | Editable on the client page, but **new clients can only be created inside a new project** |
+| Create and edit client profiles | ✅ (A–E) | "Add client" on the Clients page (plan limits and duplicate check in the database); "New project for …" from the client page |
 | Client contact details | ✅ | Email, phone, company, billing address, GSTIN, private notes |
 | Client project history | ✅ | |
 | Quotations and invoices by client | ✅ | |
@@ -81,7 +81,7 @@ Audited 1 November 2026 against the live app (scopeflow.in) and the codebase. Ev
 | Monthly revenue dashboard, expenses, profit, received, outstanding | ✅ | |
 | Active and completed projects | ✅ | |
 | Average project value | ✅ | |
-| Revenue trends and charts | 🟡 | 12-month chart; **axis labels too small on phones** |
+| Revenue trends and charts | ✅ (A–E) | 12-month chart; on phones the last 6 months at a readable size, with all 12 in the table |
 | Client performance insights | ✅ | Top clients |
 | Project performance insights | 🟡 | Progress only; **no per-project profit** (expenses are already linked to projects) |
 | Date filters | 🟡 | Month and currency; **no quarter, financial year (Apr–Mar) or custom range** |
@@ -102,7 +102,7 @@ Audited 1 November 2026 against the live app (scopeflow.in) and the codebase. Ev
 
 | Item | Status | Evidence / notes |
 |---|---|---|
-| Fully responsive mobile | 🟡 | No sideways scrolling on any main screen, but see the mobile issues below |
+| Fully responsive mobile | ✅ (A–E) | Bottom tab bar, jump links on the project page, and no main screen wider than the phone (the check now also catches the page widening itself) |
 | Authentication and account recovery | ✅ | Email + password, reset by email (Brevo) |
 | Google sign-in | ⛔ | Built; **waiting for your Google Client ID** |
 | Database-level ownership and access controls | ✅ | RLS on all 24 tables, read-only to the app, writes only through checked functions; 5 public functions |
@@ -112,36 +112,42 @@ Audited 1 November 2026 against the live app (scopeflow.in) and the codebase. Ev
 | Automated tests / regression testing | ✅ | Every release re-runs all checks before deploying |
 | No duplicate or inconsistent records | ✅ | Unique constraints, idempotency, race-tested |
 | Database migrations tested | ✅ | Each re-runs safely and rolls back twice |
-| Backup and rollback plan verified | 🟡 | Rollback is tested. **Backups are manual only**: Supabase Free has no downloadable automatic backups |
+| Backup and rollback plan verified | ⛔ (A–E) | Weekly encrypted backup with a restore check on every run (docs/BACKUPS.md). **Waiting for you to add the `BACKUP_PASSPHRASE` secret** |
 | Invite-only beta access verified | — | **Open by your decision (1 Nov)**. Invite-only mode still works and is tested |
-| Privacy policy and terms reviewed | 🟡 | Terms are current. **The privacy policy doesn't yet mention invoice details (addresses, GSTIN), expenses or follow-ups** |
+| Privacy policy and terms reviewed | ✅ (A–E) | The privacy policy now covers business and client billing details, logged requests, invoices, payments, expenses, follow-ups and the encrypted backups |
 | Production deployment readiness | ✅ | Live, with smoke tests on every release |
 
 ## Bugs and risks
 
-1. 🐞 **Dashboard "Upcoming" shows a part-paid payment's full amount**, not the balance. Small fix.
-2. ⚠️ **No automatic database backups** on the free tier. This is the biggest risk now that real invoices and payments are stored.
-3. ⚠️ **The privacy policy is behind the features** (invoice billing details, expenses, follow-ups).
-4. ⚠️ **Scope-creep gap:** you can't log out-of-scope requests that arrive outside ScopeFlow (WhatsApp, calls), so they escape the revision count.
-5. ℹ️ **Your email appears on invoices** sent to clients (normal for invoices; can be removed).
-6. ℹ️ **Supabase Free:** 5 GB/month data transfer. Fine for now; check Usage weekly.
+Items marked "fixed" are fixed in batches A–E (not live yet).
+
+1. ✅ Fixed: **Dashboard "Upcoming" showed a part-paid payment's full amount.** It now shows the balance.
+2. ⛔ **No automatic database backups:** the weekly encrypted backup is built and tested, but it needs your `BACKUP_PASSPHRASE` secret.
+3. ✅ Fixed: **The privacy policy was behind the features.**
+4. ✅ Fixed: **Scope-creep gap.** Requests that arrive on WhatsApp, a call or email can now be logged.
+5. ✅ Fixed (found during A–E): **The dashboard was wider than a phone screen** when a project title was long. Phones quietly zoomed out, so the old check missed it; the check is stricter now.
+6. ℹ️ **Your email appears on invoices** sent to clients. This is normal for invoices and can be removed.
+7. ℹ️ **Supabase Free:** 5 GB/month data transfer. Fine for now; check Usage weekly.
+8. ℹ️ **The repository is public**, so backup files are downloadable by signed-in GitHub users. They're encrypted (AES-256-GCM) and the logs show no data. Making the repository private also works, within GitHub's free private-repo minutes.
 
 ## Mobile UX issues
 
-1. **Dashboard totals are cut off** with more than one currency ("₹313.00 · $…").
-2. **Analytics chart labels are unreadably small** on a phone.
-3. **Project page is very long on a phone.** Payments, the client link and the timeline sit far below the scope; jump links are needed.
-4. **Main sections (Clients, Invoices, Analytics) hide behind the ⋯ menu** on phones; a bottom tab bar would help.
+All four are fixed in A–E (not live yet):
+
+1. Dashboard totals: one line per currency.
+2. Analytics chart: readable on a phone.
+3. Long project page: sticky jump links (Scope · Requests · Payments · Timeline).
+4. Main sections behind the ⋯ menu: bottom tab bar (Home, Clients, Invoices, Analytics, Settings).
 
 ## Recommended order (S = hours, M = about a day, L = several days)
 
 | Batch | What | Size | Needs approval? |
 |---|---|---|---|
-| A | Fix: Upcoming balance bug; dashboard currency totals; phone-readable chart; privacy policy update | S | No |
-| B | **Core:** log a client request received outside ScopeFlow (WhatsApp/call/email), counted against revision limits with a "how it arrived" note; standalone "Add client" | M | No |
-| C | **Core:** deliverable due dates (form, progress, reminders, client page) | M | Database change |
-| D | Phone navigation: bottom tab bar and jump links on the project page | M | No |
-| E | Automatic encrypted weekly backups through GitHub Actions (free) | M | **Yes**: needs a database connection secret, added by you |
+| A ✅ | Fix: Upcoming balance bug; dashboard currency totals; phone-readable chart; privacy policy update | S | No |
+| B ✅ | **Core:** log a client request received outside ScopeFlow (WhatsApp/call/email), counted against revision limits with a "how it arrived" note; standalone "Add client" | M | No |
+| C ✅ | **Core:** deliverable due dates (form, progress, reminders, client page) | M | Database change |
+| D ✅ | Phone navigation: bottom tab bar and jump links on the project page | M | No |
+| E ✅ | Automatic encrypted weekly backups through GitHub Actions (free) | M | **Yes**: needs the `BACKUP_PASSPHRASE` secret, added by you (uses the existing Supabase token) |
 | F | Quotes: "valid until", quantity × unit price lines, save your own templates | M | Database change |
 | G | Analytics: per-project profit; quarter / financial-year / custom date filters; one notification centre | M | No |
 | H | One-tap PDF download for quote, invoice and record (free library) | M | No |

@@ -35,8 +35,8 @@ describe("itemised project form", () => {
     expect(p.budget_cents).toBe(3483360);
     expect([p.discount_bps, p.tax_bps, p.tax_label]).toEqual([1000, 1800, "GST"]);
     expect(p.deliverables).toEqual([
-      { title: "Logo", description: "", revisions_included: 2, pricing_type: "fixed", amount_cents: 2500000 },
-      { title: "Social", description: "", revisions_included: 1, pricing_type: "hourly", hours: "6.50", rate_cents: 120000 },
+      { title: "Logo", description: "", revisions_included: 2, pricing_type: "fixed", amount_cents: 2500000, due_date: null },
+      { title: "Social", description: "", revisions_included: 1, pricing_type: "hourly", hours: "6.50", rate_cents: 120000, due_date: null },
     ]);
   });
   it("doesn't need a budget when itemised, but needs every price", () => {

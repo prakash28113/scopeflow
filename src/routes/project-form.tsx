@@ -22,10 +22,11 @@ export type FormDeliverable = {
   amount: string;
   hours: string;
   rate: string;
+  dueDate?: string;
 };
 export type FormValues = Omit<Values, "deliverables"> & { deliverables: FormDeliverable[] };
 
-export const emptyDeliverable = (revisions: number | string): FormDeliverable => ({ title: "", description: "", revisions, priceType: "fixed", amount: "", hours: "", rate: "" });
+export const emptyDeliverable = (revisions: number | string): FormDeliverable => ({ title: "", description: "", revisions, priceType: "fixed", amount: "", hours: "", rate: "", dueDate: "" });
 const emptyMilestone = () => ({ title: "", amount: "", dueDate: "" });
 
 export function ProjectForm({ projectId, initial, showTemplates = false }: { projectId: string | null; initial: FormValues; showTemplates?: boolean }) {
@@ -195,18 +196,23 @@ export function ProjectForm({ projectId, initial, showTemplates = false }: { pro
                   </div>
                 ) : null}
               </div>
-              <Field label="Revisions included" htmlFor={`d-rev-${i}`} error={fe[`deliverables.${i}.revisions`]}>
-                <Input
-                  id={`d-rev-${i}`}
-                  type="number"
-                  inputMode="numeric"
-                  min={0}
-                  max={50}
-                  value={d.revisions}
-                  onChange={(e) => setDeliverable(i, "revisions", e.target.value)}
-                  className="num"
-                />
-              </Field>
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-1">
+                <Field label="Revisions included" htmlFor={`d-rev-${i}`} error={fe[`deliverables.${i}.revisions`]}>
+                  <Input
+                    id={`d-rev-${i}`}
+                    type="number"
+                    inputMode="numeric"
+                    min={0}
+                    max={50}
+                    value={d.revisions}
+                    onChange={(e) => setDeliverable(i, "revisions", e.target.value)}
+                    className="num"
+                  />
+                </Field>
+                <Field label="Due (optional)" htmlFor={`d-due-${i}`} error={fe[`deliverables.${i}.dueDate`]}>
+                  <Input id={`d-due-${i}`} type="date" value={d.dueDate ?? ""} onChange={(e) => setDeliverable(i, "dueDate", e.target.value)} />
+                </Field>
+              </div>
               <div className="sm:pt-[26px]">
                 <Button
                   type="button"

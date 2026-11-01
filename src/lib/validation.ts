@@ -88,6 +88,7 @@ export const projectFormSchema = z
           amount: z.string().trim().default(""),
           hours: z.string().trim().default(""),
           rate: z.string().trim().default(""),
+          dueDate: optionalDate.optional().default(""),
         }),
       )
       .min(1, "Add at least one deliverable")
@@ -180,6 +181,7 @@ export function toProjectPayload(f: ProjectForm) {
       title: d.title,
       description: d.description,
       revisions_included: d.revisions,
+      due_date: d.dueDate || null,
       ...(f.itemised
         ? d.priceType === "hourly"
           ? { pricing_type: "hourly", hours: (parseHours(d.hours)! / 100).toFixed(2), rate_cents: parseAmount(d.rate, f.currency) }

@@ -24,6 +24,7 @@ function unwrap<T>(res: { data: T | null; error: unknown }): T {
 export type DashboardProject = Project & {
   clients: { name: string; company: string | null };
   milestones: { id: string; title: string; amount_cents: number; status: string; due_date: string | null; paid_cents?: number }[];
+  deliverables?: { id: string; title: string; due_date: string | null; progress?: string }[];
 };
 
 export function useDashboard() {
@@ -31,7 +32,7 @@ export function useDashboard() {
     queryKey: ["dashboard"],
     queryFn: async () => {
       const [projects, changeOrders, revisions, activity, snapshots, invoices, links, followUps] = await Promise.all([
-        supabase.from("projects").select("*, clients(name, company), milestones(id, title, amount_cents, status, due_date, paid_cents)").order("updated_at", { ascending: false }),
+        supabase.from("projects").select("*, clients(name, company), milestones(id, title, amount_cents, status, due_date, paid_cents), deliverables(id, title, due_date, progress)").order("updated_at", { ascending: false }),
         supabase
           .from("change_orders")
           .select("id, number, title, amount_cents, created_at, project_id, projects(title, currency)")

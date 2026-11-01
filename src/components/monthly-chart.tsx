@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { formatMoney, minorDigits } from "@/lib/money";
 import { monthLabel, niceScale, type MonthRow } from "@/lib/analytics";
 
@@ -10,17 +10,34 @@ import { monthLabel, niceScale, type MonthRow } from "@/lib/analytics";
  */
 const RECEIVED = "#005dd4";
 const EXPENSES = "#eb6834";
-const W = 720;
-const H = 240;
-const PAD = { top: 12, right: 8, bottom: 28, left: 56 };
+const WIDE = { W: 720, H: 240, left: 56 };
+/** Phones: fewer months in a narrower drawing, so labels render at a readable size. */
+const NARROW = { W: 360, H: 220, left: 48 };
+const NARROW_BELOW_PX = 520;
+const NARROW_MONTHS = 6;
 
 function compact(minor: number, currency: string) {
   const major = minor / 10 ** minorDigits(currency);
   return new Intl.NumberFormat(currency === "INR" ? "en-IN" : "en", { style: "currency", currency, notation: "compact", maximumFractionDigits: 1 }).format(major);
 }
 
-export function MonthlyChart({ rows, currency, selected, onSelect }: { rows: MonthRow[]; currency: string; selected: string; onSelect: (m: string) => void }) {
+export function MonthlyChart({ rows: allRows, currency, selected, onSelect }: { rows: MonthRow[]; currency: string; selected: string; onSelect: (m: string) => void }) {
   const [hover, setHover] = useState<string | null>(null);
+  const box = useRef<HTMLDivElement>(null);
+  const [narrow, setNarrow] = useState(false);
+  useEffect(() => {
+    const el = box.current;
+    if (!el) return;
+    const measure = () => setNarrow(el.getBoundingClientRect().width < NARROW_BELOW_PX);
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+  const size = narrow ? NARROW : WIDE;
+  const { W, H } = size;
+  const PAD = { top: 12, right: 8, bottom: 28, left: size.left };
+  const rows = narrow ? allRows.slice(-NARROW_MONTHS) : allRows;
   const scale = niceScale(Math.max(...rows.map((r) => Math.max(r.received, r.expenses)), 0));
   const plotW = W - PAD.left - PAD.right;
   const plotH = H - PAD.top - PAD.bottom;
@@ -38,7 +55,7 @@ export function MonthlyChart({ rows, currency, selected, onSelect }: { rows: Mon
   const fmt = (n: number) => formatMoney(n, currency);
 
   return (
-    <div>
+    <div ref={box} data-testid="monthly-chart" data-months={rows.length}>
       <div className="mb-3 flex flex-wrap items-center gap-4 text-[12px] text-ink-2" aria-hidden>
         <span className="inline-flex items-center gap-1.5">
           <span className="size-2.5 rounded-sm" style={{ background: RECEIVED }} /> Received
@@ -48,7 +65,7 @@ export function MonthlyChart({ rows, currency, selected, onSelect }: { rows: Mon
         </span>
       </div>
       <div className="relative">
-        <svg viewBox={`0 0 ${W} ${H}`} className="block h-auto w-full" role="img" aria-label={`Money received and expenses per month in ${currency}, last ${rows.length} months. Values are in the table below.`}>
+        <svg viewBox={`0 0 ${W} ${H}`} className="block h-auto w-full" role="img" aria-label={`Money received and expenses per month in ${currency}, last ${rows.length} months. Values for all 12 months are in the table below.`}>
           {scale.ticks.map((t) => (
             <g key={t}>
               <line x1={PAD.left} x2={W - PAD.right} y1={y(t)} y2={y(t)} stroke="#e6e6e1" strokeWidth={1} />
@@ -124,7 +141,7 @@ export function MonthlyChart({ rows, currency, selected, onSelect }: { rows: Mon
               </tr>
             </thead>
             <tbody>
-              {[...rows].reverse().map((r) => (
+              {[...allRows].reverse().map((r) => (
                 <tr key={r.month} className="border-t border-line">
                   <td className="py-1">{monthLabel(r.month, "long")}</td>
                   <td className="py-1 text-right">{fmt(r.received)}</td>

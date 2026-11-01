@@ -47,6 +47,7 @@ export type Deliverable = {
   revisions_included: number;
   progress?: import("./progress").Progress;
   progress_updated_at?: string | null;
+  due_date?: string | null;
   pricing_type?: PricingType | null;
   hours?: string | number | null;
   rate_cents?: number | null;
@@ -92,6 +93,8 @@ export type ScopeData = {
     hours?: string | number | null;
     rate_cents?: number | null;
     amount_cents?: number | null;
+    /** Added in 20261110000000; older snapshots don't have it. */
+    due_date?: string | null;
   }[];
   milestones: { title: string; amount_cents: number; due_date: string | null }[];
 };
@@ -124,6 +127,8 @@ export type RevisionRequest = {
   requested_by: string;
   in_scope: boolean;
   revision_number: number | null;
+  source?: string;
+  received_on?: string | null;
   status: "open" | "resolved" | "converted";
   resolution_note: string | null;
   created_at: string;
@@ -202,6 +207,7 @@ export type PortalView = {
     revisions_extra?: number;
     progress?: import("./progress").Progress;
     progress_updated_at?: string | null;
+    due_date?: string | null;
   }[];
   revision_requests: {
     id: string;
@@ -213,6 +219,8 @@ export type PortalView = {
     status: "open" | "resolved" | "converted";
     resolution_note: string | null;
     created_at: string;
+    source?: string;
+    received_on?: string | null;
   }[];
   change_orders: {
     id: string;

@@ -23,8 +23,10 @@ import { AgreementTerms, RevisionMeter } from "@/components/agreement";
 import { QuoteTable, pricingFrom } from "@/components/quote";
 import { useToast } from "@/components/toast";
 import { CreateInvoice } from "@/components/create-invoice";
+import { localToday } from "@/lib/upcoming";
 import { RecordPayment } from "@/components/record-payment";
 import { AddFollowUp } from "@/components/reminders";
+import { LogRequest, sourceLabel } from "@/components/log-request";
 import { methodLabel } from "@/lib/payments";
 import { PROGRESS, progressSummary, type Progress } from "@/lib/progress";
 import { useProfile } from "@/lib/auth";
@@ -141,10 +143,20 @@ export default function ProjectPage() {
 
       <NextStep p={p} latest={latest} decision={latestDecision} revisions={revisions} changeOrders={changeOrders} />
 
-      <div className="grid gap-6 lg:grid-cols-[1fr_360px]">
+      <JumpLinks
+        links={[
+          { href: "#scope", label: "Scope" },
+          ...(approved ? [{ href: "#requests", label: "Requests" }] : []),
+          { href: "#payments", label: "Payments" },
+          { href: "#history", label: "Timeline" },
+        ]}
+      />
+
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_360px]">
         <div className="min-w-0 space-y-6">
           {/* -------------------------------------------- scope */}
           <Card>
+            <div id="scope" className="scroll-mt-24" />
             <CardHeader
               title="Scope"
               description={
@@ -175,6 +187,7 @@ export default function ProjectPage() {
                       <div className="min-w-0">
                         <p className="text-sm font-medium">{d.title}</p>
                         {d.description ? <p className="mt-0.5 whitespace-pre-line text-[13px] text-muted">{d.description}</p> : null}
+                        {d.due_date ? <DeliverableDue due={currentDueDate(d.due_date, p.extra_days)!} delivered={d.progress === "delivered"} extended={p.extra_days > 0} /> : null}
                       </div>
                       <p className="num shrink-0 text-[13px] text-ink-2">
                         {approved ? null : pluralize(d.revisions_included, "revision")}
@@ -212,10 +225,20 @@ export default function ProjectPage() {
           {/* -------------------------------------------- requests */}
           {approved ? (
             <Card>
-              <div id="requests" className="scroll-mt-20" />
-              <CardHeader title="Revision & change requests" description="Each request is checked against the approved scope when the client submits it." />
+              <div id="requests" className="scroll-mt-24" />
+              <CardHeader title="Revision & change requests" description="Each request is checked against the approved scope, whether the client used their link or you logged it." />
+              {p.status === "active" ? (
+                <div className="border-b border-line px-5 py-3">
+                  <LogRequest
+                    projectId={pid}
+                    deliverables={p.deliverables.map((d) => ({ id: d.id, title: d.title }))}
+                    minDate={p.approved_at ? p.approved_at.slice(0, 10) : ""}
+                    onDone={(msg) => act(() => Promise.resolve({ data: null, error: null }), msg)}
+                  />
+                </div>
+              ) : null}
               {revisions.length === 0 ? (
-                <EmptyState title="No requests yet" body="Your client can request revisions or new work from their project link." />
+                <EmptyState title="No requests yet" body="Your client can request revisions or new work from their project link, or you can log what they asked on WhatsApp, a call or email." />
               ) : (
                 <ul className="divide-y divide-line">
                   {revisions.map((r) => {
@@ -238,7 +261,8 @@ export default function ProjectPage() {
                         </div>
                         <p className="mt-1.5 whitespace-pre-line break-words text-[13px] text-ink-2">{r.description}</p>
                         <p className="mt-1 text-[12px] text-muted">
-                          {r.requested_by} · {formatDateTime(r.created_at)}
+                          {r.requested_by} · {sourceLabel(r.source) ? `via ${sourceLabel(r.source)}${r.received_on ? ` on ${formatDate(r.received_on)}` : ""} · logged ` : ""}
+                          {formatDateTime(r.created_at)}
                         </p>
                         {r.resolution_note ? <p className="mt-1 text-[12px] text-muted">Note: {r.resolution_note}</p> : null}
                         {r.status === "open" && p.status === "active" ? (
@@ -397,6 +421,7 @@ export default function ProjectPage() {
           />
 
           <Card>
+            <div id="payments" className="scroll-mt-24" />
             <CardHeader title="Payments" description="Tracking only — record payments you've received." />
             <dl className="num grid grid-cols-2 gap-x-4 gap-y-3 border-b border-line px-5 py-4 text-[13px]" data-testid="payment-totals">
               <dt className="text-muted">Original budget</dt>
@@ -851,6 +876,7 @@ function ProjectTimeline({ activity }: { activity: { id: string; event: string; 
   }
   return (
     <Card>
+      <div id="history" className="scroll-mt-24" />
       <CardHeader title="Project timeline" description="Approvals, requests, changes, progress and payments: everything, with dates." />
       <div className="flex flex-wrap gap-1 border-b border-line px-4 py-2" role="tablist" aria-label="Filter timeline">
         {TIMELINE_FILTERS.map((f) => (
@@ -893,5 +919,38 @@ function ProjectTimeline({ activity }: { activity: { id: string; event: string; 
         </div>
       )}
     </Card>
+  );
+}
+
+/** "Due Nov 20" for a deliverable, flagged when it's close or late and not yet delivered. */
+function DeliverableDue({ due, delivered, extended }: { due: string; delivered: boolean; extended: boolean }) {
+  const today = localToday();
+  const left = Math.round((Date.parse(`${due}T00:00:00Z`) - Date.parse(`${today}T00:00:00Z`)) / 86_400_000);
+  return (
+    <p className="mt-1 flex flex-wrap items-center gap-2 text-[12px] text-muted" data-testid="deliverable-due">
+      <span>
+        Due {formatDate(due)}
+        {extended ? " (incl. change-order extensions)" : ""}
+      </span>
+      {!delivered && left < 0 ? <Tag tone="danger">{-left === 1 ? "1 day late" : `${-left} days late`}</Tag> : null}
+      {!delivered && left >= 0 && left <= 3 ? <Tag tone="warning">{left === 0 ? "Due today" : left === 1 ? "Due tomorrow" : `Due in ${left} days`}</Tag> : null}
+    </p>
+  );
+}
+
+/** Phones: the project page is long, so a sticky row of links jumps to each part. */
+function JumpLinks({ links }: { links: { href: string; label: string }[] }) {
+  return (
+    <nav aria-label="On this page" className="sticky top-14 z-20 -mx-4 mb-4 border-b border-line bg-canvas/95 px-4 py-2 backdrop-blur lg:hidden print:hidden" data-testid="jump-links">
+      <ul className="flex gap-2 overflow-x-auto">
+        {links.map((l) => (
+          <li key={l.href}>
+            <a href={l.href} className="inline-block whitespace-nowrap rounded-full border border-line bg-surface px-3 py-1 text-[12px] font-medium text-ink-2 hover:text-ink">
+              {l.label}
+            </a>
+          </li>
+        ))}
+      </ul>
+    </nav>
   );
 }

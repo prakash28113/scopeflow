@@ -1,4 +1,6 @@
 import { useSearchParams } from "react-router";
+import { useQuery } from "@tanstack/react-query";
+import { supabase } from "@/lib/supabase";
 import { Alert, PageHeader } from "@/components/ui";
 import { PageSpinner } from "@/components/app-shell";
 import { useProfile } from "@/lib/auth";
@@ -11,7 +13,16 @@ export default function NewProject() {
   const plan = useMyPlan();
   const [params] = useSearchParams();
   const welcome = params.get("welcome");
-  if (!profile.data || plan.isLoading) return <PageSpinner />;
+  const clientId = params.get("client");
+  const client = useQuery({
+    queryKey: ["client-prefill", clientId],
+    enabled: Boolean(clientId),
+    queryFn: async () => {
+      const { data } = await supabase.from("clients").select("name, email, company").eq("id", clientId!).maybeSingle();
+      return data as { name: string; email: string; company: string | null } | null;
+    },
+  });
+  if (!profile.data || plan.isLoading || (clientId && client.isLoading)) return <PageSpinner />;
   const m = plan.data;
   // Explain the limit before any typing; the database enforces it either way.
   const atLimit = m && m.limits.active_projects !== null && m.usage.active_projects >= m.limits.active_projects;
@@ -22,7 +33,7 @@ export default function NewProject() {
     budget: "",
     startDate: "",
     dueDate: "",
-    client: { name: "", email: "", company: "" },
+    client: client.data ? { name: client.data.name, email: client.data.email, company: client.data.company ?? "" } : { name: "", email: "", company: "" },
     deliverables: [emptyDeliverable(2)],
     milestones: [],
     exclusions: "",

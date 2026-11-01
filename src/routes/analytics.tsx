@@ -162,7 +162,7 @@ export default function AnalyticsPage() {
         </Card>
       ) : (
         <Card className="mb-6">
-          <CardHeader title="Last 12 months" description={`In ${currency}. Tap a month to see its details.`} />
+          <CardHeader title="Monthly trend" description={`In ${currency}. Last 12 months (6 on a phone; the table has all 12). Tap a month to see its details.`} />
           <div className="px-4 py-4 sm:px-5">
             <MonthlyChart rows={rows} currency={currency} selected={month} onSelect={setMonth} />
           </div>

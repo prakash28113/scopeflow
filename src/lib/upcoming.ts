@@ -9,7 +9,7 @@ export type UpcomingProject = {
   status: ProjectStatus;
   due_date: string | null;
   extra_days: number;
-  milestones: { id?: string; title?: string; amount_cents: number; status: string; due_date?: string | null }[];
+  milestones: { id?: string; title?: string; amount_cents: number; status: string; due_date?: string | null; paid_cents?: number | null }[];
 };
 
 export type UpcomingItem = {
@@ -46,7 +46,8 @@ export function upcomingItems(projects: UpcomingProject[], today: string, horizo
             projectTitle: p.title,
             date: m.due_date,
             daysAway: daysBetween(today, m.due_date),
-            amountCents: Number(m.amount_cents),
+            // What is still due: part payments reduce it.
+            amountCents: Number(m.amount_cents) - Number(m.paid_cents ?? 0),
             currency: p.currency,
           });
         }

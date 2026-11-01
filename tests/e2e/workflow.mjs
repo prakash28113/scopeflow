@@ -94,6 +94,7 @@ try {
   await f.getByLabel("Summary").fill("A complete visual identity for the new roastery: primary logo, colour palette and a compact brand guide.");
   await f.getByLabel("Deliverable 1", { exact: true }).fill("Primary logo");
   await f.locator("#d-rev-0").fill("2");
+  await f.locator("#d-due-0").fill("2026-11-20");
   await f.getByRole("button", { name: "Add deliverable" }).click();
   await f.getByLabel("Deliverable 2", { exact: true }).fill("Brand guidelines (12 pages)");
   await f.locator("#d-rev-1").fill("1");
@@ -143,6 +144,7 @@ try {
   await c.getByText("Please review the scope below").waitFor();
   await c.getByRole("heading", { name: "Not included" }).waitFor();
   await c.getByText("Stock photo licences").waitFor();
+  await c.getByText(/Due Nov 20, 2026/).first().waitFor(); // deliverable due date, part of what the client approves
   await c.getByText("Each extra revision round").waitFor();
   await c.getByText("$150.00").first().waitFor();
   await c.getByText("50% deposit before work starts. Final files after full payment.").waitFor();
@@ -590,6 +592,39 @@ try {
   await f.getByRole("button", { name: "Print or save as PDF" }).waitFor();
   await shot(f, "35-approval-record");
 
+  step("outside requests, due dates, adding clients: log a WhatsApp request, the client sees it; add a client and start a project for them");
+  await f.goto(projectUrl);
+  await f.getByTestId("deliverable-due").first().getByText("Due Nov 23, 2026 (incl. change-order extensions)").waitFor();
+  await f.goto(menuUrl);
+  await f.getByRole("button", { name: "Log a request from WhatsApp, call or email" }).click();
+  const lr = f.getByTestId("log-request");
+  await lr.getByLabel("What did they ask for?").selectOption("new_work");
+  await lr.getByLabel("Their request").fill("Could you also design a takeaway cup sleeve?");
+  await lr.getByLabel("How it arrived").selectOption("whatsapp");
+  await lr.getByRole("button", { name: "Log request" }).click();
+  await f.getByText(/outside the agreed scope, so propose a change order/).waitFor();
+  await f.getByText(/via WhatsApp on [^·]+· logged/).waitFor();
+  await shot(f, "43-logged-request", false);
+  await c.goto("about:blank");
+  await c.goto(menuPortal);
+  await c.getByText("Could you also design a takeaway cup sleeve?").waitFor();
+  await c.getByText(/You asked by WhatsApp on [^·]+· recorded by/).waitFor();
+  await f.goto(`${BASE}/clients`);
+  await f.getByRole("button", { name: "Add client" }).click();
+  const nc = f.getByTestId("add-client");
+  await nc.getByRole("button", { name: "Add client" }).click();
+  await nc.getByText(/name is required|Enter the client's name/i).first().waitFor();
+  await nc.getByLabel("Name").fill("Arjun Rao");
+  await nc.getByLabel("Email").fill("arjun@rao.test");
+  await nc.getByLabel("Company (optional)").fill("Rao Bakers");
+  await nc.getByRole("button", { name: "Add client" }).click();
+  await f.getByText("Client added.").waitFor();
+  await f.getByRole("heading", { name: /Arjun Rao/ }).waitFor();
+  await f.getByRole("link", { name: "New project for Arjun" }).click();
+  await f.waitForURL(/\/projects\/new\?client=/);
+  // This account is at the Free plan's 2 active projects, so the form explains the limit instead.
+  await f.getByText("You've reached the Free plan's active projects").waitFor();
+
   step("password reset by email: request, open the link, choose a new password, sign in with it");
   const resetCtx = await newCtx();
   const a = await resetCtx.newPage();
@@ -726,6 +761,16 @@ try {
   await fm.goto(projectUrl);
   await fm.getByText("Contract total").waitFor();
   await shot(fm, "15-project-mobile");
+  // Phones: jump links on the long project page, and the bottom tab bar.
+  const jump = fm.getByTestId("jump-links");
+  await jump.getByRole("link", { name: "Payments" }).click();
+  await fm.waitForFunction(() => location.hash === "#payments");
+  assert.ok(await fm.evaluate(() => Math.abs(document.getElementById("payments").getBoundingClientRect().top) < 200), "jump link scrolls to Payments");
+  assert.ok(await jump.isVisible(), "jump links stay on screen while scrolling");
+  const tabs = fm.getByTestId("mobile-tabs");
+  await tabs.getByRole("link", { name: "Invoices" }).click();
+  await fm.waitForURL("**/invoices");
+  assert.equal(await tabs.getByRole("link", { name: "Invoices" }).getAttribute("aria-current"), "page");
   const overflow = await fm.evaluate(() => document.documentElement.scrollWidth > window.innerWidth);
   assert.equal(overflow, false, "mobile project page must not scroll horizontally");
   // Every main screen on a phone: no sideways scrolling.
@@ -741,8 +786,9 @@ try {
     await fm.goto(`${BASE}${path}`);
     await fm.getByRole("heading", { name: ready }).first().waitFor();
     await shot(fm, name);
-    const wide = await fm.evaluate(() => [...document.querySelectorAll("body *")].filter((el) => el.getBoundingClientRect().right > window.innerWidth + 1 && getComputedStyle(el).position !== "fixed").map((el) => `${el.tagName.toLowerCase()}.${String(el.className).slice(0, 60)}`).slice(0, 5));
-    const sideways = await fm.evaluate(() => document.documentElement.scrollWidth > window.innerWidth);
+    const wide = await fm.evaluate(() => [...document.querySelectorAll("body *")].filter((el) => el.getBoundingClientRect().right > 391 && getComputedStyle(el).position !== "fixed").map((el) => `${el.tagName.toLowerCase()}.${String(el.className).slice(0, 60)}`).slice(0, 5));
+    // On a phone, Chrome widens the page to fit content that's too wide, so also check the page stayed at the phone's width.
+    const sideways = await fm.evaluate(() => document.documentElement.scrollWidth > window.innerWidth || window.innerWidth > 390);
     assert.equal(sideways, false, `${path} scrolls sideways on a phone: ${wide.join(" | ")}`);
   }
 

@@ -80,3 +80,20 @@ describe("reminders", () => {
     ]);
   });
 });
+
+describe("deliverable deadlines", () => {
+  it("flags late and soon-due deliverables on active projects, counting extensions, ignoring delivered ones", () => {
+    const r = buildReminders({
+      ...base,
+      deliverables: [
+        { id: "d1", title: "Logo", due_date: "2026-11-07", progress: "in_progress", project_id: "b" },
+        { id: "d2", title: "Guide", due_date: "2026-11-07", progress: "delivered", project_id: "b" },
+        { id: "d3", title: "Menu PDF", due_date: "2026-11-09", progress: "not_started", project_id: "c" }, // +2 extension days → due Nov 11
+        { id: "d4", title: "Draft only", due_date: "2026-11-01", progress: "not_started", project_id: "a" }, // not active
+      ],
+    }).map((x) => x.title);
+    expect(r).toContain("“Logo” is 3 days late");
+    expect(r).toContain("“Menu PDF” is due tomorrow");
+    expect(r.some((t) => t.includes("Guide") || t.includes("Draft only"))).toBe(false);
+  });
+});

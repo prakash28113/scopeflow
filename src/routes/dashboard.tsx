@@ -39,6 +39,7 @@ export default function Dashboard() {
       .flatMap((p) => p.milestones.map((m) => ({ ...m, paid_cents: Number(m.paid_cents ?? 0), project_id: p.id, has_invoice: invoicedMilestones.has(m.id) }))),
     links,
     followUps,
+    deliverables: projects.flatMap((p) => (p.deliverables ?? []).map((d) => ({ ...d, project_id: p.id }))),
   });
 
   const open = projects.filter((p) => OPEN.includes(p.status));
@@ -74,13 +75,13 @@ export default function Dashboard() {
           <div className="mb-8 grid grid-cols-2 gap-px overflow-hidden rounded-[var(--radius-card)] border border-line bg-line lg:grid-cols-4">
             <Stat label="In progress" value={String(projects.filter((p) => p.status === "active").length)} />
             <Stat label="Waiting on clients" value={String(pendingCount)} />
-            <Stat label="Outstanding" value={outstanding.map(([c, v]) => formatMoney(v, c)).join(" · ") || "—"} />
-            <Stat label="Collected" value={collected.map(([c, v]) => formatMoney(v, c)).join(" · ") || "—"} />
+            <Stat label="Outstanding" value={outstanding.map(([c, v]) => formatMoney(v, c))} />
+            <Stat label="Collected" value={collected.map(([c, v]) => formatMoney(v, c))} />
           </div>
 
           <RemindersCard reminders={reminders} projects={projects.filter((p) => p.status !== "cancelled" && p.status !== "completed").map((p) => ({ id: p.id, title: p.title }))} />
 
-          <div className="grid gap-6 lg:grid-cols-[1fr_340px]">
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_340px]">
             <Card>
               <CardHeader title="Projects" />
               <ul className="divide-y divide-line">
@@ -217,13 +218,17 @@ export default function Dashboard() {
   );
 }
 
-function Stat({ label, value }: { label: string; value: string }) {
+function Stat({ label, value }: { label: string; value: string | string[] }) {
+  const lines = Array.isArray(value) ? (value.length ? value : ["—"]) : [value];
   return (
-    <div className="bg-surface px-5 py-4">
+    <div className="bg-surface px-4 py-4 sm:px-5">
       <p className="text-[12px] font-medium text-muted">{label}</p>
-      <p className="num mt-1 truncate text-xl font-semibold tracking-[-0.02em]" title={value}>
-        {value}
-      </p>
+      {/* One line per currency, so nothing is cut off on a phone. */}
+      {lines.map((l) => (
+        <p key={l} className={`num mt-1 break-words font-semibold tracking-[-0.02em] ${lines.length > 1 ? "text-base leading-snug" : "text-xl"}`}>
+          {l}
+        </p>
+      ))}
     </div>
   );
 }
