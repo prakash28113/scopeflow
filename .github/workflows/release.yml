@@ -4,7 +4,7 @@
 #   verify       unit + database tests, type check, secret scan, dependency audit,
 #                the unit suite again in three time zones, permission audit report
 #   concurrency  races real PostgreSQL connections against the portal functions
-#   e2e          the 22-step browser walkthrough on Cloudflare's runtime (workerd)
+#   e2e          the browser walkthrough on Cloudflare's runtime (workerd)
 #
 # Deploying is manual only: Actions → Release → Run workflow (the owner's explicit approval).
 #   action = release           apply pending database migrations, then publish the app
@@ -87,7 +87,7 @@ jobs:
         working-directory: tests/concurrency
 
   e2e:
-    name: Browser walkthrough (22 steps, Cloudflare runtime)
+    name: Browser walkthrough (Cloudflare runtime)
     runs-on: ubuntu-24.04
     timeout-minutes: 25
     steps:
