@@ -15,16 +15,23 @@
 
 **Fixes**
 - Removed two promises of emails the app doesn't send (client portal and project form).
+- Retried or double-tapped change requests are recorded once (request id + unique included revision numbers).
+- Payment and approval timestamps are shown in the viewer's time zone (were UTC, so off by a day near midnight in India).
 
-**Database** — `supabase/migrations/20261101000000_v1_1_agreement.sql` (additive; existing projects unaffected)
+**Release process** (production-readiness audit — [docs/release/v1.1/](docs/release/v1.1/README.md))
+- Every push runs: unit + database tests, the unit suite in three time zones, a permission audit, real-PostgreSQL concurrency checks and the 22-step browser walkthrough.
+- Deploy and rollback run only on a manual *Run workflow*; credentials only as least-privilege repository secrets (the chat hand-off was removed).
+
+**Database** — `supabase/migrations/20261101000000_v1_1_agreement.sql` (additive, re-runnable, backward compatible)
 - `projects.exclusions`, `projects.terms`, `projects.extra_revision_cents` (nullable, length/range checked; writable only through `save_project` while the scope is unlocked).
 - `portal_view` records the first open of a scope version awaiting a decision as an immutable `scope.viewed` activity event (unique per version) and reports `revisions_extra` per deliverable.
+- `revision_requests.client_request_id` and two unique indexes (retry-safe requests, unique included revision numbers); `portal_request_revision` gains an optional request id.
 - No new tables, no new public functions; Row Level Security unchanged.
-- Rollback: `supabase/rollback/20261101000000_v1_1_agreement_down.sql` (restores the v1.0 functions, drops the three columns and the index; deletes data entered in them). Tested.
+- Rollback: `supabase/rollback/20261101000000_v1_1_agreement_down.sql` (restores the v1.0 functions, drops the new columns and indexes; deletes data entered in them). Tested, including twice in a row.
 
 **Release order** — the database must be migrated before the app is published. The release refuses an app-only deploy while a migration is pending (`config/public-supabase.json` → `databaseVersion`), so v1.1 needs one run with both the Supabase and Cloudflare tokens.
 
-**Tests** — new database tests (agreement fields, fingerprint, locking, permissions, "viewed", extra rounds, rollback), unit tests (scope check, upcoming dates, labels, form conversion, release guard), and the end-to-end browser suite extended with v1.1 steps on Cloudflare's runtime (23 steps, no browser errors).
+**Tests** — new database tests (agreement fields, fingerprint, locking, permissions, "viewed", extra rounds, rollback), unit tests (scope check, upcoming dates, labels, form conversion, release guard), and the end-to-end browser suite extended with v1.1 steps on Cloudflare's runtime (22 steps, no browser errors).
 
 ## v1.0 — Private beta (live 1 Nov 2026)
 Scope, client approval links, locked scope versions, revision limits, change orders, manual payment milestones, in-app notifications, privacy/terms pages.

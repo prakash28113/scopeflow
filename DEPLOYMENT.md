@@ -9,50 +9,13 @@ Related: [README.md](README.md) · [ARCHITECTURE.md](ARCHITECTURE.md) · [FINAL_
 
 ## ⚡ Automatic deployment (recommended — works from a phone)
 
-The repository includes a GitHub Actions workflow (`.github/workflows/release.yml`) that does the whole
-deployment on GitHub's free servers. **You never paste SQL or run commands.** On every push to `main`
-(or when you tap *Run workflow*) it:
+GitHub Actions (`.github/workflows/release.yml`) runs every check on each push, and deploys **only when
+the owner taps *Run workflow*** (Actions → Release → action `release`). Credentials live only in
+repository secrets with least privilege — never in chat or in the repository. Rollback is the same
+button with action `rollback-app` or `rollback-database`.
 
-1. runs all tests, the secret scan and the dependency audit;
-2. finds the Supabase project **scopeflow-beta**, applies the database setup (each migration once, in a
-   single transaction, recorded in a private `scopeflow_admin` schema) and runs the security check;
-3. configures sign-in (email + password, no confirmation email, minimum 8 characters);
-4. syncs the invite list from `config/beta-allowlist.txt` (empty list = sign-ups closed);
-5. builds the app and deploys it to Cloudflare Workers Free (registering a free `workers.dev` address
-   if the account has none), then sets the Supabase Site URL;
-6. smoke-tests the live site: security headers, private client portal, database health, fake links
-   rejected, and no anonymous access to project data.
-
-The run's **Summary** page shows each result and the live link. If a secret is missing, the run stops
-cleanly and says which one.
-
-**Your one-time part (≈ 10 minutes, phone browser):**
-
-| | Where | What |
-|---|---|---|
-| 1 | supabase.com → your avatar → **Account preferences → Access Tokens** | **Generate new token**, name it `scopeflow-github`, copy it |
-| 2 | github.com/prakash28113/scopeflow → **Settings → Secrets and variables → Actions** | **New repository secret** → Name `SUPABASE_ACCESS_TOKEN` → paste → **Add secret** |
-| 3 | dash.cloudflare.com (sign up free, no card) → **My Profile → API Tokens** | **Create Token** → template **Edit Cloudflare Workers** → **Use template** → keep defaults → **Continue → Create Token** → copy |
-| 4 | Same GitHub page as step 2 | **New repository secret** → Name `CLOUDFLARE_API_TOKEN` → paste → **Add secret** |
-| 5 | github.com/prakash28113/scopeflow → **Actions → Release** | **Run workflow**, then open the run → **Summary** for the live link |
-
-**Invites:** edit `config/beta-allowlist.txt` (one email per line) — or ask Claude to — and the next run
-applies it.
-
-**About the tokens:**
-- GitHub stores secrets encrypted and hides them in logs.
-- The Supabase token is used only by the release job, and only to talk to the Supabase API. It is never given to the build or to Cloudflare; a test checks this.
-- It can manage your whole Supabase account, so keep it only in GitHub secrets. You can delete it in Supabase after the first successful run, and add it back when the database needs an update.
-- The Cloudflare token can only edit Workers.
-
-**Cost:**
-- GitHub Actions includes about 2,000 free minutes a month for private repositories, and a release takes about 5 minutes.
-- If the free minutes ever run out, GitHub blocks further runs rather than charging.
-- Everything else stays on the free plans below.
-
-The manual steps in §1–§8 below remain available as a fallback.
-
----
+Current release documents: **[docs/release/v1.1/](docs/release/v1.1/README.md)** — deployment plan
+(secrets, steps, checks), rollback plan, test report, migration diff and permission audit.
 
 ## 0. What you need (all free)
 
