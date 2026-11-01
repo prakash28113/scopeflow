@@ -1,37 +1,50 @@
-# Verify, set up the database, deploy and smoke-test ScopeFlow — all on free tiers.
+# ScopeFlow CI and release — free GitHub Actions minutes, free Supabase and Cloudflare tiers.
 #
-# Runs on every push to main, or manually (Actions → Release → Run workflow).
-# Needs two repository secrets (Settings → Secrets and variables → Actions):
-#   SUPABASE_ACCESS_TOKEN   Supabase → Account → Access Tokens
-#   CLOUDFLARE_API_TOKEN    Cloudflare → My Profile → API Tokens → "Edit Cloudflare Workers"
-# Until they exist, the release job stops cleanly and explains what's missing.
-# Owners who can't add secrets can instead run it with `handoff_issue` set: the
-# run then receives the credentials once, encrypted to a key only that run holds
-# (see scripts/ci/receive-credentials.sh). Nothing is stored afterwards.
+# On every push and pull request: all automated checks (no deploy, no production access).
+#   verify       unit + database tests, type check, secret scan, dependency audit,
+#                the unit suite again in three time zones, permission audit report
+#   concurrency  races real PostgreSQL connections against the portal functions
+#   e2e          the 23-step browser walkthrough on Cloudflare's runtime (workerd)
+#
+# Deploying is manual only: Actions → Release → Run workflow (the owner's explicit approval).
+#   action = release           apply pending database migrations, then publish the app
+#   action = rollback-app      put the previous app version back live (Cloudflare keeps versions)
+#   action = rollback-database undo the newest database migration (type ROLLBACK to confirm)
+#
+# Credentials live only in repository secrets (Settings → Secrets and variables → Actions),
+# least privilege — see docs/release/v1.1/DEPLOYMENT_PLAN.md:
+#   SUPABASE_ACCESS_TOKEN   scoped to this project: Database read/write (+ Auth config write)
+#   CLOUDFLARE_API_TOKEN    custom token: Account → Workers Scripts → Edit, this account only
+#   CLOUDFLARE_ACCOUNT_ID   the Cloudflare account id
 name: Release
 
 on:
   push:
     branches: [main]
+  pull_request:
   workflow_dispatch:
     inputs:
-      handoff_issue:
-        description: "Issue number for a one-time encrypted credential hand-off (leave empty to use repository secrets)"
+      action:
+        description: "What to do"
+        type: choice
+        options: [release, rollback-app, rollback-database]
+        default: release
+      confirm:
+        description: "For rollback-database only: type ROLLBACK"
         required: false
         default: ""
-        type: string
 
 permissions:
   contents: read
 
 concurrency:
-  group: release
+  group: release-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
   verify:
-    name: Verify (tests, secret scan, dependency audit)
-    runs-on: ubuntu-latest
+    name: Verify (tests, time zones, secret scan, dependency audit)
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -42,17 +55,41 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      - run: npm run verify
+      - name: Unit + database tests, type check, secret scan, dependency audit
+        run: npm run verify
+      - name: Unit tests in three time zones (UTC−10, UTC+14, India)
+        run: npm run test:tz
+      - name: Test report and permission audit
+        run: |
+          mkdir -p reports
+          npx vitest run --reporter=default --reporter=junit --outputFile.junit=reports/vitest-junit.xml
+          node scripts/audit/permission-report.mjs > reports/permission-audit.md
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: verify-reports
+          path: reports/
 
-  release:
-    name: Database, deploy and live checks
-    needs: verify
-    runs-on: ubuntu-latest
-    timeout-minutes: 40
-    environment: production
-    permissions:
-      contents: read
-      issues: write # only used by the optional one-time credential hand-off
+  concurrency:
+    name: Concurrency (real PostgreSQL)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+      - run: npm ci
+        working-directory: tests/concurrency
+      - run: npm test
+        working-directory: tests/concurrency
+
+  e2e:
+    name: Browser walkthrough (23 steps, Cloudflare runtime)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -62,22 +99,44 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      - name: Receive one-time credentials
-        if: ${{ inputs.handoff_issue != '' }}
-        run: bash scripts/ci/receive-credentials.sh
-        env:
-          GH_TOKEN: ${{ github.token }}
-          ISSUE: ${{ inputs.handoff_issue }}
-          REPO: ${{ github.repository }}
-          OWNER: ${{ github.repository_owner }}
-          RUN_ID: ${{ github.run_id }}
-      - name: Release
+      - run: npm ci
+        working-directory: tests/e2e
+      - name: Install Chromium for Playwright
+        working-directory: tests/e2e
+        run: npx playwright install --with-deps chromium
+      - name: Download PostgREST 12.2.12 (open source, local stand-in for Supabase's API)
         run: |
-          for name in SUPABASE_ACCESS_TOKEN CLOUDFLARE_API_TOKEN CLOUDFLARE_ACCOUNT_ID; do
-            file="$RUNNER_TEMP/handoff/$name"
-            if [ -z "${!name:-}" ] && [ -f "$file" ]; then export "$name=$(cat "$file")"; fi
-          done
-          node scripts/ci/release.mjs
+          curl -fsSL -o "$RUNNER_TEMP/postgrest.tar.xz" https://github.com/PostgREST/postgrest/releases/download/v12.2.12/postgrest-v12.2.12-linux-static-x64.tar.xz
+          tar -xJf "$RUNNER_TEMP/postgrest.tar.xz" -C "$RUNNER_TEMP"
+          "$RUNNER_TEMP/postgrest" --version
+      - name: Run the walkthrough
+        run: POSTGREST_BIN="$RUNNER_TEMP/postgrest" bash tests/e2e/run.sh
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: e2e-screenshots
+          path: |
+            tests/e2e/shots/
+            tests/e2e/.logs/
+
+  release:
+    name: Database, deploy and live checks
+    needs: [verify, concurrency, e2e]
+    if: github.event_name == 'workflow_dispatch' && inputs.action == 'release' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    environment: production
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Release
+        run: node scripts/ci/release.mjs
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -85,6 +144,27 @@ jobs:
           SUPABASE_PROJECT_NAME: ${{ vars.SUPABASE_PROJECT_NAME }}
           BETA_EMAILS: ${{ vars.BETA_EMAILS }}
           VITE_TURNSTILE_SITE_KEY: ${{ vars.VITE_TURNSTILE_SITE_KEY }}
-      - name: Remove hand-off files
-        if: always()
-        run: rm -rf "$RUNNER_TEMP/handoff"
+
+  rollback:
+    name: Rollback
+    if: github.event_name == 'workflow_dispatch' && startsWith(inputs.action, 'rollback-') && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    environment: production
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Rollback
+        run: node scripts/ci/rollback.mjs
+        env:
+          ROLLBACK_TARGET: ${{ inputs.action }}
+          ROLLBACK_CONFIRM: ${{ inputs.confirm }}
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}

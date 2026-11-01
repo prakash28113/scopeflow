@@ -118,7 +118,7 @@ describe("rollback", () => {
   it("removes v1.1 cleanly and the migration re-applies", async () => {
     const fresh = await createDb();
     const read = (p: string) => readFileSync(new URL(p, import.meta.url), "utf8");
-    await fresh.exec(read("../../supabase/rollback/20261101000000_v1_1_down.sql"));
+    await fresh.exec(read("../../supabase/rollback/20261101000000_v1_1_agreement_down.sql"));
     const cols = await fresh.query<Json>("select column_name from information_schema.columns where table_name = 'projects' and column_name in ('exclusions','terms','extra_revision_cents')");
     expect(cols.rows).toEqual([]);
     await fresh.exec(read("../../supabase/migrations/20261101000000_v1_1_agreement.sql"));

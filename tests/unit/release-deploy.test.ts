@@ -8,7 +8,7 @@ const APP = "https://scopeflow.prakash-studio.workers.dev";
 
 type Call = { method: string; url: string; body?: unknown; headers?: Record<string, string> };
 
-function world(opts: { subdomain?: string | null; leak?: boolean; badCsp?: boolean; status?: string[]; accounts?: number } = {}) {
+function world(opts: { subdomain?: string | null; leak?: boolean; badCsp?: boolean; status?: string[]; accounts?: number; authForbidden?: boolean } = {}) {
   const calls: Call[] = [];
   const statuses = [...(opts.status ?? ["ACTIVE_HEALTHY"])];
   const json = (status: number, data: unknown, headers: Record<string, string> = {}) =>
@@ -28,7 +28,7 @@ function world(opts: { subdomain?: string | null; leak?: boolean; badCsp?: boole
           return json(201, [{ tables: 14, without_rls: 0, public_functions: 5, signup_trigger: 1 }]);
         return json(201, []);
       }
-      if (u.pathname.endsWith("/config/auth")) return json(200, {});
+      if (u.pathname.endsWith("/config/auth")) return opts.authForbidden ? json(403, { message: "Missing required permission(s): auth_config_write" }) : json(200, {});
       if (u.pathname.endsWith("/api-keys")) return json(200, [{ type: "publishable", api_key: "sb_publishable_live123" }]);
     }
     // Cloudflare API
@@ -188,5 +188,16 @@ describe("release automation — deploy and live checks", () => {
     };
     expect(await run(deps)).toBe("waiting-supabase");
     expect(w.summary()).toMatch(/Database update pending/);
+  });
+
+  it("with public settings in config, a least-privilege token (database only) is enough", async () => {
+    const w = world({ authForbidden: true });
+    const env = { ...BOTH, SUPABASE_URL: SUPA, SUPABASE_PUBLISHABLE_KEY: "sb_publishable_live123" };
+    expect(await run(w.deps(env))).toBe("deployed");
+    const supabaseCalls = w.calls.filter((c) => c.url.includes("api.supabase.com")).map((c) => new URL(c.url).pathname);
+    expect(supabaseCalls.some((p) => p === "/v1/projects" || p.endsWith("/api-keys"))).toBe(false);
+    expect(supabaseCalls.filter((p) => p.endsWith("/database/query")).length).toBeGreaterThan(2);
+    expect(w.summary()).toMatch(/skipped \(token not scoped for Auth config/);
+    expect(w.summary()).toContain(`**Live:** ${APP}`);
   });
 });

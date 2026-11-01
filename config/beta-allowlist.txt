@@ -1,8 +1,9 @@
 # ScopeFlow — who may create an account.
 # One email per line. Lines starting with # are ignored.
 # The release automation copies this into the database whenever it runs with Supabase access:
-#   - a line containing only *  → sign-ups are OPEN to everyone (the allowlist is cleared);
+#   - a line containing only *  → sign-ups are OPEN to everyone (the public launch);
 #   - otherwise only the emails listed may sign up; removing an email removes the invite
 #     (existing accounts are not deleted);
 #   - if nothing is listed, sign-ups stay CLOSED.
-*
+# Kept invite-only until the owner approves the public launch.
+prakashmummidisetti@gmail.com

@@ -1,0 +1,13 @@
+{
+  "name": "scopeflow-concurrency-tests",
+  "private": true,
+  "type": "module",
+  "description": "Races real PostgreSQL connections against the portal functions. Not part of the app bundle.",
+  "scripts": {
+    "test": "node race.mjs"
+  },
+  "dependencies": {
+    "@embedded-postgres/linux-x64": "^17.5.0-beta.15",
+    "pg": "^8.16.3"
+  }
+}

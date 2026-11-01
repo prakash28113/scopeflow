@@ -144,25 +144,40 @@ export async function run(deps) {
     try { return text ? JSON.parse(text) : null; } catch { return text; }
   };
 
+  // Least privilege: with the public settings in config/public-supabase.json the token only
+  // needs Database access (+ Auth config to manage sign-in settings). Without them, it also
+  // needs Project read (to find the project) and API-keys read (to fetch the public key).
+  const configured = env.SUPABASE_URL ? publicSupabaseConfig(env) : null;
   const projectName = env.SUPABASE_PROJECT_NAME || "scopeflow-beta";
   let project;
-  for (let attempt = 0; ; attempt++) {
+  if (configured) project = { ref: new URL(configured.supabaseUrl).hostname.split(".")[0], status: "ACTIVE_HEALTHY", configured: true };
+  for (let attempt = 0; !project; attempt++) {
     const projects = await sb("/projects");
     const matches = projects.filter((p) => p.name === projectName);
     if (matches.length !== 1) {
       const names = projects.map((p) => p.name).join(", ") || "none";
       throw new Error(`Expected exactly one Supabase project named "${projectName}", found ${matches.length} (projects: ${names}).`);
     }
-    project = matches[0];
-    if (project.status === "ACTIVE_HEALTHY") break;
-    if (attempt >= 20) throw new Error(`Supabase project is "${project.status}", not ACTIVE_HEALTHY. If it's paused, tap "Resume project" in Supabase.`);
-    log(`Supabase project status is ${project.status}; waiting…`);
+    if (matches[0].status === "ACTIVE_HEALTHY") { project = matches[0]; break; }
+    if (attempt >= 20) throw new Error(`Supabase project is "${matches[0].status}", not ACTIVE_HEALTHY. If it's paused, tap "Resume project" in Supabase.`);
+    log(`Supabase project status is ${matches[0].status}; waiting…`);
     await wait(15_000);
   }
   const ref = project.ref ?? project.id;
   if (!/^[a-z0-9]{20}$/.test(ref)) throw new Error("Unexpected Supabase project reference format.");
   const supabaseUrl = `https://${ref}.supabase.co`;
-  ok(`Supabase project **${projectName}** found (${project.region ?? "region n/a"})`);
+  ok(project.configured ? `Supabase project \`${ref}\` (from config/public-supabase.json)` : `Supabase project **${projectName}** found (${project.region ?? "region n/a"})`);
+  /** Settings changes the token may not be scoped for: skipped with a note, never fatal. */
+  const optional = async (label, path, body) => {
+    try {
+      await sb(path, { method: "PATCH", body });
+      ok(label);
+    } catch (e) {
+      if (!/\((401|403)\)/.test(String(e.message))) throw e;
+      log(`::notice::${label} — skipped: the token has no Auth config permission (settings left as they are).`);
+      report.push(`- ⏭️ ${label} — skipped (token not scoped for Auth config; nothing changed)`);
+    }
+  };
 
   const sql = (query) => sb(`/projects/${ref}/database/query`, { method: "POST", body: { query } });
 
@@ -191,11 +206,12 @@ revoke all on all tables in schema scopeflow_admin from public, anon, authentica
   }
   ok("Security check passed: 14 tables, RLS on all, 5 public functions, sign-up trigger present");
 
-  await sb(`/projects/${ref}/config/auth`, {
-    method: "PATCH",
-    body: { external_email_enabled: true, mailer_autoconfirm: true, password_min_length: 8, disable_signup: false },
+  await optional("Sign-in configured: email + password, no confirmation email, minimum 8 characters", `/projects/${ref}/config/auth`, {
+    external_email_enabled: true,
+    mailer_autoconfirm: true,
+    password_min_length: 8,
+    disable_signup: false,
   });
-  ok("Sign-in configured: email + password, no confirmation email, minimum 8 characters");
 
   const allowText = [allowlistFile ?? "", env.BETA_EMAILS ?? ""].join("\n");
   if (signupsOpen(allowText)) {
@@ -207,17 +223,17 @@ revoke all on all tables in schema scopeflow_admin from public, anon, authentica
     ok(emails.length ? `Beta allowlist synced (${emails.length} email${emails.length === 1 ? "" : "s"})` : "Beta allowlist empty → sign-ups kept **closed**");
   }
 
-  const keys = await sb(`/projects/${ref}/api-keys?reveal=false`);
-  const publishable = keys.find((k) => k.type === "publishable")?.api_key ?? keys.find((k) => k.name === "anon")?.api_key;
-  if (!publishable || /[*•·]/.test(publishable)) throw new Error("Could not read the project's publishable (anon) key.");
-  ok("Read the public Supabase URL and publishable key");
+  let publishable = configured?.publishable;
+  if (!publishable) {
+    const keys = await sb(`/projects/${ref}/api-keys?reveal=false`);
+    publishable = keys.find((k) => k.type === "publishable")?.api_key ?? keys.find((k) => k.name === "anon")?.api_key;
+    if (!publishable || /[*•·]/.test(publishable)) throw new Error("Could not read the project's publishable (anon) key.");
+  }
+  ok("Public Supabase URL and publishable key ready");
   return {
     supabaseUrl,
     publishable,
-    setSiteUrl: async (appUrl) => {
-      await sb(`/projects/${ref}/config/auth`, { method: "PATCH", body: { site_url: appUrl } });
-      ok("Supabase Site URL set to the live address");
-    },
+    setSiteUrl: (appUrl) => optional("Supabase Site URL set to the live address", `/projects/${ref}/config/auth`, { site_url: appUrl }),
   };
   }
 

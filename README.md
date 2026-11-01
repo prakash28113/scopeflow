@@ -73,7 +73,7 @@ What runs where on the free plan:
 
 ```bash
 npm run verify         # all of the below except e2e
-npm test               # 131 unit + database tests (real migration on in-process Postgres)
+npm test               # 156 unit + database tests (real migration on in-process Postgres)
 npm run typecheck
 npm run audit:secrets  # build with a public test config, scan build output + repo for secrets
 npm run audit:deps     # licences, paid-service SDKs, external hosts in the bundle

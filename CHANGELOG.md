@@ -20,7 +20,7 @@
 - `projects.exclusions`, `projects.terms`, `projects.extra_revision_cents` (nullable, length/range checked; writable only through `save_project` while the scope is unlocked).
 - `portal_view` records the first open of a scope version awaiting a decision as an immutable `scope.viewed` activity event (unique per version) and reports `revisions_extra` per deliverable.
 - No new tables, no new public functions; Row Level Security unchanged.
-- Rollback: `supabase/rollback/20261101000000_v1_1_down.sql` (restores the v1.0 functions, drops the three columns and the index; deletes data entered in them). Tested.
+- Rollback: `supabase/rollback/20261101000000_v1_1_agreement_down.sql` (restores the v1.0 functions, drops the three columns and the index; deletes data entered in them). Tested.
 
 **Release order** — the database must be migrated before the app is published. The release refuses an app-only deploy while a migration is pending (`config/public-supabase.json` → `databaseVersion`), so v1.1 needs one run with both the Supabase and Cloudflare tokens.
 

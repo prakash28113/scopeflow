@@ -1,24 +1,57 @@
 -- =====================================================================
--- ScopeFlow v1.1 — clearer agreements and an approval timeline.
+-- ScopeFlow v1.1 — clearer agreements, approval timeline, retry-safe revisions.
 --
 --   * projects.exclusions / terms / extra_revision_cents: part of the scope the
 --     client approves (copied into each scope snapshot and its fingerprint);
 --     editable only while the scope is unlocked, through save_project.
 --   * "Viewed": portal_view records the first time a client opens a scope
 --     version awaiting a decision, as an immutable activity_log event.
+--   * Revision requests: optional client request id makes retries idempotent;
+--     a unique index guarantees each included revision number is used once.
 --
--- Additive only: existing rows keep working (new columns are nullable).
--- Rollback: supabase/rollback/20261101000000_v1_1_down.sql
+-- Safe to re-run: every statement is IF NOT EXISTS / OR REPLACE.
+-- Backward compatible: new columns are nullable; save_project keeps them when a
+-- v1.0 client omits them; portal_request_revision still accepts v1.0 calls.
+-- Rollback: supabase/rollback/20261101000000_v1_1_agreement_down.sql
 -- =====================================================================
 
 alter table public.projects
-  add column exclusions text check (char_length(exclusions) <= 4000),
-  add column terms text check (char_length(terms) <= 4000),
-  add column extra_revision_cents bigint check (extra_revision_cents between 0 and 100000000000);
+  add column if not exists exclusions text check (char_length(exclusions) <= 4000),
+  add column if not exists terms text check (char_length(terms) <= 4000),
+  add column if not exists extra_revision_cents bigint check (extra_revision_cents between 0 and 100000000000);
 
-create unique index activity_scope_viewed_once
+alter table public.revision_requests
+  add column if not exists client_request_id uuid;
+
+create unique index if not exists revision_requests_client_request_once
+  on public.revision_requests (project_id, client_request_id)
+  where client_request_id is not null;
+
+create unique index if not exists revision_requests_number_once
+  on public.revision_requests (deliverable_id, revision_number)
+  where in_scope;
+
+create unique index if not exists activity_scope_viewed_once
   on public.activity_log ((metadata ->> 'snapshot_id'))
   where event = 'scope.viewed';
+
+-- The request id is part of what a client submitted: immutable like the rest.
+create or replace function public._guard_revision_classification()
+returns trigger
+language plpgsql
+set search_path = ''
+as $$
+begin
+  if (new.project_id, new.deliverable_id, new.kind, new.description, new.requested_by,
+      new.in_scope, new.revision_number, new.created_at, new.client_request_id)
+     is distinct from
+     (old.project_id, old.deliverable_id, old.kind, old.description, old.requested_by,
+      old.in_scope, old.revision_number, old.created_at, old.client_request_id) then
+    raise exception 'Revision request details are immutable' using errcode = '42501';
+  end if;
+  return new;
+end;
+$$;
 
 create or replace function public._build_scope(p_project_id uuid)
 returns jsonb
@@ -117,9 +150,11 @@ begin
            budget_cents = (p ->> 'budget_cents')::bigint,
            start_date = nullif(p ->> 'start_date', '')::date,
            due_date = nullif(p ->> 'due_date', '')::date,
-           exclusions = nullif(trim(coalesce(p ->> 'exclusions', '')), ''),
-           terms = nullif(trim(coalesce(p ->> 'terms', '')), ''),
-           extra_revision_cents = nullif(p ->> 'extra_revision_cents', '')::bigint,
+           -- Backward compatible: a client that doesn't send these keys (v1.0 app) keeps them.
+           exclusions = case when p ? 'exclusions' then nullif(trim(coalesce(p ->> 'exclusions', '')), '') else exclusions end,
+           terms = case when p ? 'terms' then nullif(trim(coalesce(p ->> 'terms', '')), '') else terms end,
+           extra_revision_cents = case when p ? 'extra_revision_cents' then nullif(p ->> 'extra_revision_cents', '')::bigint
+                                       else extra_revision_cents end,
            updated_at = now()
      where id = p_project_id
     returning * into v_project;
@@ -243,3 +278,95 @@ begin
   );
 end;
 $$;
+
+-- New optional parameter: replace the v1.0 signature (old calls still match via the default).
+drop function if exists public.portal_request_revision(text, public.revision_kind, uuid, text, text);
+create or replace function public.portal_request_revision(
+  p_token text, p_kind public.revision_kind, p_deliverable_id uuid,
+  p_description text, p_client_name text, p_request_id uuid default null)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  g record;
+  v public.projects;
+  v_name text := public._clean_name(p_client_name);
+  v_desc text := nullif(left(trim(coalesce(p_description, '')), 4000), '');
+  v_del public.deliverables;
+  v_used integer := 0;
+  v_in_scope boolean := false;
+  v_number integer;
+  v_id uuid;
+  v_summary text;
+  v_prior public.revision_requests;
+begin
+  select * into g from public._portal_gate(p_token, true, true);
+  if g.o_error is not null then
+    return public._portal_error(g.o_error);
+  end if;
+  v := g.o_project;
+
+  -- Retries of the same submission (double tap, network retry) return the original
+  -- result instead of using up another revision. The project row is locked above, so
+  -- this check and the insert below can't interleave with a concurrent request.
+  if p_request_id is not null then
+    select * into v_prior from public.revision_requests
+     where project_id = v.id and client_request_id = p_request_id;
+    if found then
+      return jsonb_build_object('ok', true, 'in_scope', v_prior.in_scope, 'revision_number', v_prior.revision_number,
+                                'revisions_included', (select revisions_included from public.deliverables
+                                                        where id = v_prior.deliverable_id),
+                                'duplicate', true);
+    end if;
+  end if;
+
+  if v.status <> 'active' then
+    raise exception 'Requests can only be made while the project is in progress' using errcode = '55000';
+  end if;
+  if v_desc is null then
+    raise exception 'Please describe the change you need' using errcode = '22023';
+  end if;
+  if (select count(*) from public.revision_requests
+       where project_id = v.id and created_at > now() - interval '1 hour') >= 10 then
+    raise exception 'Too many requests in the last hour. Please try again later.' using errcode = '55000';
+  end if;
+
+  if p_kind = 'revision' then
+    select * into v_del from public.deliverables where id = p_deliverable_id and project_id = v.id;
+    if not found then
+      raise exception 'Choose a deliverable from this project' using errcode = '22023';
+    end if;
+    -- Scope check: the project row is locked, so concurrent requests serialize here.
+    select count(*) into v_used from public.revision_requests
+     where deliverable_id = v_del.id and kind = 'revision' and in_scope;
+    v_in_scope := v_used < v_del.revisions_included;
+    if v_in_scope then
+      v_number := v_used + 1;
+      v_summary := format('Revision %s of %s requested for "%s"', v_number, v_del.revisions_included, v_del.title);
+    else
+      v_summary := format('Revision requested for "%s" beyond the %s included — needs a change order',
+                          v_del.title, v_del.revisions_included);
+    end if;
+  else
+    v_summary := 'New work requested outside the original scope — needs a change order';
+  end if;
+
+  insert into public.revision_requests (project_id, deliverable_id, kind, description, requested_by,
+                                        in_scope, revision_number, client_request_id)
+  values (v.id, case when p_kind = 'revision' then v_del.id end, p_kind, v_desc, v_name,
+          v_in_scope, v_number, p_request_id)
+  returning id into v_id;
+
+  perform public._log(v.id, 'client', v_name, 'revision.requested', v_summary,
+    jsonb_build_object('revision_request_id', v_id, 'in_scope', v_in_scope));
+
+  -- Public response: only what the client UI needs. No internal identifiers.
+  return jsonb_build_object('ok', true, 'in_scope', v_in_scope, 'revision_number', v_number,
+                            'revisions_included', v_del.revisions_included);
+end;
+$$;
+
+revoke all on function public.portal_request_revision(text, public.revision_kind, uuid, text, text, uuid) from public;
+grant execute on function public.portal_request_revision(text, public.revision_kind, uuid, text, text, uuid) to anon, authenticated;

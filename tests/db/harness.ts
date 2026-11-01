@@ -9,40 +9,21 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { randomUUID } from "node:crypto";
 
-export const SUPABASE_STUB = `
-  create role anon nologin;
-  create role authenticated nologin;
-  create role service_role nologin bypassrls;
-  create schema auth;
-  create table auth.users (
-    id uuid primary key default gen_random_uuid(),
-    email text,
-    raw_user_meta_data jsonb default '{}'::jsonb
-  );
-  -- Same semantics as Supabase: legacy per-claim setting, else the JWT claims JSON.
-  create function auth.uid() returns uuid language sql stable as $$
-    select coalesce(
-      nullif(current_setting('request.jwt.claim.sub', true), ''),
-      (nullif(current_setting('request.jwt.claims', true), '')::jsonb ->> 'sub')
-    )::uuid
-  $$;
-  grant usage on schema auth to anon, authenticated, service_role;
-  grant execute on function auth.uid() to anon, authenticated, service_role;
-  grant usage on schema public to anon, authenticated, service_role;
-  -- Mirror Supabase defaults: API roles get broad grants; RLS is the guard.
-  alter default privileges in schema public grant all on tables to anon, authenticated, service_role;
-  alter default privileges in schema public grant all on functions to anon, authenticated, service_role;
-  alter default privileges in schema public grant all on sequences to anon, authenticated, service_role;
-`;
+export const SUPABASE_STUB = readFileSync(fileURLToPath(new URL("./supabase-stub.sql", import.meta.url)), "utf8");
 
 export type Role = { kind: "user"; id: string } | { kind: "anon" } | { kind: "service" };
 
-export async function createDb() {
+export const MIGRATIONS_DIR = fileURLToPath(new URL("../../supabase/migrations/", import.meta.url));
+export const migrationFiles = () => readdirSync(MIGRATIONS_DIR).filter((f) => f.endsWith(".sql")).sort();
+export const readMigration = (file: string) => readFileSync(join(MIGRATIONS_DIR, file), "utf8");
+
+/** A database with every migration applied, or only those up to and including `upTo`. */
+export async function createDb(opts: { upTo?: string } = {}) {
   const db = new PGlite();
   await db.exec(SUPABASE_STUB);
-  const dir = fileURLToPath(new URL("../../supabase/migrations/", import.meta.url));
-  for (const file of readdirSync(dir).filter((f) => f.endsWith(".sql")).sort()) {
-    await db.exec(readFileSync(join(dir, file), "utf8"));
+  for (const file of migrationFiles()) {
+    await db.exec(readMigration(file));
+    if (file === opts.upTo) break;
   }
   return db;
 }

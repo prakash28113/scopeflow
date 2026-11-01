@@ -1,13 +1,19 @@
 import type { ProjectStatus } from "./types";
 
-export function formatDate(iso: string | null | undefined): string {
+/**
+ * Calendar dates (YYYY-MM-DD: due dates, milestones) are shown exactly as agreed, in any time zone.
+ * Moments (timestamps: approved, paid) are shown as the date in the viewer's own time zone.
+ */
+export function formatDate(iso: string | null | undefined, timeZone?: string): string {
   if (!iso) return "—";
-  const d = iso.length === 10 ? new Date(`${iso}T00:00:00Z`) : new Date(iso);
-  return new Intl.DateTimeFormat("en", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" }).format(d);
+  const opts: Intl.DateTimeFormatOptions = { day: "numeric", month: "short", year: "numeric" };
+  if (/^\d{4}-\d{2}-\d{2}$/.test(iso)) return new Intl.DateTimeFormat("en", { ...opts, timeZone: "UTC" }).format(new Date(`${iso}T00:00:00Z`));
+  return new Intl.DateTimeFormat("en", { ...opts, ...(timeZone ? { timeZone } : {}) }).format(new Date(iso));
 }
 
-export function formatDateTime(iso: string): string {
+export function formatDateTime(iso: string, timeZone?: string): string {
   return new Intl.DateTimeFormat("en", {
+    ...(timeZone ? { timeZone } : {}),
     day: "numeric",
     month: "short",
     year: "numeric",

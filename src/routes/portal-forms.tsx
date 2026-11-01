@@ -179,6 +179,8 @@ export function RevisionRequestForm({
   const [kind, setKind] = useState<"revision" | "new_work">("revision");
   const [deliverableId, setDeliverableId] = useState("");
   const [formKey, setFormKey] = useState(0);
+  // One id per submission: a retried or double-tapped send is recorded once.
+  const [requestId, setRequestId] = useState(() => crypto.randomUUID());
   const [sent, setSent] = useState<string | null>(null);
   const fe = a.fieldErrors;
   const chosen = deliverables.find((d) => d.id === deliverableId);
@@ -193,6 +195,7 @@ export function RevisionRequestForm({
         p_deliverable_id: d.kind === "revision" ? d.deliverableId : null,
         p_description: d.description,
         p_client_name: d.clientName,
+        p_request_id: requestId,
       }),
     );
     if (res === undefined) return;
@@ -217,6 +220,7 @@ export function RevisionRequestForm({
                 setSent(null);
                 setDeliverableId("");
                 setFormKey((k) => k + 1);
+                setRequestId(crypto.randomUUID());
               }}
             >
               New request

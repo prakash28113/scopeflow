@@ -1,7 +1,8 @@
 -- Rollback for ScopeFlow v1.1 (20261101000000_v1_1_agreement.sql).
--- Restores the v1.0 functions, then removes the v1.1 index and columns.
+-- Restores the v1.0 functions, then removes the v1.1 indexes and columns.
 -- WARNING: deletes exclusions, terms and extra-revision prices entered since v1.1.
 -- "Viewed" events stay in the activity log (it is immutable by design).
+-- Safe to re-run.
 begin;
 
 create or replace function public._build_scope(p_project_id uuid)
@@ -205,7 +206,102 @@ begin
 end;
 $$;
 
+drop function if exists public.portal_request_revision(text, public.revision_kind, uuid, text, text, uuid);
+create or replace function public.portal_request_revision(
+  p_token text, p_kind public.revision_kind, p_deliverable_id uuid,
+  p_description text, p_client_name text)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  g record;
+  v public.projects;
+  v_name text := public._clean_name(p_client_name);
+  v_desc text := nullif(left(trim(coalesce(p_description, '')), 4000), '');
+  v_del public.deliverables;
+  v_used integer := 0;
+  v_in_scope boolean := false;
+  v_number integer;
+  v_id uuid;
+  v_summary text;
+begin
+  select * into g from public._portal_gate(p_token, true, true);
+  if g.o_error is not null then
+    return public._portal_error(g.o_error);
+  end if;
+  v := g.o_project;
+  if v.status <> 'active' then
+    raise exception 'Requests can only be made while the project is in progress' using errcode = '55000';
+  end if;
+  if v_desc is null then
+    raise exception 'Please describe the change you need' using errcode = '22023';
+  end if;
+  if (select count(*) from public.revision_requests
+       where project_id = v.id and created_at > now() - interval '1 hour') >= 10 then
+    raise exception 'Too many requests in the last hour. Please try again later.' using errcode = '55000';
+  end if;
+
+  if p_kind = 'revision' then
+    select * into v_del from public.deliverables where id = p_deliverable_id and project_id = v.id;
+    if not found then
+      raise exception 'Choose a deliverable from this project' using errcode = '22023';
+    end if;
+    -- Scope check: the project row is locked, so concurrent requests serialize here.
+    select count(*) into v_used from public.revision_requests
+     where deliverable_id = v_del.id and kind = 'revision' and in_scope;
+    v_in_scope := v_used < v_del.revisions_included;
+    if v_in_scope then
+      v_number := v_used + 1;
+      v_summary := format('Revision %s of %s requested for "%s"', v_number, v_del.revisions_included, v_del.title);
+    else
+      v_summary := format('Revision requested for "%s" beyond the %s included — needs a change order',
+                          v_del.title, v_del.revisions_included);
+    end if;
+  else
+    v_summary := 'New work requested outside the original scope — needs a change order';
+  end if;
+
+  insert into public.revision_requests (project_id, deliverable_id, kind, description, requested_by,
+                                        in_scope, revision_number)
+  values (v.id, case when p_kind = 'revision' then v_del.id end, p_kind, v_desc, v_name,
+          v_in_scope, v_number)
+  returning id into v_id;
+
+  perform public._log(v.id, 'client', v_name, 'revision.requested', v_summary,
+    jsonb_build_object('revision_request_id', v_id, 'in_scope', v_in_scope));
+
+  -- Public response: only what the client UI needs. No internal identifiers.
+  return jsonb_build_object('ok', true, 'in_scope', v_in_scope, 'revision_number', v_number,
+                            'revisions_included', v_del.revisions_included);
+end;
+$$;
+
+revoke all on function public.portal_request_revision(text, public.revision_kind, uuid, text, text) from public;
+grant execute on function public.portal_request_revision(text, public.revision_kind, uuid, text, text) to anon, authenticated;
+
+create or replace function public._guard_revision_classification()
+returns trigger
+language plpgsql
+set search_path = ''
+as $$
+begin
+  if (new.project_id, new.deliverable_id, new.kind, new.description, new.requested_by,
+      new.in_scope, new.revision_number, new.created_at)
+     is distinct from
+     (old.project_id, old.deliverable_id, old.kind, old.description, old.requested_by,
+      old.in_scope, old.revision_number, old.created_at) then
+    raise exception 'Revision request details are immutable' using errcode = '42501';
+  end if;
+  return new;
+end;
+$$;
+
 drop index if exists public.activity_scope_viewed_once;
+drop index if exists public.revision_requests_number_once;
+drop index if exists public.revision_requests_client_request_once;
+alter table public.revision_requests drop column if exists client_request_id;
 alter table public.projects
   drop column if exists exclusions,
   drop column if exists terms,
