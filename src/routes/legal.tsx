@@ -58,6 +58,7 @@ export function PrivacyPage() {
         <h2>What we don&apos;t do</h2>
         <ul>
           <li>No advertising, tracking or analytics cookies. Your browser only keeps your sign-in session.</li>
+          <li>We count visits with Cloudflare Web Analytics, which uses no cookies, doesn&apos;t follow you across other websites and doesn&apos;t identify you.</li>
           <li>We don&apos;t sell or share your data, and we don&apos;t email your clients. You share client links yourself.</li>
           <li>We don&apos;t process payments or store card details.</li>
         </ul>

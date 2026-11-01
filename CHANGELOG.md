@@ -1,5 +1,11 @@
 # Changelog
 
+## Visitor stats — ready for review (not released)
+
+- The security policy now allows Cloudflare Web Analytics (free, cookieless): scripts from `https://static.cloudflareinsights.com` and beacons to `https://cloudflareinsights.com`. Nothing else is added.
+- The Privacy Policy mentions it: no cookies, no cross-site tracking, nobody identified.
+- Turned on by the owner in Cloudflare → Web Analytics (automatic setup for scopeflow.in).
+
 ## Feedback link — live 1 Nov 2026 (release run 41314127613)
 
 - **Send feedback** in the account menu, and a short line at the bottom of every app page. It opens the user's own email app, addressed to support, with a short prompt and the page path. Project ids are replaced with `:id`, and no project data is included.

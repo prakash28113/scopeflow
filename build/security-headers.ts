@@ -10,17 +10,24 @@
  * Nothing else is broadened: no wildcards, no 'unsafe-eval', no inline scripts.
  */
 export const TURNSTILE_ORIGIN = "https://challenges.cloudflare.com";
+/**
+ * Cloudflare Web Analytics (free, cookieless visit counts), added by Cloudflare's automatic setup:
+ *   script-src  https://static.cloudflareinsights.com  (beacon.min.js)
+ *   connect-src https://cloudflareinsights.com         (sends the page-view beacon)
+ */
+export const ANALYTICS_SCRIPT_ORIGIN = "https://static.cloudflareinsights.com";
+export const ANALYTICS_BEACON_ORIGIN = "https://cloudflareinsights.com";
 
 export function buildCsp(opts: { supabaseUrl: string; turnstile: boolean }): string {
   const supabase = new URL(opts.supabaseUrl).origin;
   const t = opts.turnstile ? ` ${TURNSTILE_ORIGIN}` : "";
   return [
     "default-src 'self'",
-    `script-src 'self'${t}`,
+    `script-src 'self' ${ANALYTICS_SCRIPT_ORIGIN}${t}`,
     "style-src 'self' 'unsafe-inline'",
     "img-src 'self' data:",
     "font-src 'self'",
-    `connect-src 'self' ${supabase}${t}`,
+    `connect-src 'self' ${supabase} ${ANALYTICS_BEACON_ORIGIN}${t}`,
     `frame-src ${opts.turnstile ? TURNSTILE_ORIGIN : "'none'"}`,
     "frame-ancestors 'none'",
     "base-uri 'none'",

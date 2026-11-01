@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildCsp, buildHeadersFile, TURNSTILE_ORIGIN } from "../../build/security-headers";
+import { ANALYTICS_BEACON_ORIGIN, ANALYTICS_SCRIPT_ORIGIN, buildCsp, buildHeadersFile, TURNSTILE_ORIGIN } from "../../build/security-headers";
 
 const directives = (csp: string) =>
   Object.fromEntries(csp.split("; ").map((d) => { const [k, ...v] = d.split(" "); return [k, v]; }));
@@ -9,8 +9,8 @@ describe("Content-Security-Policy", () => {
 
   it("without CAPTCHA: no third-party origins except Supabase for API calls", () => {
     const d = directives(buildCsp({ supabaseUrl, turnstile: false }));
-    expect(d["script-src"]).toEqual(["'self'"]);
-    expect(d["connect-src"]).toEqual(["'self'", "https://abcd.supabase.co"]);
+    expect(d["script-src"]).toEqual(["'self'", ANALYTICS_SCRIPT_ORIGIN]);
+    expect(d["connect-src"]).toEqual(["'self'", "https://abcd.supabase.co", ANALYTICS_BEACON_ORIGIN]);
     expect(d["frame-src"]).toEqual(["'none'"]);
     expect(buildCsp({ supabaseUrl, turnstile: false })).not.toContain("challenges.cloudflare.com");
   });
@@ -18,9 +18,9 @@ describe("Content-Security-Policy", () => {
   it("with CAPTCHA: Turnstile origin added to script-src, frame-src and connect-src only", () => {
     const csp = buildCsp({ supabaseUrl, turnstile: true });
     const d = directives(csp);
-    expect(d["script-src"]).toEqual(["'self'", TURNSTILE_ORIGIN]);
+    expect(d["script-src"]).toEqual(["'self'", ANALYTICS_SCRIPT_ORIGIN, TURNSTILE_ORIGIN]);
     expect(d["frame-src"]).toEqual([TURNSTILE_ORIGIN]);
-    expect(d["connect-src"]).toEqual(["'self'", "https://abcd.supabase.co", TURNSTILE_ORIGIN]);
+    expect(d["connect-src"]).toEqual(["'self'", "https://abcd.supabase.co", ANALYTICS_BEACON_ORIGIN, TURNSTILE_ORIGIN]);
     for (const k of ["default-src", "style-src", "img-src", "font-src", "frame-ancestors", "form-action"]) {
       expect(d[k].join(" ")).not.toContain("cloudflare");
     }
