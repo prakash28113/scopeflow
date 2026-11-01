@@ -129,6 +129,11 @@ export default function ProjectPage() {
                 {p.status === "changes_requested" ? "Send revised scope" : "Send to client"}
               </ActionButton>
             ) : null}
+            {snapshots.length ? (
+              <LinkButton variant="secondary" to={`/projects/${pid}/record`}>
+                Approval record
+              </LinkButton>
+            ) : null}
             {p.status === "active" ? <LinkButton to={`/projects/${pid}/change-orders/new`}>New change order</LinkButton> : null}
           </>
         }

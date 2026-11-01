@@ -572,6 +572,24 @@ try {
   await f.getByRole("heading", { name: /^Reminders/ }).waitFor();
   assert.equal(await f.getByText("Check in on the concepts").count(), 0, "future follow-ups wait for their day");
 
+  step("approval record: everything agreed, with fingerprint, evidence, change orders, revisions, payments and the full log");
+  await f.goto(projectUrl);
+  await f.getByRole("link", { name: "Approval record" }).click();
+  await f.waitForURL(/\/record$/);
+  const record = f.getByTestId("project-record");
+  await record.getByText("Project record").waitFor();
+  const rtext = await record.innerText();
+  assert.match(rtext, /Fingerprint \(SHA-256 of the exact content approved\): [0-9a-f]{64}/);
+  assert.match(rtext, /approved .* by Dana Whitfield · Chrome on Linux/);
+  assert.match(rtext, /Version 1 sent [^\n]*\n+Changes requested by Dana Whitfield/);
+  assert.match(rtext, /#1 Loyalty card design/);
+  assert.match(rtext, /Approved by Dana Whitfield/);
+  assert.match(rtext, /outside the agreed scope/);
+  assert.match(rtext, /Bank transfer · Wise transfer #4471/);
+  assert.match(rtext, /full activity log/i);
+  await f.getByRole("button", { name: "Print or save as PDF" }).waitFor();
+  await shot(f, "35-approval-record");
+
   step("password reset by email: request, open the link, choose a new password, sign in with it");
   const resetCtx = await newCtx();
   const a = await resetCtx.newPage();
@@ -662,6 +680,11 @@ try {
   await f.getByRole("button", { name: "Save" }).click();
   await f.getByText("Client saved.").waitFor();
   await f.getByText("Prefers email. Approves quickly.").waitFor();
+  // Client history: invoices, quotes, payment records, repeat client.
+  await f.getByTestId("client-invoices").getByText(/RS-\d{4}-002/).waitFor();
+  assert.equal(await f.getByTestId("client-quotes").getByRole("link", { name: "Quote" }).count(), 2);
+  await f.getByText("Repeat client").waitFor();
+  await f.getByText(/UPI · UTR 5521/).waitFor();
   await shot(f, "21-client");
 
   step("plans: the Free limit is reached at 2 active projects");
