@@ -1,4 +1,5 @@
 import { useState, type FormEvent } from "react";
+import { received } from "@/lib/pricing";
 import { Link, useParams } from "react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Alert, Card, CardHeader, EmptyState, Field, Input, PageHeader, StatusBadge, Tag, Textarea } from "@/components/ui";
@@ -46,7 +47,7 @@ function money(projects: ClientProject[]) {
     if (p.status !== "active" && p.status !== "completed") continue;
     const t = by.get(p.currency) ?? { contracted: 0, paid: 0 };
     t.contracted += Number(p.budget_cents) + Number(p.approved_extras_cents);
-    t.paid += p.milestones.filter((m) => m.status === "paid").reduce((s, m) => s + Number(m.amount_cents), 0);
+    t.paid += p.milestones.reduce((s, m) => s + received(m), 0);
     by.set(p.currency, t);
   }
   return [...by.entries()].map(([currency, t]) => ({ currency, ...t, outstanding: t.contracted - t.paid }));
@@ -58,7 +59,7 @@ export function ClientsPage() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("clients")
-        .select("id, name, email, company, phone, notes, billing_address, gstin, created_at, projects(id, title, status, currency, budget_cents, approved_extras_cents, created_at, milestones(title, amount_cents, status, paid_at, payment_note))")
+        .select("id, name, email, company, phone, notes, billing_address, gstin, created_at, projects(id, title, status, currency, budget_cents, approved_extras_cents, created_at, milestones(title, amount_cents, status, paid_at, payment_note, paid_cents))")
         .order("name");
       if (error) throw error;
       return data as unknown as ClientRow[];
@@ -116,7 +117,7 @@ export function ClientPage() {
       const { data, error } = await supabase
         .from("clients")
         .select(
-          "id, name, email, company, phone, notes, created_at, projects(id, title, status, currency, budget_cents, approved_extras_cents, created_at, milestones(title, amount_cents, status, paid_at, payment_note), scope_decisions(decision, client_name, created_at), change_orders(number, title, status, amount_cents, decided_at))",
+          "id, name, email, company, phone, notes, billing_address, gstin, created_at, projects(id, title, status, currency, budget_cents, approved_extras_cents, created_at, milestones(title, amount_cents, status, paid_at, payment_note, paid_cents), scope_decisions(decision, client_name, created_at), change_orders(number, title, status, amount_cents, decided_at))",
         )
         .eq("id", id!)
         .maybeSingle();

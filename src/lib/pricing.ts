@@ -46,14 +46,19 @@ export interface Totals {
   unscheduled: number;
 }
 
+/** Money received against a payment milestone (part payments count). */
+export function received(m: { amount_cents: number; status: string; paid_cents?: number | null }): number {
+  return m.paid_cents !== undefined && m.paid_cents !== null ? Number(m.paid_cents) : m.status === "paid" ? Number(m.amount_cents) : 0;
+}
+
 export function projectTotals(
   budgetMinor: number,
   extrasMinor: number,
-  milestones: { amount_cents: number; status: string }[],
+  milestones: { amount_cents: number; status: string; paid_cents?: number | null }[],
 ): Totals {
   const contract = budgetMinor + extrasMinor;
   const scheduled = milestones.reduce((s, m) => s + Number(m.amount_cents), 0);
-  const paid = milestones.filter((m) => m.status === "paid").reduce((s, m) => s + Number(m.amount_cents), 0);
+  const paid = milestones.reduce((s, m) => s + received(m), 0);
   return {
     original: budgetMinor,
     extras: extrasMinor,

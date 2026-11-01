@@ -22,17 +22,19 @@ const STAMP: Record<InvoiceStatus, { text: string; cls: string } | null> = {
   paid: { text: "Paid", cls: "border-positive text-positive" },
   void: { text: "Void", cls: "border-danger text-danger" },
   overdue: { text: "Overdue", cls: "border-warning text-warning" },
+  partial: { text: "Part paid", cls: "border-accent text-accent" },
   due: null,
 };
 
 /** A printable invoice. Add `data-print-scope` around it (it already has it) and use PrintButton to save as PDF. */
-export function InvoiceDocument({ inv, status, paidAt, className }: { inv: InvoiceDoc; status: InvoiceStatus; paidAt?: string | null; className?: string }) {
+export function InvoiceDocument({ inv, status, paidAt, paidCents = 0, className }: { inv: InvoiceDoc; status: InvoiceStatus; paidAt?: string | null; paidCents?: number; className?: string }) {
   const fmt = (n: number) => formatMoney(Number(n), inv.currency);
   const taxes = taxRows(inv);
   const words = amountInWords(Number(inv.amount_cents), inv.currency);
   const stamp = STAMP[status];
+  const balance = Math.max(0, Number(inv.amount_cents) - (status === "paid" ? Number(inv.amount_cents) : Number(paidCents)));
   const upi = inv.currency === "INR" && inv.seller.upi_id && status !== "paid" && status !== "void"
-    ? upiPayUrl({ upiId: inv.seller.upi_id, payee: inv.seller.name, amountPaise: Number(inv.amount_cents), note: inv.number })
+    ? upiPayUrl({ upiId: inv.seller.upi_id, payee: inv.seller.name, amountPaise: balance || Number(inv.amount_cents), note: inv.number })
     : null;
   const qr = upi
     ? (() => {
@@ -103,6 +105,18 @@ export function InvoiceDocument({ inv, status, paidAt, className }: { inv: Invoi
               <td className="pt-3">Total</td>
               <td className="pt-3 text-right" data-testid="invoice-total">{fmt(inv.amount_cents)}</td>
             </tr>
+            {status !== "paid" && status !== "void" && paidCents > 0 ? (
+              <>
+                <tr>
+                  <td className="pt-1 text-muted">Paid so far</td>
+                  <td className="pt-1 text-right">− {fmt(paidCents)}</td>
+                </tr>
+                <tr className="font-semibold">
+                  <td className="pt-1">Balance due</td>
+                  <td className="pt-1 text-right" data-testid="invoice-balance">{fmt(balance)}</td>
+                </tr>
+              </>
+            ) : null}
           </tfoot>
         </table>
         {words ? <p className="mt-3 text-[12px] text-ink-2">Amount in words: {words}</p> : null}

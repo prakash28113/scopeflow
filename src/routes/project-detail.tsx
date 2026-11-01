@@ -23,6 +23,8 @@ import { AgreementTerms, RevisionMeter } from "@/components/agreement";
 import { QuoteTable, pricingFrom } from "@/components/quote";
 import { useToast } from "@/components/toast";
 import { CreateInvoice } from "@/components/create-invoice";
+import { RecordPayment } from "@/components/record-payment";
+import { methodLabel } from "@/lib/payments";
 import { PROGRESS, progressSummary, type Progress } from "@/lib/progress";
 import { useProfile } from "@/lib/auth";
 import { useProject, type FullProject } from "@/lib/queries";
@@ -31,7 +33,7 @@ import { call } from "@/lib/use-action";
 import { LINK_VALIDITY_DAYS, portalUrl } from "@/lib/portal-link";
 import { formatMoney } from "@/lib/money";
 import { formatDate, formatDateTime, pluralize, shortHash } from "@/lib/format";
-import { currentDueDate, projectTotals } from "@/lib/pricing";
+import { currentDueDate, projectTotals, received } from "@/lib/pricing";
 import type { ChangeOrder, RevisionRequest, ScopeDecision, ScopeSnapshot, ShareLinkStatus } from "@/lib/types";
 import NotFound from "./not-found";
 
@@ -50,7 +52,7 @@ export default function ProjectPage() {
   if (q.isError) return <Alert>Couldn't load this project. Please refresh.</Alert>;
   if (!q.data) return <NotFound />;
 
-  const { project: p, snapshots, decisions, revisions, changeOrders, activity, link, invoices } = q.data;
+  const { project: p, snapshots, decisions, revisions, changeOrders, activity, link, invoices, payments } = q.data;
   const liveInvoice = (milestoneId: string) => invoices.find((i) => i.milestone_id === milestoneId && !i.voided_at);
   const pid = p.id;
   const latest = snapshots[0];
@@ -418,14 +420,48 @@ export default function ProjectPage() {
                         <p className="text-[13px] font-medium">{m.title}</p>
                         <p className="break-words text-[12px] text-muted">
                           {m.status === "paid"
-                            ? `Paid ${formatDate(m.paid_at)}${m.payment_note ? ` · ${m.payment_note}` : ""}`
-                            : m.due_date
-                              ? `Due ${formatDate(m.due_date)}`
-                              : "No due date"}
+                            ? `Paid in full · ${formatDate(m.paid_at)}`
+                            : received(m) > 0
+                              ? `Part paid · ${fmt(received(m))} of ${fmt(Number(m.amount_cents))}`
+                              : m.due_date
+                                ? `Due ${formatDate(m.due_date)}`
+                                : "No due date"}
                         </p>
                       </div>
-                      <p className="num text-[13px] font-medium">{fmt(Number(m.amount_cents))}</p>
+                      <div className="flex shrink-0 items-center gap-2">
+                        {m.status === "paid" ? <Tag tone="positive">Paid</Tag> : received(m) > 0 ? <Tag tone="accent">Part paid</Tag> : null}
+                        <p className="num text-[13px] font-medium">{fmt(Number(m.amount_cents))}</p>
+                      </div>
                     </div>
+                    {payments.some((x) => x.milestone_id === m.id) ? (
+                      <ul className="mt-2 space-y-1 rounded-md bg-canvas px-3 py-2 text-[12px]" data-testid="payment-records">
+                        {payments
+                          .filter((x) => x.milestone_id === m.id)
+                          .map((x) => (
+                            <li key={x.id} className="flex items-start justify-between gap-2">
+                              <span className="min-w-0 break-words text-ink-2">
+                                {formatDate(x.paid_on)} · {methodLabel(x.method)}
+                                {x.reference ? ` · ${x.reference}` : ""}
+                              </span>
+                              <span className="flex shrink-0 items-center gap-2">
+                                <span className="num">{fmt(Number(x.amount_cents))}</span>
+                                {p.status !== "cancelled" ? (
+                                  <ActionButton
+                                    size="sm"
+                                    variant="ghost"
+                                    className="h-6 px-1.5 text-[11px]"
+                                    aria-label={`Remove payment of ${fmt(Number(x.amount_cents))} on ${formatDate(x.paid_on)}`}
+                                    confirm={`Remove this ${fmt(Number(x.amount_cents))} payment? The amount goes back to "due".`}
+                                    onAction={() => act(() => supabase.rpc("delete_payment", { p_payment_id: x.id }), "Payment removed.")}
+                                  >
+                                    Remove
+                                  </ActionButton>
+                                ) : null}
+                              </span>
+                            </li>
+                          ))}
+                      </ul>
+                    ) : null}
                     {liveInvoice(m.id) ? (
                       <Link to={`/invoices/${liveInvoice(m.id)!.id}`} className="mt-2 inline-flex text-[12px] font-medium text-accent hover:underline">
                         Invoice {liveInvoice(m.id)!.number} →
@@ -441,32 +477,15 @@ export default function ProjectPage() {
                         />
                       </div>
                     ) : null}
-                    {approved && p.status !== "cancelled" ? (
-                      m.status === "paid" ? (
-                        <ActionButton
-                          className="mt-2"
-                          size="sm"
-                          variant="ghost"
-                          confirm="Remove the paid mark from this milestone?"
-                          onAction={() =>
-                            act(() => supabase.rpc("set_milestone_paid", { p_milestone_id: m.id, p_paid: false, p_note: null }), "Payment mark removed.")
-                          }
-                        >
-                          Undo paid
-                        </ActionButton>
-                      ) : (
-                        <div className="mt-2">
-                          <NoteAction
-                            label="Mark paid"
-                            submitLabel="Save"
-                            placeholder="Reference (optional)"
-                            maxLength={500}
-                            onSubmit={(note) =>
-                              act(() => supabase.rpc("set_milestone_paid", { p_milestone_id: m.id, p_paid: true, p_note: note }), "Payment recorded.")
-                            }
-                          />
-                        </div>
-                      )
+                    {approved && p.status !== "cancelled" && m.status !== "paid" ? (
+                      <div className="mt-2">
+                        <RecordPayment
+                          milestoneId={m.id}
+                          due={Number(m.amount_cents) - received(m)}
+                          currency={p.currency}
+                          onDone={(msg) => act(() => Promise.resolve({ data: null, error: null }), msg)}
+                        />
+                      </div>
                     ) : null}
                   </li>
                 ))}

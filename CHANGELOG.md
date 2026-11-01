@@ -1,5 +1,28 @@
 # Changelog
 
+## Payments done right + audit fixes — ready for release (owner approved: release together with invoices, progress and analytics)
+
+- **Record payment** replaces "Mark paid":
+  - an amount (part or full, prefilled with what's still due), the date it was **actually received**, the method (UPI, bank transfer, cash, card, cheque, PayPal, other) and a reference;
+  - several part payments add up, and the payment becomes *Paid* when covered;
+  - each payment is listed with a Remove button;
+  - overpaying is refused, including when two payments are recorded at the same moment (race-tested).
+- **Everywhere uses part payments:**
+  - project totals, the dashboard and the client page;
+  - invoices: a new *Part paid* status, with "Paid so far" and "Balance due" lines;
+  - analytics: money counts in the month it was received;
+  - the client's Pay via UPI asks only for the balance.
+- **Analytics:** adds average project value.
+- **Pricing page:** now matches what's built. Quotes, invoices, payments, progress, expenses and analytics are marked available (expenses and analytics free during the beta). Only exports, team members and white-label still say "coming".
+- **Audit fixes:**
+  - the Invoices page and the Plan page's billing history no longer share a data cache;
+  - the client page now loads billing address and GSTIN, so saving a client no longer wipes them.
+- **Database:** `supabase/migrations/20261107000000_payments.sql` is re-runnable. It adds a `payments` table (RLS, owner read-only) and `milestones.paid_cents`; existing paid milestones are carried over as one payment each; `set_milestone_paid` keeps working. Rollback is `supabase/rollback/20261107000000_payments_down.sql`, tested twice; paid status survives the rollback.
+- **Tests:**
+  - 250 unit and database tests;
+  - 8 real-PostgreSQL race checks;
+  - a **32-step** browser walkthrough (new: part payments).
+
 ## Progress, project timeline and monthly analytics — ready for review (not released)
 
 - **Deliverable progress:**

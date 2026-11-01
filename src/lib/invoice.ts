@@ -30,12 +30,13 @@ export type InvoiceRow = InvoiceDoc & {
   created_at: string;
 };
 
-export type InvoiceStatus = "void" | "paid" | "overdue" | "due";
+export type InvoiceStatus = "void" | "paid" | "overdue" | "partial" | "due";
 
-export function invoiceStatus(inv: { voided_at?: string | null; due_date: string | null }, paid: boolean, today: string): InvoiceStatus {
+export function invoiceStatus(inv: { voided_at?: string | null; due_date: string | null }, paid: boolean, today: string, paidCents = 0): InvoiceStatus {
   if (inv.voided_at) return "void";
   if (paid) return "paid";
   if (inv.due_date && inv.due_date < today) return "overdue";
+  if (paidCents > 0) return "partial";
   return "due";
 }
 

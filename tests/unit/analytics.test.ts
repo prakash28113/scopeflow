@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { change, lastMonths, monthOf, monthly, niceScale, receivables, topClients, type PaymentFact } from "@/lib/analytics";
+import { change, lastMonths, monthOf, monthly, niceScale, receivables, topClients, type PaymentFact, type ReceiptFact } from "@/lib/analytics";
 import { progressSummary } from "@/lib/progress";
 
 const pay = (o: Partial<PaymentFact>): PaymentFact => ({ paid_at: null, status: "pending", amount_cents: 0, currency: "INR", due_date: null, client: "A", project: "P", project_id: "p1", ...o });
@@ -18,11 +18,11 @@ describe("months", () => {
 describe("monthly totals", () => {
   const months = ["2026-10", "2026-11"];
   const rows = monthly(months, "INR", {
-    payments: [
-      pay({ status: "paid", paid_at: "2026-10-10T08:00:00Z", amount_cents: 500000 }),
-      pay({ status: "paid", paid_at: "2026-11-02T08:00:00Z", amount_cents: 300000 }),
-      pay({ status: "paid", paid_at: "2026-11-02T08:00:00Z", amount_cents: 999, currency: "USD" }),
-      pay({ status: "pending", due_date: "2026-11-05", amount_cents: 700000 }),
+    receipts: [
+      { paid_on: "2026-10-10", amount_cents: 500000, currency: "INR", client: "A" },
+      { paid_on: "2026-11-02", amount_cents: 200000, currency: "INR", client: "A" },
+      { paid_on: "2026-11-30", amount_cents: 100000, currency: "INR", client: "A" }, // a part payment
+      { paid_on: "2026-11-02", amount_cents: 999, currency: "USD", client: "A" },
     ],
     invoices: [
       { issue_date: "2026-11-01", amount_cents: 300000, currency: "INR", voided_at: null },
@@ -45,19 +45,23 @@ describe("monthly totals", () => {
 
 describe("receivables and top clients", () => {
   const ps = [
-    pay({ client: "Nova", status: "paid", paid_at: "2026-10-01T00:00:00Z", amount_cents: 100 }),
-    pay({ client: "Acme", status: "paid", paid_at: "2026-10-01T00:00:00Z", amount_cents: 300 }),
-    pay({ client: "Nova", status: "paid", paid_at: "2026-11-01T00:00:00Z", amount_cents: 250 }),
-    pay({ client: "Acme", due_date: "2026-10-20", amount_cents: 1000 }),
+    pay({ client: "Nova", status: "paid", amount_cents: 100, paid_cents: 100 }),
+    pay({ client: "Acme", due_date: "2026-10-20", amount_cents: 1000, paid_cents: 250 }),
     pay({ client: "Nova", due_date: "2026-12-01", amount_cents: 400 }),
     pay({ client: "Zed", amount_cents: 50 }),
   ];
-  it("totals what's owed and what's overdue, oldest first", () => {
+  const rs: ReceiptFact[] = [
+    { client: "Nova", paid_on: "2026-10-01", amount_cents: 100, currency: "INR" },
+    { client: "Acme", paid_on: "2026-10-01", amount_cents: 300, currency: "INR" },
+    { client: "Nova", paid_on: "2026-11-01", amount_cents: 250, currency: "INR" },
+    { client: "Nova", paid_on: "2025-01-01", amount_cents: 9999, currency: "INR" },
+  ];
+  it("totals what's still owed (part payments reduce it) and what's overdue, oldest first", () => {
     const r = receivables(ps, "INR", "2026-11-01");
-    expect([r.outstanding, r.overdue, r.overdueItems.map((p) => p.client)]).toEqual([1450, 1000, ["Acme"]]);
+    expect([r.outstanding, r.overdue, r.overdueItems.map((p) => p.client)]).toEqual([1200, 750, ["Acme"]]);
   });
-  it("ranks clients by money received", () => {
-    expect(topClients(ps, "INR", ["2026-10", "2026-11"])).toEqual([
+  it("ranks clients by money received in the period", () => {
+    expect(topClients(rs, "INR", ["2026-10", "2026-11"])).toEqual([
       { client: "Nova", cents: 350 },
       { client: "Acme", cents: 300 },
     ]);

@@ -160,6 +160,26 @@ try {
     });
   }
 
+  const hasPayments = (await admin.query("select to_regproc('public.record_payment') is not null as ok")).rows[0].ok;
+  if (hasPayments) {
+    check("4 simultaneous part payments of 60% each: exactly 1 is recorded, never more than the amount due", async () => {
+      const id = (await call("owner", "save_project", [null, JSON.stringify({
+        title: "Pay race", currency: "INR", budget_cents: 10000, client: { name: "C", email: "pay-race@example.com" },
+        deliverables: [{ title: "X", revisions_included: 1 }], milestones: [{ title: "All", amount_cents: 10000 }],
+      })])).value;
+      const token = (await call("owner", "send_scope", [id, 30])).value.link.token;
+      const snap = (await call("anon", "portal_view", [token])).value.snapshot.id;
+      await call("anon", "portal_decide_scope", [token, snap, "approved", "C", null]);
+      const [{ id: m }] = (await admin.query("select id from milestones where project_id = $1", [id])).rows;
+      const out = await Promise.all(Array.from({ length: 4 }, () => call("owner", "record_payment", [m, JSON.stringify({ amount_cents: 6000 })])));
+      assert.equal(out.filter((o) => o.ok).length, 1, JSON.stringify(out));
+      const [row] = (await admin.query("select paid_cents::int p, status from milestones where id = $1", [m])).rows;
+      assert.deepEqual(row, { p: 6000, status: "pending" });
+      const sum = (await admin.query("select coalesce(sum(amount_cents),0)::int s from payments where milestone_id = $1", [m])).rows[0].s;
+      assert.equal(sum, 6000);
+    });
+  }
+
   if (hasPlans) {
     check("6 simultaneous project creations on the Free plan: exactly 2 succeed, the rest get the plan-limit error", async () => {
       const out = await Promise.all(Array.from({ length: 6 }, (_, i) =>

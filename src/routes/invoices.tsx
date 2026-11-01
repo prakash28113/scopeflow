@@ -15,13 +15,13 @@ import { localToday } from "@/lib/upcoming";
 import { invoiceStatus, type InvoiceRow, type InvoiceStatus } from "@/lib/invoice";
 import NotFound from "./not-found";
 
-type ListedInvoice = InvoiceRow & { milestones: { status: string; paid_at: string | null } | null; projects: { id: string; title: string } | null };
+type ListedInvoice = InvoiceRow & { milestones: { status: string; paid_at: string | null; paid_cents?: number } | null; projects: { id: string; title: string } | null };
 
-const SELECT = "*, milestones(status, paid_at), projects(id, title)";
+const SELECT = "*, milestones(status, paid_at, paid_cents), projects(id, title)";
 
 function useInvoices() {
   return useQuery({
-    queryKey: ["invoices"],
+    queryKey: ["client-invoices"],
     queryFn: async () => {
       const { data, error } = await supabase.from("client_invoices").select(SELECT).order("created_at", { ascending: false });
       if (error) throw error;
@@ -30,21 +30,23 @@ function useInvoices() {
   });
 }
 
-const statusOf = (i: ListedInvoice, today: string) => invoiceStatus(i, i.milestones?.status === "paid", today);
+const statusOf = (i: ListedInvoice, today: string) => invoiceStatus(i, i.milestones?.status === "paid", today, Number(i.milestones?.paid_cents ?? 0));
+const balanceOf = (i: ListedInvoice) => (i.milestones?.status === "paid" ? 0 : Math.max(0, Number(i.amount_cents) - Number(i.milestones?.paid_cents ?? 0)));
 const TAGS: Record<InvoiceStatus, { tone: "neutral" | "positive" | "warning" | "danger"; label: string }> = {
   due: { tone: "neutral", label: "Due" },
+  partial: { tone: "neutral", label: "Part paid" },
   overdue: { tone: "warning", label: "Overdue" },
   paid: { tone: "positive", label: "Paid" },
   void: { tone: "danger", label: "Void" },
 };
 
-function sums(rows: ListedInvoice[]): string {
+function sums(rows: ListedInvoice[], amount: (r: ListedInvoice) => number = (r) => Number(r.amount_cents)): string {
   const by = new Map<string, number>();
-  for (const r of rows) by.set(r.currency, (by.get(r.currency) ?? 0) + Number(r.amount_cents));
+  for (const r of rows) by.set(r.currency, (by.get(r.currency) ?? 0) + amount(r));
   return [...by].map(([c, v]) => formatMoney(v, c)).join(" · ") || "—";
 }
 
-const FILTERS = ["all", "due", "overdue", "paid", "void"] as const;
+const FILTERS = ["all", "due", "partial", "overdue", "paid", "void"] as const;
 
 /** All invoices across projects, with totals. */
 export function InvoicesPage() {
@@ -64,8 +66,8 @@ export function InvoicesPage() {
       <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
         {[
           ["Invoiced this month", sums(live.filter((r) => r.issue_date.startsWith(month)))],
-          ["Unpaid", sums(live.filter((r) => statusOf(r, today) === "due" || statusOf(r, today) === "overdue"))],
-          ["Overdue", sums(live.filter((r) => statusOf(r, today) === "overdue"))],
+          ["Unpaid", sums(live.filter((r) => balanceOf(r) > 0), balanceOf)],
+          ["Overdue", sums(live.filter((r) => statusOf(r, today) === "overdue"), balanceOf)],
           ["Paid", sums(live.filter((r) => statusOf(r, today) === "paid"))],
         ].map(([label, value]) => (
           <Card key={label} className="px-4 py-3">
@@ -153,7 +155,7 @@ export function InvoicePage() {
     toast("positive", `Invoice ${inv.number} voided. You can create a new one from the project.`);
     await Promise.all([
       qc.invalidateQueries({ queryKey: ["invoice", id] }),
-      qc.invalidateQueries({ queryKey: ["invoices"] }),
+      qc.invalidateQueries({ queryKey: ["client-invoices"] }),
       qc.invalidateQueries({ queryKey: ["project", inv.project_id] }),
     ]);
   }
@@ -191,7 +193,7 @@ export function InvoicePage() {
           {inv.void_reason ? `: ${inv.void_reason}` : ""}. Clients no longer see this invoice.
         </Alert>
       ) : null}
-      <InvoiceDocument inv={inv} status={status} paidAt={inv.milestones?.paid_at} className="mt-3" />
+      <InvoiceDocument inv={inv} status={status} paidAt={inv.milestones?.paid_at} paidCents={Number(inv.milestones?.paid_cents ?? 0)} className="mt-3" />
       <p className="mt-3 text-[12px] text-muted print:hidden">
         Your client sees this invoice on their project page. Paid status updates when you mark the payment as received.
       </p>

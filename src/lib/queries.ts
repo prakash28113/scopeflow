@@ -31,7 +31,7 @@ export function useDashboard() {
     queryKey: ["dashboard"],
     queryFn: async () => {
       const [projects, changeOrders, revisions, activity] = await Promise.all([
-        supabase.from("projects").select("*, clients(name, company), milestones(id, title, amount_cents, status, due_date)").order("updated_at", { ascending: false }),
+        supabase.from("projects").select("*, clients(name, company), milestones(id, title, amount_cents, status, due_date, paid_cents)").order("updated_at", { ascending: false }),
         supabase
           .from("change_orders")
           .select("id, number, title, amount_cents, created_at, project_id, projects(title, currency)")
@@ -76,7 +76,7 @@ export function useProject(id: string | undefined) {
         await supabase.from("projects").select("*, clients(*), deliverables(*), milestones(*)").eq("id", id!).maybeSingle(),
       ) as FullProject | null;
       if (!project) return null;
-      const [snapshots, decisions, revisions, changeOrders, activity, links, invoices] = await Promise.all([
+      const [snapshots, decisions, revisions, changeOrders, activity, links, invoices, payments] = await Promise.all([
         supabase.from("scope_snapshots").select("*").eq("project_id", id!).order("version", { ascending: false }),
         supabase.from("scope_decisions").select("*").eq("project_id", id!),
         supabase.from("revision_requests").select("*").eq("project_id", id!).order("created_at", { ascending: false }),
@@ -90,6 +90,7 @@ export function useProject(id: string | undefined) {
           .order("created_at", { ascending: false })
           .limit(1),
         supabase.from("client_invoices").select("id, number, milestone_id, voided_at, amount_cents, currency").eq("project_id", id!),
+        supabase.from("payments").select("*").eq("project_id", id!).order("paid_on", { ascending: true }),
       ]);
       project.deliverables.sort((a, b) => a.position - b.position);
       project.milestones.sort((a, b) => a.position - b.position);
@@ -102,6 +103,7 @@ export function useProject(id: string | undefined) {
         activity: unwrap(activity) as ActivityEntry[],
         link: ((unwrap(links) as ShareLinkStatus[])[0] ?? null) as ShareLinkStatus | null,
         invoices: unwrap(invoices) as { id: string; number: string; milestone_id: string | null; voided_at: string | null }[],
+        payments: unwrap(payments) as import("./payments").PaymentRecord[],
       };
     },
   });

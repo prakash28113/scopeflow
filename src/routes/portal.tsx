@@ -13,7 +13,7 @@ import { tokenFromHash } from "@/lib/portal-link";
 import type { PortalError } from "@/lib/portal-rpc";
 import { formatMoney } from "@/lib/money";
 import { formatDate, formatDateTime, pluralize, shortHash, STATUS_LABEL } from "@/lib/format";
-import { currentDueDate } from "@/lib/pricing";
+import { currentDueDate, received } from "@/lib/pricing";
 import type { ScopeData } from "@/lib/types";
 import { ChangeOrderDecisionForm, RevisionRequestForm, ScopeDecisionForm } from "./portal-forms";
 
@@ -74,7 +74,7 @@ export default function PortalPage() {
   const fmt = (n: number) => formatMoney(Number(n), p.currency);
   const pendingCos = v.change_orders.filter((c) => c.status === "sent");
   const decidedCos = v.change_orders.filter((c) => c.status !== "sent");
-  const paid = v.milestones.filter((m) => m.status === "paid").reduce((s, m) => s + Number(m.amount_cents), 0);
+  const paid = v.milestones.reduce((s, m) => s + received(m), 0);
   const contract = Number(p.budget_cents) + Number(p.approved_extras_cents);
   const due = currentDueDate(p.due_date, p.extra_days);
 
@@ -239,16 +239,22 @@ export default function PortalPage() {
                       <div className="min-w-0">
                         <p className="text-[13px] font-medium">{m.title}</p>
                         <p className="text-[12px] text-muted">
-                          {m.status === "paid" ? `Received ${formatDate(m.paid_at)}` : m.due_date ? `Due ${formatDate(m.due_date)}` : "Upcoming"}
+                          {m.status === "paid"
+                            ? `Received ${formatDate(m.paid_at)}`
+                            : received(m) > 0
+                              ? `${fmt(received(m))} received · ${fmt(Number(m.amount_cents) - received(m))} due`
+                              : m.due_date
+                                ? `Due ${formatDate(m.due_date)}`
+                                : "Upcoming"}
                         </p>
                       </div>
                       <div className="flex items-center gap-2">
                         <span className="num text-[13px] font-medium">{fmt(m.amount_cents)}</span>
-                        {m.status === "paid" ? <Tag tone="positive">Paid</Tag> : null}
+                        {m.status === "paid" ? <Tag tone="positive">Paid</Tag> : received(m) > 0 ? <Tag tone="accent">Part paid</Tag> : null}
                       </div>
                     </div>
                     {m.status !== "paid" && v.payment ? (
-                      <UpiPay upiId={v.payment.upi_id} payee={v.payment.payee_name || v.freelancer.name} amountPaise={Number(m.amount_cents)} note={m.invoice_number || `${p.title} ${m.title}`} />
+                      <UpiPay upiId={v.payment.upi_id} payee={v.payment.payee_name || v.freelancer.name} amountPaise={Number(m.amount_cents) - received(m)} note={m.invoice_number || `${p.title} ${m.title}`} />
                     ) : null}
                   </li>
                 ))}
@@ -435,7 +441,7 @@ function PortalInvoices({ invoices }: { invoices: NonNullable<import("@/lib/type
       </div>
       <ul className="divide-y divide-line" data-testid="portal-invoices">
         {invoices.map((inv) => {
-          const s = invoiceStatus(inv, inv.paid, today);
+          const s = invoiceStatus(inv, inv.paid, today, Number(inv.paid_cents ?? 0));
           return (
             <li key={inv.id} className="flex items-center justify-between gap-3 px-5 py-3.5 sm:px-6">
               <div className="min-w-0">
@@ -447,7 +453,7 @@ function PortalInvoices({ invoices }: { invoices: NonNullable<import("@/lib/type
               </div>
               <div className="flex items-center gap-2">
                 <span className="num text-[13px] font-medium">{formatMoney(Number(inv.amount_cents), inv.currency)}</span>
-                {s === "overdue" ? <Tag tone="warning">Overdue</Tag> : s === "paid" ? <Tag tone="positive">Paid</Tag> : null}
+                {s === "overdue" ? <Tag tone="warning">Overdue</Tag> : s === "paid" ? <Tag tone="positive">Paid</Tag> : s === "partial" ? <Tag tone="accent">Part paid</Tag> : null}
                 <button type="button" className="text-[13px] font-medium text-accent hover:underline" onClick={() => setOpen(open === inv.id ? null : inv.id)}>
                   {open === inv.id ? "Close" : "View"}
                 </button>
@@ -461,7 +467,7 @@ function PortalInvoices({ invoices }: { invoices: NonNullable<import("@/lib/type
           <div className="mb-3 flex justify-end print:hidden">
             <PrintButton label="Print or save as PDF" />
           </div>
-          <InvoiceDocument inv={shown} status={invoiceStatus(shown, shown.paid, today)} paidAt={shown.paid_at} className="border-0 p-0 sm:p-2" />
+          <InvoiceDocument inv={shown} status={invoiceStatus(shown, shown.paid, today, Number(shown.paid_cents ?? 0))} paidAt={shown.paid_at} paidCents={Number(shown.paid_cents ?? 0)} className="border-0 p-0 sm:p-2" />
         </div>
       ) : null}
     </Card>

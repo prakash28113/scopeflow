@@ -23,7 +23,9 @@ import {
   monthly,
   receivables,
   topClients,
+  remaining,
   type PaymentFact,
+  type ReceiptFact,
 } from "@/lib/analytics";
 
 type ProjectRow = {
@@ -33,8 +35,10 @@ type ProjectRow = {
   status: string;
   approved_at: string | null;
   completed_at: string | null;
+  budget_cents: number;
+  approved_extras_cents: number;
   clients: { name: string; company: string | null } | null;
-  milestones: { id: string; amount_cents: number; status: string; paid_at: string | null; due_date: string | null }[];
+  milestones: { id: string; amount_cents: number; status: string; paid_at: string | null; due_date: string | null; paid_cents: number }[];
   deliverables: { progress: Progress }[];
 };
 type ExpenseRow = { id: string; spent_on: string; category: string; description: string | null; amount_cents: number; currency: string; project_id: string | null; projects: { title: string } | null };
@@ -43,18 +47,20 @@ function useAnalyticsData() {
   return useQuery({
     queryKey: ["analytics"],
     queryFn: async () => {
-      const [projects, invoices, expenses] = await Promise.all([
+      const [projects, invoices, expenses, payments] = await Promise.all([
         supabase
           .from("projects")
-          .select("id, title, currency, status, approved_at, completed_at, clients(name, company), milestones(id, amount_cents, status, paid_at, due_date), deliverables(progress)"),
+          .select("id, title, currency, status, approved_at, completed_at, budget_cents, approved_extras_cents, clients(name, company), milestones(id, amount_cents, status, paid_at, due_date, paid_cents), deliverables(progress)"),
         supabase.from("client_invoices").select("issue_date, amount_cents, currency, voided_at"),
         supabase.from("expenses").select("id, spent_on, category, description, amount_cents, currency, project_id, projects(title)").order("spent_on", { ascending: false }),
+        supabase.from("payments").select("amount_cents, paid_on, project_id"),
       ]);
-      for (const r of [projects, invoices, expenses]) if (r.error) throw r.error;
+      for (const r of [projects, invoices, expenses, payments]) if (r.error) throw r.error;
       return {
         projects: projects.data as unknown as ProjectRow[],
         invoices: invoices.data as { issue_date: string; amount_cents: number; currency: string; voided_at: string | null }[],
         expenses: expenses.data as unknown as ExpenseRow[],
+        payments: payments.data as { amount_cents: number; paid_on: string; project_id: string }[],
       };
     },
   });
@@ -84,7 +90,7 @@ export default function AnalyticsPage() {
 
   if (q.isLoading || profile.isLoading) return <PageSpinner />;
   if (q.isError || !q.data) return <Alert>Couldn't load analytics. Please refresh.</Alert>;
-  const { projects, invoices, expenses } = q.data;
+  const { projects, invoices, expenses, payments: paymentRows } = q.data;
 
   const used = [...new Set([...projects.map((p) => p.currency), ...expenses.map((e) => e.currency)])];
   const currency = currencyChoice ?? (used.includes(profile.data?.default_currency ?? "") ? profile.data!.default_currency : (used[0] ?? profile.data?.default_currency ?? "INR"));
@@ -96,19 +102,28 @@ export default function AnalyticsPage() {
       ? p.milestones.map((m) => ({ ...m, currency: p.currency, client: p.clients?.company || p.clients?.name || "Client", project: p.title, project_id: p.id }))
       : [],
   );
-  const rows = monthly(months, currency, { payments, invoices, expenses });
+  const byId = new Map(projects.map((p) => [p.id, p]));
+  const receipts: ReceiptFact[] = paymentRows.flatMap((r) => {
+    const p = byId.get(r.project_id);
+    return p ? [{ paid_on: r.paid_on, amount_cents: r.amount_cents, currency: p.currency, client: p.clients?.company || p.clients?.name || "Client" }] : [];
+  });
+  const rows = monthly(months, currency, { receipts, invoices, expenses });
   const idx = rows.findIndex((r) => r.month === month);
   const cur = rows[idx];
   const prev = rows[idx - 1];
   const owed = receivables(payments, currency, today);
-  const clients = topClients(payments, currency, months);
+  const clients = topClients(receipts, currency, months);
+  const approvedInCur = projects.filter((p) => p.currency === currency && p.approved_at && p.status !== "cancelled");
+  const avgValue = approvedInCur.length
+    ? Math.round(approvedInCur.reduce((s, p) => s + Number(p.budget_cents) + Number(p.approved_extras_cents), 0) / approvedInCur.length)
+    : 0;
   const inCur = projects.filter((p) => p.currency === currency);
   const active = inCur.filter((p) => p.status === "active");
   const approvedThisMonth = inCur.filter((p) => p.approved_at && monthOf(p.approved_at) === month).length;
   const completedThisMonth = inCur.filter((p) => p.completed_at && monthOf(p.completed_at) === month).length;
   const monthExpenses = expenses.filter((e) => e.currency === currency && monthOf(e.spent_on) === month);
   const byCategory = [...monthExpenses.reduce((m, e) => m.set(e.category, (m.get(e.category) ?? 0) + Number(e.amount_cents)), new Map<string, number>())].sort((a, b) => b[1] - a[1]);
-  const hasAnything = payments.length || expenses.length || invoices.length;
+  const hasAnything = payments.length || expenses.length || invoices.length || receipts.length;
 
   return (
     <>
@@ -173,7 +188,7 @@ export default function AnalyticsPage() {
                       {p.project} · due {formatDate(p.due_date)}
                     </p>
                   </Link>
-                  <span className="num shrink-0">{fmt(Number(p.amount_cents))}</span>
+                  <span className="num shrink-0">{fmt(remaining(p))}</span>
                 </li>
               ))}
             </ul>
@@ -204,7 +219,7 @@ export default function AnalyticsPage() {
 
       <Card className="mb-6">
         <CardHeader title="Projects" description={`${monthLabel(month, "long")} · ${currency}`} />
-        <dl className="num grid grid-cols-3 gap-4 border-b border-line px-5 py-4 text-center text-[13px]">
+        <dl className="num grid grid-cols-2 gap-4 border-b border-line px-5 py-4 text-center text-[13px] sm:grid-cols-4">
           <div>
             <dt className="text-muted">In progress</dt>
             <dd className="mt-1 text-lg font-semibold">{active.length}</dd>
@@ -216,6 +231,10 @@ export default function AnalyticsPage() {
           <div>
             <dt className="text-muted">Completed this month</dt>
             <dd className="mt-1 text-lg font-semibold">{completedThisMonth}</dd>
+          </div>
+          <div>
+            <dt className="text-muted">Average project value</dt>
+            <dd className="mt-1 text-lg font-semibold" data-testid="avg-project-value">{approvedInCur.length ? fmt(avgValue) : "—"}</dd>
           </div>
         </dl>
         {active.length ? (
