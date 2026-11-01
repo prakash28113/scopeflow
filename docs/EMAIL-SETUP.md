@@ -13,13 +13,13 @@ ScopeFlow's password-reset pages are built and tested. They stay switched off be
 1. Brevo → **Senders, Domains & Dedicated IPs → Domains → Add a domain** → `scopeflow.in`.
 2. Brevo shows a few DNS records (a Brevo code, DKIM and DMARC). Because scopeflow.in uses Cloudflare, Brevo may offer to add them for you; if not:
    Cloudflare → **scopeflow.in → DNS → Records → Add record**, and copy each record exactly (type, name, value). For CNAME records, set the proxy to **DNS only** (grey cloud).
-3. Back in Brevo, tap **Authenticate**. It can take a few minutes to turn green.
+3. Back in Brevo, tap **Authenticate**. It usually turns green within minutes but can take up to 48 hours.
 4. Brevo → **Senders → Add a sender**: name `ScopeFlow`, email `no-reply@scopeflow.in`.
 
 ## 3. Get the SMTP details
 Brevo → **SMTP & API → SMTP** tab:
 - **SMTP server:** `smtp-relay.brevo.com`, **Port:** `587`
-- **Login:** shown on that page (looks like `xxxxxx@smtp-brevo.com`)
+- **Login:** shown on that page (usually like `xxxxxx@smtp-brevo.com`; older accounts use the account email)
 - **SMTP key:** tap **Generate a new SMTP key**, name it `supabase`, and keep the page open. The key is shown only once.
 
 ## 4. Put them into Supabase
@@ -27,7 +27,7 @@ Supabase → your ScopeFlow project → **Authentication → Emails → SMTP Set
 
 | Field | Value |
 |---|---|
-| Sender email | `no-reply@scopeflow.in` |
+| Sender email | `no-reply@scopeflow.in` (must exactly match the Brevo sender) |
 | Sender name | `ScopeFlow` |
 | Host | `smtp-relay.brevo.com` |
 | Port | `587` |
