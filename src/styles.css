@@ -14,10 +14,10 @@
   --color-muted: #6b6f76;
   --color-subtle: #9a9da3;
 
-  --color-accent: #3f6fd1;
-  --color-accent-hover: #3560bd;
-  --color-accent-soft: #eef2fb;
-  --color-accent-line: #c9d6f2;
+  --color-accent: #005dd4; /* logo blue */
+  --color-accent-hover: #004cb0;
+  --color-accent-soft: #ebf3fe;
+  --color-accent-line: #c2d9f7;
 
   --color-positive: #1f7a4d;
   --color-positive-soft: #ebf5ef;
@@ -73,11 +73,11 @@
 
 /* ------------------------------------------------------------------ home page */
 .landing {
-  --lp-cobalt: #3f6fd1;
+  --lp-cobalt: #005dd4;
   --lp-ink: #101828;
   --lp-body: #475467;
   --lp-line: #eaecf0;
-  --lp-sky: #e3ebff;
+  --lp-sky: #e1edfd;
   --lp-amber: #f5a524;
   --lp-mint: #12b76a;
   --lp-mint-soft: #dcfae6;
@@ -103,7 +103,7 @@
 }
 .lp-wash-dark {
   background:
-    radial-gradient(40% 60% at 10% 100%, rgb(63 111 209 / 0.55) 0%, transparent 70%),
+    radial-gradient(40% 60% at 10% 100%, rgb(0 93 212 / 0.5) 0%, transparent 70%),
     radial-gradient(35% 55% at 95% 0%, rgb(18 183 106 / 0.28) 0%, transparent 70%),
     radial-gradient(30% 45% at 70% 110%, rgb(245 165 36 / 0.25) 0%, transparent 70%);
 }

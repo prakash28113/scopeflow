@@ -27,7 +27,7 @@ export default function Landing() {
 }
 
 const btnPrimary =
-  "inline-flex items-center justify-center whitespace-nowrap rounded-full bg-[var(--lp-cobalt)] px-6 py-3 text-[15px] font-semibold text-white shadow-[0_8px_24px_-10px_rgba(63,111,209,0.8)] transition hover:bg-[#3560bd]";
+  "inline-flex items-center justify-center whitespace-nowrap rounded-full bg-[var(--lp-cobalt)] px-6 py-3 text-[15px] font-semibold text-white shadow-[0_8px_24px_-10px_rgba(0,93,212,0.7)] transition hover:bg-[#004cb0]";
 const btnSecondary =
   "inline-flex items-center justify-center whitespace-nowrap rounded-full bg-white px-6 py-3 text-[15px] font-semibold text-[var(--lp-ink)] ring-1 ring-[var(--lp-line)] transition hover:ring-[#c7cdd8]";
 
