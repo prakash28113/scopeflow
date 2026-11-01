@@ -157,7 +157,7 @@ export function AppShell() {
         <a href={feedbackMailto(location.pathname)} className="font-medium text-accent hover:underline" data-testid="feedback-link">
           Send feedback
         </a>{" "}
-        and it comes straight to the person who builds ScopeFlow.
+        and it comes straight to the ScopeFlow team.
       </footer>
     </div>
   );
