@@ -1,6 +1,6 @@
 # Changelog
 
-## Payments done right + audit fixes — ready for release (owner approved: release together with invoices, progress and analytics)
+## Payments done right + audit fixes — live 1 Nov 2026 (release run 41323474103)
 
 - **Record payment** replaces "Mark paid":
   - an amount (part or full, prefilled with what's still due), the date it was **actually received**, the method (UPI, bank transfer, cash, card, cheque, PayPal, other) and a reference;
@@ -23,7 +23,7 @@
   - 8 real-PostgreSQL race checks;
   - a **32-step** browser walkthrough (new: part payments).
 
-## Progress, project timeline and monthly analytics — ready for review (not released)
+## Progress, project timeline and monthly analytics — live 1 Nov 2026 (release run 41323474103)
 
 - **Deliverable progress:**
   - after approval, each deliverable is *Not started / In progress / Delivered*, with a progress bar on the project;
@@ -44,7 +44,7 @@
   - 8 unit tests;
   - the browser walkthrough is now **31 steps**, adding progress & timeline and analytics & expenses.
 
-## Invoices — ready for review (not released)
+## Invoices — live 1 Nov 2026 (release run 41323474103)
 
 - **Create invoice** next to any payment of an approved project, including change-order payments. You choose the tax (defaults to the project's, e.g. GST 18%), optional CGST + SGST split, the due date (default 7 days) and a note.
 - **The invoice** is printable / Save as PDF. It shows:
