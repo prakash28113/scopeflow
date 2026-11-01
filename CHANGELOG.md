@@ -1,5 +1,16 @@
 # Changelog
 
+## Subscription plans, Phase 1–2 (branch `feature/subscription-plans`, after v1.1)
+
+- **Plans in the database** (`plans`): Free ($0; 2 active projects, 5 clients), Solo ($9/mo, $90/yr), Studio ($19/mo, $190/yr). Prices are hypotheses; none is purchasable yet.
+- **Limits enforced by the database** inside `save_project` (error `SF402` with usage). Editing, approvals, change orders, payments and client links are never limited, on any plan or after a downgrade. Completed and cancelled projects don't count.
+- **Subscriptions** (one per account, Free by default, backfilled for existing accounts) with statuses free / trial / active / past due / cancelled / expired; paid access needs a confirmed status, past due gets a 7-day grace, cancelled lasts to period end.
+- **Nobody can change their own plan:** only `admin_set_plan()` (SQL editor; no API role) or, later, a signature-verified payment webhook through `process_billing_event()` (service role only; idempotent per provider event; a failed payment never grants access).
+- **Audit and billing records:** append-only `subscription_changes`, `billing_events` (unique per provider event), `invoices` (owner-readable billing history), `early_access_requests`.
+- **Pages:** public `/pricing` (monthly/yearly, recommended plan, comparison with "Coming" labels, FAQ), signed-in **Plan & usage** (`/plan`: plan, status, usage meters, early access, billing history), and a plan-limit card instead of a form when Free is full.
+- **Database:** `supabase/migrations/20261102000000_subscription_plans.sql` (re-runnable) · rollback `supabase/rollback/20261102000000_subscription_plans_down.sql` (tested twice in a row).
+- **Tests:** 17 new database tests, plan helper unit tests, a real-PostgreSQL race (6 simultaneous creations on Free → exactly 2), and 2 new walkthrough checks (pricing page; limit, plan page, early access).
+
 ## v1.1 — Clear agreements, visible revisions (not yet deployed)
 
 **For freelancers**

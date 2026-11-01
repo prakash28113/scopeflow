@@ -18,6 +18,9 @@ export default function Landing() {
           <BetaBadge />
         </span>
         <nav className="flex items-center gap-2">
+          <Link to="/pricing" className={buttonClass("ghost", "sm")}>
+            Pricing
+          </Link>
           <Link to="/login" className={buttonClass("ghost", "sm")}>
             Sign in
           </Link>

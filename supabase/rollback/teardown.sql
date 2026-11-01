@@ -1,8 +1,8 @@
 -- =====================================================================
 -- ScopeFlow — TEARDOWN (destructive, irreversible)
 --
--- Removes every database object created by
--- supabase/migrations/20261031000000_scopeflow_schema.sql, including ALL
+-- Removes every database object created by the migrations in
+-- supabase/migrations/, including ALL
 -- ScopeFlow data (projects, approvals, history). Accounts in auth.users are
 -- NOT deleted (remove them in Authentication → Users if needed).
 --
@@ -13,6 +13,17 @@
 begin;
 
 drop trigger if exists on_auth_user_created on auth.users;
+
+-- Subscription plans (if installed).
+drop table if exists
+  public.early_access_requests, public.invoices, public.billing_events,
+  public.subscription_changes, public.subscriptions, public.plans
+cascade;
+drop function if exists
+  public.process_billing_event, public.admin_set_plan, public._set_subscription, public.join_early_access,
+  public.my_plan, public._check_plan_limits, public._plan_usage, public._effective_plan,
+  public._create_subscription, public._forbid_change
+cascade;
 
 drop table if exists
   public.activity_log,

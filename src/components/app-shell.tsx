@@ -92,6 +92,9 @@ export function AppShell() {
               <NavLink to="/dashboard" className={nav}>
                 Dashboard
               </NavLink>
+              <NavLink to="/plan" className={nav}>
+                Plan
+              </NavLink>
               <NavLink to="/settings" className={nav}>
                 Settings
               </NavLink>
@@ -117,6 +120,9 @@ export function AppShell() {
               <div className="absolute right-0 mt-2 w-48 rounded-lg border border-line bg-surface p-1 shadow-[0_12px_32px_-16px_rgba(22,24,29,0.3)]">
                 <Link to="/dashboard" className="block rounded-md px-3 py-2 text-sm hover:bg-sunken sm:hidden">
                   Dashboard
+                </Link>
+                <Link to="/plan" className="block rounded-md px-3 py-2 text-sm hover:bg-sunken sm:hidden">
+                  Plan & usage
                 </Link>
                 <Link to="/settings" className="block rounded-md px-3 py-2 text-sm hover:bg-sunken">
                   Settings

@@ -60,6 +60,9 @@ const guard = (f) =>
   : /_owned_project\(/.test(f.src) ? "project owner (owner_id = signed-in user, row locked)"
   : /_uid\(\)|auth\.uid\(\)/.test(f.src) ? "signed-in user's own rows"
   : f.name === "health" ? "none needed — returns 'ok'"
+  : f.name === "process_billing_event" ? "service role only — future signature-verified payment webhook"
+  : f.name === "admin_set_plan" ? "no API role — Supabase SQL editor only"
+  : f.name === "_create_subscription" ? "profile trigger only (Free plan for new accounts)"
   : f.name === "_handle_new_user" ? "sign-up trigger only (beta allowlist)"
   : f.definer ? "**REVIEW**" : "internal helper (not callable from the API)";
 p("## Functions");

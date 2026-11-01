@@ -48,13 +48,21 @@ export async function as<T = Record<string, unknown>>(
   });
 }
 
-export async function createUser(db: PGlite, email: string, fullName = "Test User") {
+/**
+ * Creates an account. Most suites test behaviour unrelated to plan limits, so accounts
+ * get an unlimited plan by default; the plan-limit suites pass { plan: "free" }.
+ */
+export async function createUser(db: PGlite, email: string, fullName = "Test User", opts: { plan?: "free" | "studio" } = {}) {
   const id = randomUUID();
   await db.query("insert into auth.users (id, email, raw_user_meta_data) values ($1, $2, $3)", [
     id,
     email,
     JSON.stringify({ full_name: fullName }),
   ]);
+  const plans = (await db.query<{ ok: boolean }>("select to_regproc('public.admin_set_plan') is not null as ok")).rows[0].ok;
+  if (plans && (opts.plan ?? "studio") !== "free") {
+    await db.query("select public.admin_set_plan($1, 'studio', 'active', 'year', null, 'test account')", [email]);
+  }
   return { kind: "user" as const, id };
 }
 

@@ -20,17 +20,22 @@ const FREELANCER_FUNCTIONS = [
   "complete_onboarding", "save_project", "delete_draft_project", "rotate_share_link", "revoke_share_link",
   "send_scope", "recall_scope", "resolve_revision", "create_change_order", "withdraw_change_order",
   "complete_change_order_work", "set_milestone_paid", "complete_project", "cancel_project",
-  "unread_notification_count", "mark_notifications_seen",
+  "unread_notification_count", "mark_notifications_seen", "my_plan", "join_early_access",
 ];
+// Plan changes: never callable from the app. admin_set_plan = SQL editor; process_billing_event = service role (future webhook).
+const BACK_OFFICE = ["admin_set_plan", "process_billing_event"];
 const AUTHENTICATED_FUNCTIONS = [...FREELANCER_FUNCTIONS, ...ANON_FUNCTIONS].sort();
-const SECURITY_DEFINER = [...FREELANCER_FUNCTIONS, ...PORTAL_FUNCTIONS, "health", "_handle_new_user"].sort();
+const SECURITY_DEFINER = [...FREELANCER_FUNCTIONS, ...PORTAL_FUNCTIONS, ...BACK_OFFICE, "health", "_handle_new_user", "_create_subscription"].sort();
 
 const OWNER_READABLE = [
   "profiles", "clients", "projects", "deliverables", "scope_snapshots", "scope_decisions", "revision_requests",
   "change_orders", "change_order_decisions", "milestones", "activity_log",
+  "subscription_changes", "invoices", "early_access_requests",
 ].sort();
-const NOT_READABLE = ["beta_allowlist", "portal_rate_limits", "share_links"].sort(); // share_links: column grant only
-const ALL_TABLES = [...OWNER_READABLE, ...NOT_READABLE].sort();
+// share_links, subscriptions: column grants only (never the token hash / provider ids).
+const NOT_READABLE = ["beta_allowlist", "portal_rate_limits", "share_links", "subscriptions", "billing_events"].sort();
+const PUBLIC_CATALOGUE = ["plans"]; // prices and limits for the pricing page; no personal data
+const ALL_TABLES = [...OWNER_READABLE, ...NOT_READABLE, ...PUBLIC_CATALOGUE].sort();
 const PRIVS = ["SELECT", "INSERT", "UPDATE", "DELETE", "TRUNCATE", "REFERENCES", "TRIGGER"];
 
 describe("tables and RLS", () => {
@@ -49,17 +54,17 @@ describe("tables and RLS", () => {
     expect(rows).toEqual([]);
   });
 
-  it("anon has no table privileges at all", async () => {
+  it("anon can read only the public plan catalogue, and write nothing", async () => {
     for (const t of ALL_TABLES) for (const p of PRIVS) {
       const [r] = await q<{ ok: boolean }>("select has_table_privilege('anon', $1, $2) as ok", [`public.${t}`, p]);
-      expect(r.ok, `anon ${p} ${t}`).toBe(false);
+      expect(r.ok, `anon ${p} ${t}`).toBe(p === "SELECT" && PUBLIC_CATALOGUE.includes(t));
     }
   });
 
   it("authenticated can only SELECT owner-scoped tables, and never write directly", async () => {
     for (const t of ALL_TABLES) for (const p of PRIVS) {
       const [r] = await q<{ ok: boolean }>("select has_table_privilege('authenticated', $1, $2) as ok", [`public.${t}`, p]);
-      const expected = p === "SELECT" && OWNER_READABLE.includes(t);
+      const expected = p === "SELECT" && (OWNER_READABLE.includes(t) || PUBLIC_CATALOGUE.includes(t));
       expect(r.ok, `authenticated ${p} ${t}`).toBe(expected);
     }
   });
@@ -72,12 +77,20 @@ describe("tables and RLS", () => {
     expect(readable).toEqual(["created_at", "expires_at", "id", "project_id", "revoked_at"]);
   });
 
+  it("owners may read their plan and status but never provider identifiers", async () => {
+    const cols = await q<{ column_name: string; ok: boolean }>(
+      "select column_name, has_column_privilege('authenticated', 'public.subscriptions', column_name, 'SELECT') as ok from information_schema.columns where table_schema = 'public' and table_name = 'subscriptions' order by column_name",
+    );
+    const hidden = cols.filter((c) => !c.ok).map((c) => c.column_name).sort();
+    expect(hidden).toEqual(["provider", "provider_customer_id", "provider_subscription_id"]);
+  });
+
   it("every policy is SELECT-only, for authenticated, and scoped to the owner", async () => {
     const policies = await q<{ tablename: string; cmd: string; roles: string; qual: string; permissive: string }>(
       "select tablename, cmd, roles::text, qual, permissive from pg_policies where schemaname = 'public' order by tablename",
     );
-    expect(policies.map((p) => p.tablename).sort()).toEqual([...OWNER_READABLE, "share_links"].sort());
-    for (const p of policies) {
+    expect(policies.map((p) => p.tablename).sort()).toEqual([...OWNER_READABLE, "share_links", "subscriptions", ...PUBLIC_CATALOGUE].sort());
+    for (const p of policies.filter((x) => !PUBLIC_CATALOGUE.includes(x.tablename))) {
       expect(p.cmd, p.tablename).toBe("SELECT");
       expect(p.roles, p.tablename).toBe("{authenticated}");
       expect(p.permissive, p.tablename).toBe("PERMISSIVE");
@@ -90,6 +103,15 @@ describe("tables and RLS", () => {
       "select c.relname as tbl from pg_trigger t join pg_class c on c.oid = t.tgrelid join pg_proc p on p.oid = t.tgfoid where p.proname = '_forbid_mutation' order by 1",
     );
     expect(rows.map((r) => r.tbl)).toEqual(["activity_log", "change_order_decisions", "scope_decisions", "scope_snapshots"]);
+    const audit = await q<{ tbl: string }>(
+      "select c.relname as tbl from pg_trigger t join pg_class c on c.oid = t.tgrelid join pg_proc p on p.oid = t.tgfoid where p.proname = '_forbid_change' order by 1",
+    );
+    expect(audit.map((r) => r.tbl)).toEqual(["subscription_changes"]);
+  });
+
+  it("the plan catalogue policy is read-only", async () => {
+    const [p] = await q<{ cmd: string; roles: string }>("select cmd, roles::text from pg_policies where tablename = 'plans'");
+    expect(p).toEqual({ cmd: "SELECT", roles: "{anon,authenticated}" });
   });
 });
 
@@ -122,6 +144,17 @@ describe("functions", () => {
       "select proname as name from pg_proc where pronamespace = 'public'::regnamespace and has_function_privilege('authenticated', oid, 'EXECUTE') order by 1",
     );
     expect(rows.map((r) => r.name).sort()).toEqual(AUTHENTICATED_FUNCTIONS);
+  });
+
+  it("plan changes are not callable from the app; the billing webhook entry point is service-role only", async () => {
+    for (const name of BACK_OFFICE) {
+      const [r] = await q<{ anon: boolean; auth: boolean; svc: boolean }>(
+        "select bool_or(has_function_privilege('anon', oid, 'EXECUTE')) as anon, bool_or(has_function_privilege('authenticated', oid, 'EXECUTE')) as auth, bool_or(has_function_privilege('service_role', oid, 'EXECUTE')) as svc from pg_proc where proname = $1",
+        [name],
+      );
+      expect([r.anon, r.auth], name).toEqual([false, false]);
+      expect(r.svc, name).toBe(name === "process_billing_event");
+    }
   });
 
   it("no function is executable via the PUBLIC pseudo-role", async () => {

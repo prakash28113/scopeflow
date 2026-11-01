@@ -34,15 +34,20 @@ try {
 
   const ownerId = randomUUID();
   await admin.query("insert into auth.users (id, email, raw_user_meta_data) values ($1, 'race@example.com', '{\"full_name\":\"Race\"}')", [ownerId]);
+  const hasPlans = (await admin.query("select to_regproc('public.admin_set_plan') is not null as ok")).rows[0].ok;
+  // The race account needs many projects: give it an unlimited plan (limits are raced separately below).
+  if (hasPlans) await admin.query("select public.admin_set_plan('race@example.com', 'studio', 'active', 'year', null, 'race test')");
+  const freeId = randomUUID();
+  await admin.query("insert into auth.users (id, email, raw_user_meta_data) values ($1, 'race-free@example.com', '{\"full_name\":\"Free\"}')", [freeId]);
 
   /** Runs one function call as a role on its own connection (= its own transaction). */
-  async function call(role, fn, args) {
+  async function call(role, fn, args, as = ownerId) {
     const c = conn();
     await c.connect();
     try {
       await c.query("begin");
       await c.query(`set local role ${role === "anon" ? "anon" : "authenticated"}`);
-      if (role !== "anon") await c.query("select set_config('request.jwt.claim.sub', $1, true)", [ownerId]);
+      if (role !== "anon") await c.query("select set_config('request.jwt.claim.sub', $1, true)", [as]);
       const ph = args.map((_, i) => `$${i + 1}`).join(", ");
       const r = await c.query(`select public.${fn}(${ph}) as r`, args);
       await c.query("commit");
@@ -115,6 +120,20 @@ try {
     const ms = (await admin.query("select count(*)::int n from milestones where change_order_id = $1", [coId])).rows[0].n;
     assert.equal(ms, 1);
   });
+
+  if (hasPlans) {
+    check("6 simultaneous project creations on the Free plan: exactly 2 succeed, the rest get the plan-limit error", async () => {
+      const out = await Promise.all(Array.from({ length: 6 }, (_, i) =>
+        call("owner", "save_project", [null, JSON.stringify({
+          title: `Free race ${i}`, currency: "INR", budget_cents: 1000, client: { name: "C", email: "same@example.com" },
+          deliverables: [{ title: "Logo", revisions_included: 1 }], milestones: [],
+        })], freeId)));
+      assert.equal(out.filter((o) => o.ok).length, 2, JSON.stringify(out));
+      assert.ok(out.filter((o) => !o.ok).every((o) => /Free plan includes 2 active projects/.test(o.error)), JSON.stringify(out));
+      const n = (await admin.query("select count(*)::int n from projects where owner_id = $1", [freeId])).rows[0].n;
+      assert.equal(n, 2);
+    });
+  }
 
   let failed = 0;
   for (const r of results) {

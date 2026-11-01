@@ -11,7 +11,8 @@ describe("rollback automation", () => {
     for (const m of migrations.filter((x) => x > "20261031000000_scopeflow_schema.sql")) {
       expect(rollbacks).toContain(m.replace(/\.sql$/, "_down.sql"));
     }
-    expect(rollbackPlan(migrations, rollbacks)).toEqual({ migration: "20261101000000_v1_1_agreement.sql", script: "20261101000000_v1_1_agreement_down.sql" });
+    const newest = [...migrations].sort().at(-1)!;
+    expect(rollbackPlan(migrations, rollbacks)).toEqual({ migration: newest, script: newest.replace(/\.sql$/, "_down.sql") });
     expect(() => rollbackPlan(["20300101000000_x.sql"], rollbacks)).toThrow(/No rollback script/);
   });
 
@@ -49,6 +50,6 @@ describe("rollback automation", () => {
     });
     expect(r).toBe("database-rolled-back");
     expect(bodies[0]).toBe("https://api.supabase.com/v1/projects/esixrjouserdayxxezid/database/query");
-    expect(bodies[1]).toContain("Rollback for ScopeFlow v1.1");
+    expect(bodies[1]).toMatch(/^-- Rollback for /);
   });
 });
