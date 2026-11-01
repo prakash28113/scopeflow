@@ -259,9 +259,9 @@ revoke all on all tables in schema scopeflow_admin from public, anon, authentica
 
 export async function smokeTest({ fetch, wait = sleep, appUrl, supabaseUrl, publishable }) {
   const passed = [];
-  // New deployments can take a few seconds to propagate.
+  // New deployments can take a few seconds to propagate; a brand-new workers.dev subdomain can take several minutes.
   let home;
-  for (let i = 0; i < 12; i++) {
+  for (let i = 0; i < 72; i++) {
     home = await fetch(appUrl + "/", { headers: { "Sec-Fetch-Mode": "navigate", Accept: "text/html" } }).catch(() => null);
     if (home?.ok) break;
     await wait(5_000);
