@@ -7,6 +7,8 @@ import { changeOrderDecisionSchema, revisionRequestSchema, scopeDecisionSchema }
 import { useAction } from "@/lib/use-action";
 import { portalRpc } from "@/lib/portal-rpc";
 import { formatMoney } from "@/lib/money";
+import { formatDate } from "@/lib/format";
+import { quoteExpired } from "@/lib/quote";
 
 /** Portal form helper: on success, confirm and refresh the portal so the page shows the new state. */
 function usePortalAction(token: string) {
@@ -52,9 +54,22 @@ function Choice<T extends string>({ value, onChange, options, label }: { value: 
   );
 }
 
-export function ScopeDecisionForm({ token, snapshotId, clientName }: { token: string; snapshotId: string; clientName: string }) {
+export function ScopeDecisionForm({
+  token,
+  snapshotId,
+  clientName,
+  validUntil,
+  freelancer,
+}: {
+  token: string;
+  snapshotId: string;
+  clientName: string;
+  validUntil?: string | null;
+  freelancer?: string;
+}) {
   const a = usePortalAction(token);
-  const [mode, setMode] = useState<"approved" | "rejected">("approved");
+  const expired = quoteExpired(validUntil);
+  const [mode, setMode] = useState<"approved" | "rejected">(expired ? "rejected" : "approved");
   const fe = a.fieldErrors;
 
   async function onSubmit(e: FormEvent<HTMLFormElement>) {
@@ -76,15 +91,21 @@ export function ScopeDecisionForm({ token, snapshotId, clientName }: { token: st
       {a.error ? <Alert>{a.error}</Alert> : null}
       <input type="hidden" name="snapshotId" value={snapshotId} />
       <input type="hidden" name="decision" value={mode} />
-      <Choice
-        label="Your decision"
-        value={mode}
-        onChange={setMode}
-        options={[
-          ["approved", "Approve scope"],
-          ["rejected", "Request changes"],
-        ]}
-      />
+      {expired ? (
+        <Alert tone="warning">
+          This quote was valid until {formatDate(validUntil)}, so it can't be approved now. Ask {freelancer ?? "your freelancer"} for an updated quote, or request changes below.
+        </Alert>
+      ) : (
+        <Choice
+          label="Your decision"
+          value={mode}
+          onChange={setMode}
+          options={[
+            ["approved", "Approve scope"],
+            ["rejected", "Request changes"],
+          ]}
+        />
+      )}
       <NameField id="scope-name" defaultName={clientName} error={fe.clientName} />
       {mode === "rejected" ? (
         <Field label="What should change?" htmlFor="scope-comment" error={fe.comment}>

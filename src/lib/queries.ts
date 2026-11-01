@@ -27,9 +27,10 @@ export type DashboardProject = Project & {
   deliverables?: { id: string; title: string; due_date: string | null; progress?: string }[];
 };
 
-export function useDashboard() {
+export function useDashboard(enabled = true) {
   return useQuery({
     queryKey: ["dashboard"],
+    enabled,
     queryFn: async () => {
       const [projects, changeOrders, revisions, activity, snapshots, invoices, links, followUps] = await Promise.all([
         supabase.from("projects").select("*, clients(name, company), milestones(id, title, amount_cents, status, due_date, paid_cents), deliverables(id, title, due_date, progress)").order("updated_at", { ascending: false }),
@@ -89,7 +90,7 @@ export function useProject(id: string | undefined) {
         await supabase.from("projects").select("*, clients(*), deliverables(*), milestones(*)").eq("id", id!).maybeSingle(),
       ) as FullProject | null;
       if (!project) return null;
-      const [snapshots, decisions, revisions, changeOrders, activity, links, invoices, payments, followUps] = await Promise.all([
+      const [snapshots, decisions, revisions, changeOrders, activity, links, invoices, payments, followUps, expenses] = await Promise.all([
         supabase.from("scope_snapshots").select("*").eq("project_id", id!).order("version", { ascending: false }),
         supabase.from("scope_decisions").select("*").eq("project_id", id!),
         supabase.from("revision_requests").select("*").eq("project_id", id!).order("created_at", { ascending: false }),
@@ -105,6 +106,7 @@ export function useProject(id: string | undefined) {
         supabase.from("client_invoices").select("id, number, milestone_id, voided_at, amount_cents, currency").eq("project_id", id!),
         supabase.from("payments").select("*").eq("project_id", id!).order("paid_on", { ascending: true }),
         supabase.from("follow_ups").select("id, due_on, note, done_at").eq("project_id", id!).is("done_at", null).order("due_on"),
+        supabase.from("expenses").select("amount_cents, currency").eq("project_id", id!),
       ]);
       project.deliverables.sort((a, b) => a.position - b.position);
       project.milestones.sort((a, b) => a.position - b.position);
@@ -119,6 +121,7 @@ export function useProject(id: string | undefined) {
         invoices: unwrap(invoices) as { id: string; number: string; milestone_id: string | null; voided_at: string | null }[],
         payments: unwrap(payments) as import("./payments").PaymentRecord[],
         followUps: unwrap(followUps) as { id: string; due_on: string; note: string; done_at: string | null }[],
+        expenses: unwrap(expenses) as { amount_cents: number; currency: string }[],
       };
     },
   });

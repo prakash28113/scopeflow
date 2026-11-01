@@ -2,7 +2,7 @@ import { Link, useParams } from "react-router";
 import { Alert } from "@/components/ui";
 import { PageSpinner } from "@/components/app-shell";
 import { AgreementTerms } from "@/components/agreement";
-import { PrintButton, QuoteTable, pricingFrom } from "@/components/quote";
+import { DownloadPdfButton, PrintButton, QuoteTable, pricingFrom } from "@/components/quote";
 import { useProject } from "@/lib/queries";
 import { displayName, useProfile } from "@/lib/auth";
 import { formatDate } from "@/lib/format";
@@ -32,6 +32,7 @@ export default function ProjectQuotePage() {
         exclusions: p.exclusions,
         terms: p.terms,
         extra_revision_cents: p.extra_revision_cents,
+        valid_until: p.valid_until ?? null,
         client: { name: p.clients.name, company: p.clients.company },
         deliverables: p.deliverables,
         milestones: p.milestones,
@@ -46,7 +47,10 @@ export default function ProjectQuotePage() {
         <Link to={`/projects/${p.id}`} className="text-[13px] text-muted hover:text-ink">
           ← {p.title}
         </Link>
-        <PrintButton label="Print or save as PDF" size="md" />
+        <div className="flex gap-2">
+          <PrintButton label="Print" size="md" />
+          <DownloadPdfButton name={`Quote ${d.title}`} size="md" variant="primary" />
+        </div>
       </div>
       <article data-print-scope className="rounded-[var(--radius-card)] border border-line bg-surface p-6 sm:p-10">
         <header className="flex flex-wrap items-start justify-between gap-6 border-b border-line pb-6">
@@ -94,6 +98,12 @@ export default function ProjectQuotePage() {
             <p className="text-muted">Due</p>
             <p className="font-medium">{formatDate(d.due_date)}</p>
           </div>
+          {d.valid_until ? (
+            <div>
+              <p className="text-muted">Valid until</p>
+              <p className="font-medium">{formatDate(d.valid_until)}</p>
+            </div>
+          ) : null}
         </section>
 
         {d.milestones.length ? (

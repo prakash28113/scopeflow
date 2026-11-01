@@ -43,6 +43,7 @@ export default function NewProject() {
     discount: "",
     tax: "",
     taxLabel: "",
+    validUntil: "",
   };
   return (
     <div className="mx-auto max-w-3xl">

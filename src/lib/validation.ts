@@ -27,6 +27,21 @@ const optionalDate = z
   .refine((v) => v === "" || /^\d{4}-\d{2}-\d{2}$/.test(v), "Use a valid date")
   .refine((v) => v === "" || !Number.isNaN(Date.parse(`${v}T00:00:00Z`)), "Use a valid date");
 
+/** Today's local date, YYYY-MM-DD. */
+const todayIso = () => {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+};
+
+/** "10" or "2.5" units → hundredths (1000, 250); null if invalid or above 100,000. */
+export function parseQuantity(input: string): number | null {
+  const s = input.trim();
+  if (!/^\d+(\.\d{1,2})?$/.test(s)) return null;
+  const [whole, frac = ""] = s.split(".");
+  const n = Number(whole) * 100 + Number(frac.padEnd(2, "0"));
+  return n <= 0 || n > 10_000_000 ? null : n;
+}
+
 const text = (max: number, label: string) =>
   z.string().trim().min(1, `${label} is required`).max(max, `${label} must be ${max} characters or fewer`);
 const optionalText = (max: number) => z.string().trim().max(max, `Must be ${max} characters or fewer`);
@@ -84,10 +99,12 @@ export const projectFormSchema = z
             .int("Use a whole number")
             .min(0, "Cannot be negative")
             .max(50, "Maximum is 50"),
-          priceType: z.enum(["fixed", "hourly"]).default("fixed"),
+          priceType: z.enum(["fixed", "hourly", "unit"]).default("fixed"),
           amount: z.string().trim().default(""),
           hours: z.string().trim().default(""),
           rate: z.string().trim().default(""),
+          quantity: z.string().trim().default(""),
+          unit: optionalText(24).default(""),
           dueDate: optionalDate.optional().default(""),
         }),
       )
@@ -109,11 +126,15 @@ export const projectFormSchema = z
     exclusions: optionalText(4000).default(""),
     terms: optionalText(4000).default(""),
     extraRevision: z.string().trim().default(""),
+    validUntil: optionalDate.optional().default(""),
   })
   .superRefine((v, ctx) => {
     if (v.itemised) {
       v.deliverables.forEach((d, i) => {
-        if (d.priceType === "hourly") {
+        if (d.priceType === "unit") {
+          if (parseQuantity(d.quantity) === null) ctx.addIssue({ code: "custom", path: ["deliverables", i, "quantity"], message: "Enter a quantity, e.g. 10" });
+          if (parseAmount(d.rate, v.currency) === null) ctx.addIssue({ code: "custom", path: ["deliverables", i, "rate"], message: "Enter the price per unit" });
+        } else if (d.priceType === "hourly") {
           if (parseHours(d.hours) === null) ctx.addIssue({ code: "custom", path: ["deliverables", i, "hours"], message: "Enter hours, e.g. 6 or 6.5" });
           if (parseAmount(d.rate, v.currency) === null) ctx.addIssue({ code: "custom", path: ["deliverables", i, "rate"], message: "Enter the hourly rate" });
         } else if (parseAmount(d.amount, v.currency) === null) {
@@ -136,6 +157,9 @@ export const projectFormSchema = z
         ctx.addIssue({ code: "custom", path: ["milestones", i, "amount"], message: "Enter an amount above zero" });
       }
     });
+    if (v.validUntil && v.validUntil < todayIso()) {
+      ctx.addIssue({ code: "custom", path: ["validUntil"], message: "Choose today or a later date" });
+    }
     if (v.startDate && v.dueDate && v.dueDate < v.startDate) {
       ctx.addIssue({ code: "custom", path: ["dueDate"], message: "Due date must be after the start date" });
     }
@@ -144,7 +168,12 @@ export const projectFormSchema = z
 export type ProjectForm = z.infer<typeof projectFormSchema>;
 
 /** Price of one deliverable row in the form, or null when incomplete. */
-export function formLineAmount(d: { priceType?: string; amount?: string; hours?: string; rate?: string }, currency: string): number | null {
+export function formLineAmount(d: { priceType?: string; amount?: string; hours?: string; rate?: string; quantity?: string }, currency: string): number | null {
+  if (d.priceType === "unit") {
+    const q = parseQuantity(d.quantity ?? "");
+    const r = parseAmount(d.rate ?? "", currency);
+    return q === null || r === null ? null : lineAmount({ type: "unit", quantityHundredths: q, rateMinor: r });
+  }
   if (d.priceType === "hourly") {
     const h = parseHours(d.hours ?? "");
     const r = parseAmount(d.rate ?? "", currency);
@@ -155,7 +184,7 @@ export function formLineAmount(d: { priceType?: string; amount?: string; hours?:
 }
 
 /** Live quote totals for the form; null unless every line is priced. */
-export function formQuote(f: { itemised: boolean; currency: string; discount: string; tax: string; deliverables: { priceType?: string; amount?: string; hours?: string; rate?: string }[] }) {
+export function formQuote(f: { itemised: boolean; currency: string; discount: string; tax: string; deliverables: { priceType?: string; amount?: string; hours?: string; rate?: string; quantity?: string }[] }) {
   if (!f.itemised) return null;
   const amounts = f.deliverables.map((d) => formLineAmount(d, f.currency));
   if (amounts.some((a) => a === null)) return null;
@@ -183,7 +212,9 @@ export function toProjectPayload(f: ProjectForm) {
       revisions_included: d.revisions,
       due_date: d.dueDate || null,
       ...(f.itemised
-        ? d.priceType === "hourly"
+        ? d.priceType === "unit"
+          ? { pricing_type: "unit", quantity: (parseQuantity(d.quantity)! / 100).toFixed(2), rate_cents: parseAmount(d.rate, f.currency), unit_label: d.unit }
+          : d.priceType === "hourly"
           ? { pricing_type: "hourly", hours: (parseHours(d.hours)! / 100).toFixed(2), rate_cents: parseAmount(d.rate, f.currency) }
           : { pricing_type: "fixed", amount_cents: parseAmount(d.amount, f.currency) }
         : {}),
@@ -196,6 +227,7 @@ export function toProjectPayload(f: ProjectForm) {
     exclusions: cleanLines(f.exclusions),
     terms: f.terms,
     extra_revision_cents: f.extraRevision ? parseAmount(f.extraRevision, f.currency) : null,
+    valid_until: f.validUntil || null,
   };
 }
 

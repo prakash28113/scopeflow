@@ -1,10 +1,10 @@
 # ScopeFlow — Product checklist status
 
-Audited 1 November 2026 against the live app (scopeflow.in) and the codebase, then updated after batches A–E (built 1 November, **not live yet**). Evidence comes from:
+Audited 1 November 2026 against the live app (scopeflow.in) and the codebase, then updated after batches A–E and F–H (built 1 November, **not live yet**). Evidence comes from:
 
-- 274 automated tests;
+- 300 automated tests;
 - 9 race tests on real PostgreSQL;
-- the 35-step browser walkthrough, with a phone pass of every main screen;
+- the 35-step browser walkthrough (now also downloading every PDF), with a phone pass of every main screen;
 - release smoke tests on the live site.
 
 **Legend:**
@@ -56,19 +56,19 @@ Audited 1 November 2026 against the live app (scopeflow.in) and the codebase, th
 | Repeat clients | ✅ | "Repeat client" tag; client reused by email |
 | Client activity history | ✅ | Approval history and payment records |
 | Professional quotations | ✅ | Printable quote |
-| Services, quantities, pricing | 🟡 | Fixed price, or hours × rate. **No general "quantity × unit price"** (e.g. 10 posts × ₹500) |
+| Services, quantities, pricing | ✅ (F–H) | Fixed price, hours × rate, or quantity × unit price (e.g. 10 posts × ₹500); the database works out every amount |
 | Discounts and taxes | ✅ | Discount %, GST (or any tax) |
-| Quotation validity | ❌ | |
-| Reusable quotation templates | 🟡 | Built-in templates only; **you can't save your own** |
+| Quotation validity | ✅ (F–H) | Optional "valid until" date, part of what the client approves. After it passes, the quote can't be sent or approved, but the client can still ask for changes |
+| Reusable quotation templates | ✅ (F–H) | Built-in templates, plus "Save as template" (up to 50 of your own, private to you) |
 | Share quotations with clients | ✅ | The client link shows the quote; print / PDF |
 | Convert approved quotation into project | ✅ | By design: the quote *is* the project scope, and approval activates the project |
-| Downloadable PDF quotations | 🟡 | Through the browser's "Save as PDF" (works on phone and desktop); **no one-tap PDF file** |
+| Downloadable PDF quotations | ✅ (F–H) | One-tap "Download PDF": A4 pages, made in the browser, nothing uploaded. Print is still there too |
 | Professional invoices | ✅ | GST tax invoice, locked numbering, UPI QR |
 | Advance / milestone / final invoices | ✅ | One invoice per payment milestone |
 | Paid and partially paid invoices | ✅ | |
 | Outstanding amounts | ✅ | |
 | Payment date and method | ✅ | |
-| Downloadable PDF invoices | 🟡 | Same as quotes: browser Save as PDF |
+| Downloadable PDF invoices | ✅ (F–H) | One-tap PDF for you and your client; also for the client's scope and the approval record |
 | Payment history | ✅ | Per project, per client and in the approval record |
 | Plan recurring invoice workflows | ❌ | Not planned yet (Phase 4) |
 
@@ -83,14 +83,14 @@ Audited 1 November 2026 against the live app (scopeflow.in) and the codebase, th
 | Average project value | ✅ | |
 | Revenue trends and charts | ✅ (A–E) | 12-month chart; on phones the last 6 months at a readable size, with all 12 in the table |
 | Client performance insights | ✅ | Top clients |
-| Project performance insights | 🟡 | Progress only; **no per-project profit** (expenses are already linked to projects) |
-| Date filters | 🟡 | Month and currency; **no quarter, financial year (Apr–Mar) or custom range** |
+| Project performance insights | ✅ (F–H) | Progress, plus profit by project (received minus linked expenses, with margin) in Analytics and on each project |
+| Date filters | ✅ (F–H) | Month, financial-year quarter, financial year (Apr–Mar) or custom dates, each compared with the period before; plus currency |
 | Pending approval reminders | ✅ | After 3 days |
 | Upcoming deadline reminders | ✅ | |
 | Overdue invoice alerts | ✅ | |
 | Pending payment reminders | ✅ | |
 | Follow-up reminders | ✅ | |
-| In-app notification centre | 🟡 | The bell shows client activity; Reminders are on the dashboard. **Not one place** |
+| In-app notification centre | ✅ (F–H) | One page with reminders and client activity; the bell shows a count of unread activity and a red dot when something needs attention |
 
 ## Phase 4 — Advanced (intentionally not started)
 
@@ -119,7 +119,7 @@ Audited 1 November 2026 against the live app (scopeflow.in) and the codebase, th
 
 ## Bugs and risks
 
-Items marked "fixed" are fixed in batches A–E (not live yet).
+Items marked "fixed" are fixed in batches A–E or F–H (not live yet).
 
 1. ✅ Fixed: **Dashboard "Upcoming" showed a part-paid payment's full amount.** It now shows the balance.
 2. ⛔ **No automatic database backups:** the weekly encrypted backup is built and tested, but it needs your `BACKUP_PASSPHRASE` secret.
@@ -128,7 +128,8 @@ Items marked "fixed" are fixed in batches A–E (not live yet).
 5. ✅ Fixed (found during A–E): **The dashboard was wider than a phone screen** when a project title was long. Phones quietly zoomed out, so the old check missed it; the check is stricter now.
 6. ℹ️ **Your email appears on invoices** sent to clients. This is normal for invoices and can be removed.
 7. ℹ️ **Supabase Free:** 5 GB/month data transfer. Fine for now; check Usage weekly.
-8. ℹ️ **The repository is public**, so backup files are downloadable by signed-in GitHub users. They're encrypted (AES-256-GCM) and the logs show no data. Making the repository private also works, within GitHub's free private-repo minutes.
+8. ℹ️ **PDFs are pictures of the page** (F–H): they look exactly like the screen, but the text can't be selected or searched. Printing to PDF still gives selectable text.
+9. ℹ️ **The repository is public**, so backup files are downloadable by signed-in GitHub users. They're encrypted (AES-256-GCM) and the logs show no data. Making the repository private also works, within GitHub's free private-repo minutes.
 
 ## Mobile UX issues
 
@@ -148,7 +149,7 @@ All four are fixed in A–E (not live yet):
 | C ✅ | **Core:** deliverable due dates (form, progress, reminders, client page) | M | Database change |
 | D ✅ | Phone navigation: bottom tab bar and jump links on the project page | M | No |
 | E ✅ | Automatic encrypted weekly backups through GitHub Actions (free) | M | **Yes**: needs the `BACKUP_PASSPHRASE` secret, added by you (uses the existing Supabase token) |
-| F | Quotes: "valid until", quantity × unit price lines, save your own templates | M | Database change |
-| G | Analytics: per-project profit; quarter / financial-year / custom date filters; one notification centre | M | No |
-| H | One-tap PDF download for quote, invoice and record (free library) | M | No |
+| F ✅ | Quotes: "valid until", quantity × unit price lines, save your own templates | M | Database change |
+| G ✅ | Analytics: per-project profit; quarter / financial-year / custom date filters; one notification centre | M | No |
+| H ✅ | One-tap PDF download for quote, invoice and record (free library) | M | No |
 | — | Phase 4 (recurring invoices, retainers, automation) | L | After real-freelancer validation |

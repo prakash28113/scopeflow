@@ -1,9 +1,29 @@
+import { useState } from "react";
 import { Button } from "./ui";
+import { useToast } from "./toast";
 import { formatMoney } from "@/lib/money";
 import { quoteTotals } from "@/lib/quote";
 import type { PricingType, QuotePricing } from "@/lib/types";
 
-type Line = { id?: string; title: string; pricing_type?: PricingType | null; hours?: string | number | null; rate_cents?: number | null; amount_cents?: number | null };
+type Line = {
+  id?: string;
+  title: string;
+  pricing_type?: PricingType | null;
+  hours?: string | number | null;
+  rate_cents?: number | null;
+  amount_cents?: number | null;
+  quantity?: string | number | null;
+  unit_label?: string | null;
+};
+
+/** "6.5 h × ₹1,200.00" or "10 posts × ₹500.00"; null for fixed prices. */
+export function lineBasis(l: Line, currency: string): string | null {
+  if (l.rate_cents == null) return null;
+  const rate = formatMoney(Number(l.rate_cents), currency);
+  if (l.pricing_type === "hourly" && l.hours != null) return `${Number(l.hours)} h × ${rate}`;
+  if (l.pricing_type === "unit" && l.quantity != null) return `${Number(l.quantity)}${l.unit_label ? ` ${l.unit_label}` : ""} × ${rate}`;
+  return null;
+}
 
 /** Quote totals from saved deliverables + project settings (the same maths the database uses). */
 export function pricingFrom(lines: Line[], discountBps?: number | null, taxBps?: number | null, taxLabel?: string | null): QuotePricing | null {
@@ -31,11 +51,7 @@ export function QuoteTable({ lines, pricing, currency, className }: { lines: Lin
             <tr key={l.id ?? i} className="border-t border-line align-top">
               <td className="py-2 pr-3">
                 {l.title}
-                {l.pricing_type === "hourly" && l.hours != null && l.rate_cents != null ? (
-                  <span className="num block text-[12px] text-muted">
-                    {Number(l.hours)} h × {fmt(Number(l.rate_cents))}
-                  </span>
-                ) : null}
+                {lineBasis(l, currency) ? <span className="num block text-[12px] text-muted">{lineBasis(l, currency)}</span> : null}
               </td>
               <td className="num py-2 text-right">
                 {fmt(Number(l.amount_cents ?? 0))}
@@ -92,6 +108,40 @@ export function PrintButton({ label = "Save as PDF", size = "sm" }: { label?: st
       }}
     >
       {label}
+    </Button>
+  );
+}
+
+/**
+ * Saves the document as a PDF file in one tap (made in the browser; nothing is uploaded).
+ * Finds the document from `selector`, or the [data-print-scope] element around or on the page.
+ */
+export function DownloadPdfButton({ name, selector, size = "sm", variant = "secondary" }: { name: string; selector?: string; size?: "sm" | "md"; variant?: "primary" | "secondary" }) {
+  const [busy, setBusy] = useState(false);
+  const toast = useToast();
+  return (
+    <Button
+      type="button"
+      variant={variant}
+      size={size}
+      className="print:hidden"
+      disabled={busy}
+      onClick={async (e) => {
+        const btn = e.currentTarget;
+        const el = (selector ? document.querySelector(selector) : (btn.closest("[data-print-scope]") ?? document.querySelector("[data-print-scope]"))) as HTMLElement | null;
+        if (!el) return;
+        setBusy(true);
+        try {
+          const { downloadPdf } = await import("@/lib/pdf");
+          await downloadPdf(el, name);
+        } catch {
+          toast("danger", "Couldn't create the PDF on this device. Use Print and choose “Save as PDF” instead.");
+        } finally {
+          setBusy(false);
+        }
+      }}
+    >
+      {busy ? "Preparing PDF…" : "Download PDF"}
     </Button>
   );
 }

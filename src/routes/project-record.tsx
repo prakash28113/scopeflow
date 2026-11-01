@@ -3,7 +3,7 @@ import { Link, useParams } from "react-router";
 import { useQuery } from "@tanstack/react-query";
 import { Alert, cx } from "@/components/ui";
 import { PageSpinner } from "@/components/app-shell";
-import { PrintButton, QuoteTable } from "@/components/quote";
+import { DownloadPdfButton, PrintButton, QuoteTable } from "@/components/quote";
 import { useProject } from "@/lib/queries";
 import { displayName, useProfile } from "@/lib/auth";
 import { supabase } from "@/lib/supabase";
@@ -79,7 +79,10 @@ export default function ProjectRecordPage() {
         <Link to={`/projects/${p.id}`} className="text-[13px] text-muted hover:text-ink">
           ← {p.title}
         </Link>
-        <PrintButton label="Print or save as PDF" size="md" />
+        <div className="flex gap-2">
+          <PrintButton label="Print" size="md" />
+          <DownloadPdfButton name={`Project record ${p.title}`} size="md" variant="primary" />
+        </div>
       </div>
       <article data-print-scope data-testid="project-record" className="rounded-[var(--radius-card)] border border-line bg-surface p-6 sm:p-10">
         <header className="border-b border-line pb-6">

@@ -38,6 +38,21 @@ for (const [who, p] of [["freelancer", f], ["client", c]]) {
 }
 const shot = (p, name, full = true) => p.screenshot({ path: `${OUT}${name}.png`, fullPage: full });
 const step = (s) => console.log(`• ${s}`);
+/** Taps "Download PDF" and checks a real, multi-kilobyte PDF arrives with the expected name. */
+async function pdfDownload(p, button, nameRe) {
+  const [download] = await Promise.all([p.waitForEvent("download", { timeout: 30000 }), button.click()]);
+  assert.match(download.suggestedFilename(), nameRe);
+  const file = await download.path();
+  const { readFileSync } = await import("node:fs");
+  const bytes = readFileSync(file);
+  assert.equal(bytes.subarray(0, 5).toString(), "%PDF-");
+  assert.ok(bytes.length > 15_000, `PDF too small: ${bytes.length} bytes`);
+  const { writeFileSync } = await import("node:fs");
+  writeFileSync(`${OUT}${download.suggestedFilename()}`, bytes); // kept with the screenshots for review
+  return bytes;
+}
+const IN_14_DAYS = (() => { const d = new Date(Date.now() + 14 * 86_400_000); d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); return d.toISOString().slice(0, 10); })();
+const longDate = (iso) => new Intl.DateTimeFormat("en", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" }).format(new Date(`${iso}T00:00:00Z`));
 const accept = (p) => p.once("dialog", (d) => d.accept());
 const SOON = (() => { const d = new Date(Date.now() + 3 * 86_400_000); d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); return d.toISOString().slice(0, 10); })();
 
@@ -275,6 +290,8 @@ try {
   await shot(f, "12-dashboard");
   await f.getByRole("link", { name: /Notifications/ }).click();
   await f.getByText("Change order #1 approved by Dana Whitfield").waitFor();
+  await f.getByRole("heading", { name: /^Reminders/ }).waitFor(); // one place: reminders and client activity
+  await f.getByRole("heading", { name: "Client activity" }).waitFor();
   await shot(f, "13-notifications");
   await f.getByRole("link", { name: "Notifications", exact: true }).waitFor();
 
@@ -349,7 +366,11 @@ try {
   await f.getByLabel("Client email").fill("dana@northwind.test");
   await f.getByLabel("Currency").selectOption("INR");
   await f.getByText("Price each deliverable").click();
-  await f.locator("#d-price-0").fill("150");
+  // Per unit: 3 options × ₹50 = ₹150.
+  await f.getByRole("radio", { name: "Per unit" }).first().click();
+  await f.locator("#d-qty-0").fill("3");
+  await f.locator("#d-unit-0").fill("options");
+  await f.locator("#d-each-0").fill("50");
   await f.getByRole("radio", { name: "Hourly" }).nth(1).click();
   await f.locator("#d-hours-1").fill("4");
   await f.locator("#d-rate-1").fill("50");
@@ -362,6 +383,16 @@ try {
   await f.getByRole("button", { name: "Add milestone" }).click();
   await f.getByLabel("Milestone 1").fill("Advance");
   await f.locator("#m-amt-0").fill("206.50");
+  await f.getByLabel("Quote valid until").fill(IN_14_DAYS);
+  // Save this scope as my own template, then apply it again: same quote.
+  await f.getByRole("button", { name: "Save as template" }).click();
+  await f.getByLabel("Template name").fill("Menu cards");
+  await f.getByRole("button", { name: "Save template" }).click();
+  await f.getByText(/Saved as template “Menu cards”/).waitFor();
+  await f.getByTestId("saved-templates").getByRole("button", { name: "Menu cards", exact: true }).click();
+  await f.getByText("Menu cards template applied").waitFor();
+  assert.equal(await f.locator("#d-qty-0").inputValue(), "3");
+  assert.match(await f.getByTestId("quote-summary").innerText(), /Total\s+₹413\.00/);
   await shot(f, "19-quote-builder");
   await f.getByRole("button", { name: "Create project" }).click();
   await f.waitForURL(/\/projects\/[0-9a-f-]{36}$/);
@@ -372,7 +403,9 @@ try {
   await f.getByText("Prepared for").waitFor();
   assert.match(await f.getByTestId("quote-table").innerText(), /Total\s+₹413\.00/);
   assert.match(await f.getByTestId("quote-table").innerText(), /4 h × ₹50\.00/);
-  await f.getByRole("button", { name: "Print or save as PDF" }).waitFor();
+  assert.match(await f.getByTestId("quote-table").innerText(), /3 options × ₹50\.00/);
+  await f.getByText(longDate(IN_14_DAYS)).waitFor(); // valid until
+  await pdfDownload(f, f.getByRole("button", { name: "Download PDF" }), /^Quote-Menu-card-for-Northwind\.pdf$/);
   await shot(f, "20-printable-quote");
 
   step("launch prep: UPI payment details, WhatsApp + email sharing, client pays via UPI");
@@ -397,6 +430,8 @@ try {
   await shot(f, "23-share-whatsapp", false);
   await f.getByRole("button", { name: "Done", exact: true }).click();
   await c.goto(menuPortal);
+  await c.getByTestId("quote-valid-until").getByText(longDate(IN_14_DAYS)).waitFor();
+  await pdfDownload(c, c.getByRole("button", { name: "Download PDF" }).first(), /^Menu-card-for-Northwind-scope-v1\.pdf$/);
   await c.getByRole("button", { name: "Approve scope" }).last().click();
   await c.getByRole("checkbox").check();
   await c.getByRole("button", { name: "Approve scope" }).last().click();
@@ -447,7 +482,8 @@ try {
   assert.match(text, /GSTIN: 36ABCDE1234F1Z5/);
   assert.match(text, /Thank you, Dana!/);
   await doc.getByRole("img", { name: /UPI QR code to pay RS-/ }).waitFor();
-  await f.getByRole("button", { name: "Print or save as PDF" }).waitFor();
+  await f.getByRole("button", { name: "Print", exact: true }).waitFor();
+  await pdfDownload(f, f.getByRole("button", { name: "Download PDF" }), new RegExp(`^Invoice-RS-${year}-001\\.pdf$`));
   await shot(f, "29-invoice");
   // The payment now links to its invoice instead of offering a second one.
   await f.goto(menuUrl);
@@ -457,6 +493,7 @@ try {
   await c.getByTestId("portal-invoices").getByText(`RS-${year}-001`).waitFor();
   await c.getByTestId("portal-invoices").getByRole("button", { name: "View" }).click();
   await c.getByTestId("invoice-document").getByText(/Total\s*₹206\.50/).waitFor();
+  await pdfDownload(c, c.getByRole("button", { name: "Download PDF" }).last(), new RegExp(`^Invoice-RS-${year}-001\\.pdf$`));
   await shot(c, "30-portal-invoice-mobile");
   // The invoices list, then void (the number is never reused).
   await f.goto(`${BASE}/invoices`);
@@ -499,6 +536,7 @@ try {
   assert.equal(await f.getByTestId("kpi-received").innerText(), "$1,600.00");
   await f.getByLabel("Amount (USD)").fill("50");
   await f.getByLabel("What for (optional)").fill("Figma");
+  await f.getByLabel("Project (optional)").selectOption({ label: "Brand identity for Northwind Coffee" });
   await f.getByRole("button", { name: "Add expense" }).click();
   await f.getByText("Expense added.").waitFor();
   await f.getByTestId("expense-list").getByText("Figma").waitFor();
@@ -509,10 +547,28 @@ try {
   await f.getByLabel("Currency").selectOption("INR");
   await f.getByTestId("owed-outstanding").getByText("₹206.50").waitFor();
   await f.getByLabel("Currency").selectOption("USD");
+  // Profit by project: received minus the linked expense.
+  assert.match(await f.getByTestId("project-profit").innerText(), /Brand identity for Northwind Coffee[\s\S]*\$1,600\.00\s+−\$50\.00\s+\$1,550\.00/);
+  // Quarter and financial year include this month.
+  await f.getByLabel("Period").selectOption("quarter");
+  assert.equal(await f.getByTestId("kpi-received").innerText(), "$1,600.00");
+  await f.getByLabel("Period").selectOption("fy");
+  assert.equal(await f.getByTestId("kpi-received").innerText(), "$1,600.00");
+  await f.getByLabel("Period").selectOption("custom");
+  await f.getByLabel("From").fill("2020-01-01");
+  await f.getByLabel("To").fill("2020-12-31");
+  assert.equal(await f.getByTestId("kpi-received").innerText(), "$0.00");
+  await f.getByLabel("Period").selectOption("month");
   await shot(f, "32-analytics");
+  await f.goto(projectUrl);
+  assert.equal(await f.getByTestId("project-profit-so-far").innerText(), "$1,550.00");
+  await f.goto(`${BASE}/analytics`);
   accept(f);
   await f.getByRole("button", { name: "Delete expense Figma" }).click();
   await f.getByText("No expenses logged for").waitFor();
+  await f.goto(projectUrl);
+  await f.getByText("Contract total").waitFor();
+  assert.equal(await f.getByTestId("project-profit-so-far").count(), 0); // no linked expenses left
 
   step("part payments: record part of a payment with its date and method; invoice, client page and analytics show the balance");
   await f.goto(menuUrl);
@@ -589,7 +645,9 @@ try {
   assert.match(rtext, /outside the agreed scope/);
   assert.match(rtext, /Bank transfer · Wise transfer #4471/);
   assert.match(rtext, /full activity log/i);
-  await f.getByRole("button", { name: "Print or save as PDF" }).waitFor();
+  // A long record spans several PDF pages.
+  const recordPdf = await pdfDownload(f, f.getByRole("button", { name: "Download PDF" }), /^Project-record-Brand-identity-for-Northwind-Coffee\.pdf$/);
+  assert.ok((recordPdf.toString("latin1").match(/\/Type \/Page\b/g) ?? []).length >= 2, "record PDF has more than one page");
   await shot(f, "35-approval-record");
 
   step("outside requests, due dates, adding clients: log a WhatsApp request, the client sees it; add a client and start a project for them");

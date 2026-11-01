@@ -27,10 +27,12 @@ export default function EditProject() {
       title: d.title,
       description: d.description ?? "",
       revisions: d.revisions_included,
-      priceType: d.pricing_type === "hourly" ? "hourly" : "fixed",
+      priceType: d.pricing_type === "hourly" || d.pricing_type === "unit" ? d.pricing_type : "fixed",
       amount: d.pricing_type === "fixed" && d.amount_cents != null ? toInputAmount(Number(d.amount_cents), p.currency) : "",
       hours: d.hours != null ? String(Number(d.hours)) : "",
       rate: d.rate_cents != null ? toInputAmount(Number(d.rate_cents), p.currency) : "",
+      quantity: d.quantity != null ? String(Number(d.quantity)) : "",
+      unit: d.unit_label ?? "",
       dueDate: d.due_date ?? "",
     })),
     milestones: p.milestones.map((m) => ({ title: m.title, amount: toInputAmount(Number(m.amount_cents), p.currency), dueDate: m.due_date ?? "" })),
@@ -40,6 +42,7 @@ export default function EditProject() {
     discount: bpsToPercent(p.discount_bps),
     tax: bpsToPercent(p.tax_bps),
     taxLabel: p.tax_label ?? "",
+    validUntil: p.valid_until ?? "",
     extraRevision: p.extra_revision_cents === null || p.extra_revision_cents === undefined ? "" : toInputAmount(Number(p.extra_revision_cents), p.currency),
   };
   return (

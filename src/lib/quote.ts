@@ -4,10 +4,15 @@
  */
 import { hourlyAmount } from "./pricing";
 
-export type QuoteLine = { type: "fixed"; amountMinor: number } | { type: "hourly"; hoursHundredths: number; rateMinor: number };
+export type QuoteLine =
+  | { type: "fixed"; amountMinor: number }
+  | { type: "hourly"; hoursHundredths: number; rateMinor: number }
+  | { type: "unit"; quantityHundredths: number; rateMinor: number };
 
 export function lineAmount(l: QuoteLine): number {
-  return l.type === "fixed" ? l.amountMinor : hourlyAmount(l.hoursHundredths, l.rateMinor);
+  if (l.type === "fixed") return l.amountMinor;
+  // Quantity × unit price rounds exactly like hours × rate.
+  return hourlyAmount(l.type === "hourly" ? l.hoursHundredths : l.quantityHundredths, l.rateMinor);
 }
 
 /** Half away from zero, like PostgreSQL round(numeric), for non-negative integers: round(n * bps / 10000). */
@@ -32,6 +37,15 @@ export function parsePercent(input: string): number | null {
   const [w, f = ""] = s.split(".");
   const bps = Number(w) * 100 + Number(f.padEnd(2, "0"));
   return bps <= 10000 ? bps : null;
+}
+
+/**
+ * A quote stays open through its last day everywhere on Earth (UTC−12), matching the database,
+ * so a client in any time zone gets the whole day.
+ */
+export function quoteExpired(validUntil: string | null | undefined, now = new Date()): boolean {
+  if (!validUntil) return false;
+  return validUntil < new Date(now.getTime() - 12 * 3_600_000).toISOString().slice(0, 10);
 }
 
 export const bpsToPercent = (bps: number | null | undefined) => (bps ? String(bps / 100) : "");
