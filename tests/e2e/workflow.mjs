@@ -33,7 +33,8 @@ try {
   // ---------------------------------------------------------- freelancer onboarding
   step("landing + sign up (no email confirmation)");
   await f.goto(BASE);
-  await f.getByRole("link", { name: "Start free" }).waitFor();
+  await f.getByRole("heading", { name: /Just one small change/ }).waitFor();
+  await f.getByRole("link", { name: "Start free" }).first().waitFor();
   await f.getByRole("link", { name: "Privacy" }).click();
   await f.getByRole("heading", { name: "Privacy Policy" }).waitFor();
   await f.goto(`${BASE}/terms`);
