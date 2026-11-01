@@ -12,7 +12,8 @@ export type ScopeCheckInput = {
   currency: string;
   budget: string;
   dueDate: string;
-  deliverables: { title: string; description: string; revisions: number | string }[];
+  deliverables: { title: string; description: string; revisions: number | string; dueDate?: string }[];
+  startDate?: string;
   milestones: { amount: string }[];
   exclusions: string;
   terms: string;
@@ -75,6 +76,12 @@ export function checkScope(v: ScopeCheckInput): ScopeHint[] {
     });
   }
   if (!v.dueDate) hints.push({ level: "tip", message: "Add a due date so the timeline is part of what the client approves." });
+  for (const d of named) {
+    if (d.dueDate && v.dueDate && d.dueDate > v.dueDate)
+      hints.push({ level: "warn", message: `${d.name} is due after the project's due date. Move it earlier, or the project date later.` });
+    if (d.dueDate && v.startDate && d.dueDate < v.startDate)
+      hints.push({ level: "warn", message: `${d.name} is due before the project starts.` });
+  }
   if (!v.terms.trim()) hints.push({ level: "tip", message: "Add payment terms, for example “50% advance, final files after full payment”." });
 
   const budget = parseAmount(v.budget, v.currency);

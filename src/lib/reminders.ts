@@ -20,6 +20,8 @@ export type ReminderInput = {
   payments: { id: string; title: string; due_date: string | null; amount_cents: number; paid_cents: number; status: string; project_id: string; has_invoice: boolean }[];
   links: { project_id: string; expires_at: string; revoked_at: string | null }[];
   followUps: { id: string; due_on: string; note: string; project_id: string | null; done_at: string | null }[];
+  /** Deliverables with a due date, on any project (only active ones count). */
+  deliverables?: { id: string; title: string; due_date: string | null; progress?: string; project_id: string }[];
 };
 
 const dayMs = 86_400_000;
@@ -76,6 +78,15 @@ export function buildReminders(x: ReminderInput): Reminder[] {
     if (left < 0) out.push({ id: `due-${p.id}`, tone: "danger", title: `“${p.title}” is past its deadline`, detail: `Was due ${days(-left)} ago. Deliver, or agree a new date with a change order`, href: `/projects/${p.id}`, sort: left });
     else if (left <= DEADLINE_SOON_DAYS)
       out.push({ id: `due-${p.id}`, tone: "info", title: `“${p.title}” is due ${left === 0 ? "today" : left === 1 ? "tomorrow" : `in ${days(left)}`}`, detail: `For ${p.client}`, href: `/projects/${p.id}`, sort: 30 + left });
+  }
+  // 5b. Deliverables: late, or due within a few days, and not delivered (extensions count).
+  for (const d of x.deliverables ?? []) {
+    const p = project.get(d.project_id);
+    if (!p || p.status !== "active" || !d.due_date || d.progress === "delivered") continue;
+    const left = daysBetween(x.today, addDays(d.due_date, p.extra_days ?? 0));
+    if (left < 0) out.push({ id: `del-${d.id}`, tone: "danger", title: `“${d.title}” is ${days(-left)} late`, detail: `${p.title} · for ${p.client}`, href: `/projects/${p.id}`, sort: left });
+    else if (left <= DEADLINE_SOON_DAYS)
+      out.push({ id: `del-${d.id}`, tone: "info", title: `“${d.title}” is due ${left === 0 ? "today" : left === 1 ? "tomorrow" : `in ${days(left)}`}`, detail: `${p.title} · for ${p.client}`, href: `/projects/${p.id}`, sort: 30 + left });
   }
   // 6. Client links about to expire while the client still has to act.
   for (const l of x.links) {

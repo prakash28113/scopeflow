@@ -7,6 +7,7 @@ import { InvoiceDocument } from "@/components/invoice-document";
 import { invoiceStatus } from "@/lib/invoice";
 import { localToday } from "@/lib/upcoming";
 import { progressLabel, progressSummary } from "@/lib/progress";
+import { sourceLabel } from "@/components/log-request";
 import { PageSpinner } from "@/components/app-shell";
 import { usePortal } from "@/lib/queries";
 import { tokenFromHash } from "@/lib/portal-link";
@@ -195,7 +196,10 @@ export default function PortalPage() {
                       <p className="text-sm font-medium">{d.title}</p>
                       {d.description ? <p className="mt-0.5 whitespace-pre-line text-[13px] text-muted">{d.description}</p> : null}
                     </div>
-                    <Tag tone={d.progress === "delivered" ? "positive" : d.progress === "in_progress" ? "accent" : "neutral"}>{progressLabel(d.progress)}</Tag>
+                    <div className="flex shrink-0 flex-col items-end gap-1">
+                      <Tag tone={d.progress === "delivered" ? "positive" : d.progress === "in_progress" ? "accent" : "neutral"}>{progressLabel(d.progress)}</Tag>
+                      {d.due_date ? <span className="text-[12px] text-muted">Due {formatDate(currentDueDate(d.due_date, p.extra_days ?? 0))}</span> : null}
+                    </div>
                   </div>
                   <RevisionMeter used={d.revisions_used + (d.revisions_extra ?? 0)} included={d.revisions_included} />
                 </li>
@@ -220,7 +224,10 @@ export default function PortalPage() {
                     </div>
                     <p className="mt-1 whitespace-pre-line text-[13px] text-ink-2">{r.description}</p>
                     {r.resolution_note ? <p className="mt-1 text-[12px] text-muted">Reply: {r.resolution_note}</p> : null}
-                    <p className="mt-1 text-[12px] text-muted">{formatDateTime(r.created_at)}</p>
+                    <p className="mt-1 text-[12px] text-muted">
+                      {sourceLabel(r.source) ? `You asked by ${sourceLabel(r.source)}${r.received_on ? ` on ${formatDate(r.received_on)}` : ""} · recorded by ${v.freelancer.name} · ` : ""}
+                      {formatDateTime(r.created_at)}
+                    </p>
                   </li>
                 ))}
               </ul>
@@ -363,7 +370,9 @@ function ScopeDocument({
               <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap items-baseline justify-between gap-x-3">
                   <p className="text-sm font-medium">{d.title}</p>
-                  <p className="text-[12px] text-muted">{pluralize(d.revisions_included, "revision")} included</p>
+                  <p className="text-[12px] text-muted">
+                    {pluralize(d.revisions_included, "revision")} included{d.due_date ? ` · Due ${formatDate(d.due_date)}` : ""}
+                  </p>
                 </div>
                 {d.description ? <p className="mt-0.5 whitespace-pre-line text-[13px] text-muted">{d.description}</p> : null}
               </div>

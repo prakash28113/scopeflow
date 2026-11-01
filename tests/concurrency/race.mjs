@@ -98,6 +98,23 @@ try {
     assert.equal(n, 1);
   });
 
+  check("client link and logged WhatsApp requests at the same time: still exactly 2 included rounds; a double-tapped log is recorded once", async () => {
+    const p = await approve(await approvedProject(2));
+    const rid = randomUUID();
+    const logged = (i, id = randomUUID()) =>
+      call("owner", "log_client_request", [p.id, JSON.stringify({ kind: "revision", deliverable_id: p.deliverableId, description: `logged ${i}`, source: "whatsapp", client_request_id: id })]);
+    const out = await Promise.all([
+      ...Array.from({ length: 4 }, (_, i) => call("anon", "portal_request_revision", [p.token, "revision", p.deliverableId, `link ${i}`, "Client", randomUUID()])),
+      ...Array.from({ length: 4 }, (_, i) => logged(i)),
+      ...Array.from({ length: 3 }, () => logged("same", rid)),
+    ]);
+    assert.ok(out.every((o) => o.ok), JSON.stringify(out.filter((o) => !o.ok)));
+    const rows = (await admin.query("select revision_number from revision_requests where project_id = $1 and in_scope order by 1", [p.id])).rows;
+    assert.deepEqual(rows.map((r) => r.revision_number), [1, 2]);
+    const total = (await admin.query("select count(*)::int n from revision_requests where project_id = $1", [p.id])).rows[0].n;
+    assert.equal(total, 9);
+  });
+
   check("simultaneous approve and reject of one scope version: exactly one decision", async () => {
     const p = await approvedProject(2);
     const out = await Promise.all([

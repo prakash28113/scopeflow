@@ -3,9 +3,10 @@ import { methodLabel } from "@/lib/payments";
 import { invoiceStatus } from "@/lib/invoice";
 import { localToday } from "@/lib/upcoming";
 import { received } from "@/lib/pricing";
-import { Link, useParams } from "react-router";
+import { Link, useNavigate, useParams } from "react-router";
+import { z } from "zod";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Alert, Card, CardHeader, EmptyState, Field, Input, PageHeader, StatusBadge, Tag, Textarea } from "@/components/ui";
+import { Alert, Button, Card, CardHeader, EmptyState, Field, Input, LinkButton, PageHeader, StatusBadge, Tag, Textarea, buttonClass } from "@/components/ui";
 import { SubmitButton } from "@/components/form-bits";
 import { PageSpinner } from "@/components/app-shell";
 import { useToast } from "@/components/toast";
@@ -77,10 +78,13 @@ export function ClientsPage() {
 
   return (
     <>
-      <PageHeader title="Clients" description="Everyone you've sent a scope to, with their projects, approvals and payments." />
+      <PageHeader title="Clients" description="Everyone you work with, with their projects, approvals, invoices and payments." />
+      <div className="mb-4">
+        <AddClient />
+      </div>
       <Card>
         {q.data.length === 0 ? (
-          <EmptyState title="No clients yet" body="Clients are added when you create a project for them." />
+          <EmptyState title="No clients yet" body="Add a client here, or they're added automatically when you create a project for them." />
         ) : (
           <ul className="divide-y divide-line">
             {q.data.map((c) => {
@@ -182,8 +186,9 @@ export function ClientPage() {
         }
         title={c.name}
         description={[c.company, c.email].filter(Boolean).join(" · ")}
+        actions={<LinkButton to={`/projects/new?client=${c.id}`}>New project for {c.name.split(" ")[0]}</LinkButton>}
       />
-      <div className="grid gap-6 lg:grid-cols-[1fr_360px]">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_360px]">
         <div className="min-w-0 space-y-6">
           <Card>
             <CardHeader title="Projects" />
@@ -377,5 +382,62 @@ export function ClientPage() {
         </div>
       </div>
     </>
+  );
+}
+
+const newClientSchema = z.object({
+  name: z.string().trim().min(1, "Client name is required").max(120),
+  email: z.email("Enter a valid email").max(254),
+  company: z.string().trim().max(120),
+  phone: z.string().trim().max(40).refine((v) => v === "" || /^[+()\d\s.-]{5,40}$/.test(v), "Use digits, spaces and + ( ) - only"),
+});
+
+/** Add a client without starting a project. Plan limits apply (checked by the database). */
+function AddClient() {
+  const qc = useQueryClient();
+  const toast = useToast();
+  const navigate = useNavigate();
+  const action = useAction();
+  const [open, setOpen] = useState(false);
+  if (!open)
+    return (
+      <Button type="button" onClick={() => setOpen(true)}>
+        Add client
+      </Button>
+    );
+  async function onSubmit(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const id = await action.run(newClientSchema, Object.fromEntries(new FormData(e.currentTarget)), (v) => supabase.rpc("create_client", { p: v }));
+    if (id === undefined) return;
+    await qc.invalidateQueries({ queryKey: ["clients"] });
+    toast("positive", "Client added.");
+    navigate(`/clients/${id as string}`);
+  }
+  return (
+    <Card>
+      <form onSubmit={onSubmit} className="space-y-4 p-5" noValidate data-testid="add-client">
+        {action.error ? <Alert>{action.error}</Alert> : null}
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Field label="Name" htmlFor="nc-name" error={action.fieldErrors.name}>
+            <Input id="nc-name" name="name" autoComplete="off" />
+          </Field>
+          <Field label="Email" htmlFor="nc-email" error={action.fieldErrors.email}>
+            <Input id="nc-email" name="email" type="email" autoComplete="off" />
+          </Field>
+          <Field label="Company (optional)" htmlFor="nc-company" error={action.fieldErrors.company}>
+            <Input id="nc-company" name="company" />
+          </Field>
+          <Field label="Phone (optional)" htmlFor="nc-phone" error={action.fieldErrors.phone}>
+            <Input id="nc-phone" name="phone" type="tel" />
+          </Field>
+        </div>
+        <div className="flex gap-2">
+          <SubmitButton pending={action.pending} pendingLabel="Adding…">Add client</SubmitButton>
+          <button type="button" className={buttonClass("ghost")} onClick={() => setOpen(false)}>
+            Cancel
+          </button>
+        </div>
+      </form>
+    </Card>
   );
 }

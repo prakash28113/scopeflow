@@ -13,3 +13,8 @@ backups
 .audit-dist
 .audit-deps-dist
 .audit-dist
+
+# Database backups (encrypted, but never committed)
+/backup/
+*.sfbk
+*.restore.sql

@@ -44,8 +44,9 @@ export function PrivacyPage() {
         <h2>What we store</h2>
         <ul>
           <li><strong>Your account:</strong> name, email address and a securely hashed password. We never see your password. If you continue with Google, Google shares only your name, email address and profile picture with us, and we never see your Google password.</li>
-          <li><strong>Your business details:</strong> what you enter in onboarding and settings, such as business name and currency.</li>
-          <li><strong>Your projects:</strong> client names and email addresses, deliverables, prices, dates, milestones, change orders and payments you record.</li>
+          <li><strong>Your business details:</strong> what you enter in onboarding and settings, such as business name, currency, UPI ID, business address, GSTIN and invoice prefix.</li>
+          <li><strong>Your clients:</strong> names, email addresses, company, phone, billing address, GSTIN and your private notes about them (never shown to the client).</li>
+          <li><strong>Your projects and money records:</strong> deliverables, prices, dates, milestones, change orders, requests you log for a client, invoices you issue (with the seller and buyer details on them), payments you record (amount, date, method, reference), your expense log and your follow-up reminders.</li>
           <li>
             <strong>Client decisions:</strong> when your client approves, declines or requests changes through a client link, we record
             the name they enter, any comment, the time, and their IP address and browser type. This is the evidence of who approved what,
@@ -66,7 +67,7 @@ export function PrivacyPage() {
       <section>
         <h2>Where it&apos;s kept</h2>
         <p>
-          Data is stored with Supabase (database and sign-in) and the app is served by Cloudflare. Password-reset emails are sent through Brevo, which receives only your email address and the reset link. These providers may process data outside India.
+          Data is stored with Supabase (database and sign-in) and the app is served by Cloudflare. Once a week the database is backed up so it can be restored after an outage: the backup is encrypted (AES-256) as it is made, stored with GitHub for up to 90 days, and can&apos;t be opened without a passphrase only the operator holds. Password-reset emails are sent through Brevo, which receives only your email address and the reset link. These providers may process data outside India.
           Access to your data is restricted by database security rules: only you can see your projects, and a client link shows only that
           one project&apos;s client-facing details.
         </p>
@@ -89,7 +90,7 @@ export function PrivacyPage() {
       <section>
         <h2>Beta</h2>
         <p>
-          ScopeFlow is in beta. Supabase&apos;s free plan has no automatic backups, so keep your own copies of anything critical. We&apos;ll
+          ScopeFlow is in beta. ScopeFlow keeps a weekly encrypted backup, so up to a week of changes could be lost in a serious outage; keep your own copies of anything critical. We&apos;ll
           update this policy as the product changes and show the date at the top.
         </p>
       </section>

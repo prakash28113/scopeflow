@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { Link, NavLink, Navigate, Outlet, useLocation } from "react-router";
 import { useQuery } from "@tanstack/react-query";
 import { Button, Logo, buttonClass, cx } from "./ui";
@@ -128,18 +129,6 @@ export function AppShell() {
                 </svg>
               </summary>
               <div className="absolute right-0 mt-2 w-48 rounded-lg border border-line bg-surface p-1 shadow-[0_12px_32px_-16px_rgba(22,24,29,0.3)]">
-                <Link to="/dashboard" className="block rounded-md px-3 py-2 text-sm hover:bg-sunken sm:hidden">
-                  Dashboard
-                </Link>
-                <Link to="/clients" className="block rounded-md px-3 py-2 text-sm hover:bg-sunken sm:hidden">
-                  Clients
-                </Link>
-                <Link to="/invoices" className="block rounded-md px-3 py-2 text-sm hover:bg-sunken sm:hidden">
-                  Invoices
-                </Link>
-                <Link to="/analytics" className="block rounded-md px-3 py-2 text-sm hover:bg-sunken sm:hidden">
-                  Analytics
-                </Link>
                 <Link to="/plan" className="block rounded-md px-3 py-2 text-sm hover:bg-sunken sm:hidden">
                   Plan & usage
                 </Link>
@@ -164,7 +153,8 @@ export function AppShell() {
       <main className="mx-auto max-w-6xl px-4 py-8 sm:px-6 sm:py-10">
         <Outlet />
       </main>
-      <footer className="mx-auto max-w-6xl px-4 pb-10 text-[12px] text-muted sm:px-6 print:hidden">
+      <MobileTabBar />
+      <footer className="mx-auto max-w-6xl px-4 pb-24 text-[12px] text-muted sm:mt-0 sm:px-6 sm:pb-10 print:hidden">
         Something missing or not working?{" "}
         <a href={feedbackMailto(location.pathname)} className="font-medium text-accent hover:underline" data-testid="feedback-link">
           Send feedback
@@ -172,5 +162,40 @@ export function AppShell() {
         and it comes straight to the ScopeFlow team.
       </footer>
     </div>
+  );
+}
+
+const TABS: { to: string; label: string; icon: ReactNode }[] = [
+  { to: "/dashboard", label: "Home", icon: <path d="M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z" /> },
+  { to: "/clients", label: "Clients", icon: <path d="M16 20v-1.5A3.5 3.5 0 0 0 12.5 15h-5A3.5 3.5 0 0 0 4 18.5V20M10 11a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Zm10 9v-1.5a3.5 3.5 0 0 0-2.5-3.35M15.5 4.15a3.5 3.5 0 0 1 0 6.7" /> },
+  { to: "/invoices", label: "Invoices", icon: <path d="M7 3h7l5 5v12a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1Zm7 0v5h5M9 13h6M9 17h6" /> },
+  { to: "/analytics", label: "Analytics", icon: <path d="M4 20V10m6 10V4m6 16v-7m4 7H3" /> },
+  { to: "/settings", label: "Settings", icon: <path d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6Zm7.4-3a7.4 7.4 0 0 0-.1-1.2l2-1.6-2-3.4-2.4 1a7.6 7.6 0 0 0-2-1.2L14.5 3h-4l-.4 2.6a7.6 7.6 0 0 0-2 1.2l-2.4-1-2 3.4 2 1.6a7.4 7.4 0 0 0 0 2.4l-2 1.6 2 3.4 2.4-1a7.6 7.6 0 0 0 2 1.2l.4 2.6h4l.4-2.6a7.6 7.6 0 0 0 2-1.2l2.4 1 2-3.4-2-1.6c.1-.4.1-.8.1-1.2Z" /> },
+];
+
+/** Phones: the main sections one tap away at the bottom of the screen. */
+function MobileTabBar() {
+  return (
+    <nav
+      aria-label="Sections"
+      className="fixed inset-x-0 bottom-0 z-30 border-t border-line bg-surface/95 pb-[env(safe-area-inset-bottom)] backdrop-blur sm:hidden print:hidden"
+      data-testid="mobile-tabs"
+    >
+      <ul className="grid grid-cols-5">
+        {TABS.map((t) => (
+          <li key={t.to}>
+            <NavLink
+              to={t.to}
+              className={({ isActive }) => cx("flex flex-col items-center gap-0.5 py-2 text-[11px] font-medium", isActive ? "text-accent" : "text-muted")}
+            >
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                {t.icon}
+              </svg>
+              {t.label}
+            </NavLink>
+          </li>
+        ))}
+      </ul>
+    </nav>
   );
 }

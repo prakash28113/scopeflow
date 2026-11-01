@@ -138,6 +138,7 @@ export default function ProjectRecordPage() {
                   {scope.deliverables.map((d) => (
                     <li key={d.id}>
                       <span className="font-medium">{d.title}</span> · {pluralize(d.revisions_included, "revision round")} included
+                      {(d as { due_date?: string | null }).due_date ? ` · due ${formatDate((d as { due_date?: string | null }).due_date)}` : ""}
                       {d.description ? <span className="block whitespace-pre-line text-ink-2">{d.description}</span> : null}
                     </li>
                   ))}
