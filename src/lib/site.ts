@@ -3,6 +3,9 @@ import siteConfig from "../../config/public-site.json";
 /** True once real email (SMTP) is set up in Supabase, so reset emails reach everyone. */
 export const PASSWORD_RESET_EMAIL: boolean = siteConfig.passwordResetEmail === true;
 
+/** Google OAuth Client ID (public). Empty → no "Continue with Google" button. Tests override it with VITE_GOOGLE_CLIENT_ID. */
+export const GOOGLE_CLIENT_ID: string = (import.meta.env.VITE_GOOGLE_CLIENT_ID as string | undefined) ?? String(siteConfig.googleClientId ?? "");
+
 /** Public site facts shown on the landing page, legal pages and sign-in help. */
 export const SUPPORT_EMAIL = "prakashmummidisetti@gmail.com";
 export const LEGAL_UPDATED = "1 November 2026";

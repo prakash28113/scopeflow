@@ -14,6 +14,7 @@ export interface Env {
   SUPABASE_URL: string;
   SUPABASE_ANON_KEY: string;
   TURNSTILE_ENABLED?: string;
+  GOOGLE_SIGNIN_ENABLED?: string;
   ASSETS?: { fetch(request: Request): Promise<Response> };
 }
 
@@ -53,7 +54,7 @@ export async function servePage(request: Request, env: Env): Promise<Response> {
   const shell = await env.ASSETS.fetch(new Request(new URL("/", url), { method: request.method }));
   if (!shell.ok) return json({ error: "Not found" }, 404);
   const headers = new Headers({ "content-type": shell.headers.get("content-type") ?? "text/html; charset=utf-8" });
-  for (const [k, v] of Object.entries(pageHeaders({ supabaseUrl, turnstile: env.TURNSTILE_ENABLED === "true" }))) headers.set(k, v);
+  for (const [k, v] of Object.entries(pageHeaders({ supabaseUrl, turnstile: env.TURNSTILE_ENABLED === "true", google: env.GOOGLE_SIGNIN_ENABLED === "true" }))) headers.set(k, v);
   if ((PRIVATE_PATHS as readonly string[]).includes(url.pathname)) for (const [k, v] of Object.entries(PORTAL_HEADERS)) headers.set(k, v);
   else headers.set("Cache-Control", "no-cache");
   return new Response(shell.body, { status: 200, headers });

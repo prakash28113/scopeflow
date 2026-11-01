@@ -52,3 +52,38 @@ describe("Content-Security-Policy", () => {
     expect(() => buildCsp({ supabaseUrl: "not a url", turnstile: false })).toThrow();
   });
 });
+
+import { GOOGLE_GSI, GOOGLE_GSI_SCRIPT, GOOGLE_GSI_STYLE, pageHeaders } from "../../build/security-headers";
+// @ts-expect-error — plain ESM script
+import { googleSignInEnabled } from "../../scripts/ci/release.mjs";
+
+describe("Sign in with Google", () => {
+  const parse = (csp: string) => Object.fromEntries(csp.split("; ").map((d) => { const [k, ...v] = d.split(" "); return [k, v]; }));
+  it("off by default: no Google origins, strict referrer and opener policies", () => {
+    const h = pageHeaders({ supabaseUrl: "https://abcd.supabase.co", turnstile: false });
+    expect(h["Content-Security-Policy"]).not.toContain("accounts.google.com");
+    expect(h["Referrer-Policy"]).toBe("no-referrer");
+    expect(h["Cross-Origin-Opener-Policy"]).toBe("same-origin");
+  });
+  it("on: only Google's sign-in paths are allowed, the popup can report back, and only the origin is sent", () => {
+    const h = pageHeaders({ supabaseUrl: "https://abcd.supabase.co", turnstile: false, google: true });
+    const d = parse(h["Content-Security-Policy"]);
+    expect(d["script-src"]).toContain(GOOGLE_GSI_SCRIPT);
+    expect(d["frame-src"]).toEqual([GOOGLE_GSI]);
+    expect(d["connect-src"]).toContain(GOOGLE_GSI);
+    expect(d["style-src"]).toContain(GOOGLE_GSI_STYLE);
+    expect(h["Content-Security-Policy"]).not.toMatch(/accounts\.google\.com(?!\/gsi)/);
+    expect(h["Referrer-Policy"]).toBe("strict-origin");
+    expect(h["Cross-Origin-Opener-Policy"]).toBe("same-origin-allow-popups");
+    expect(d["frame-ancestors"]).toEqual(["'none'"]);
+  });
+  it("with CAPTCHA too: both frames allowed", () => {
+    const d = parse(buildCsp({ supabaseUrl: "https://abcd.supabase.co", turnstile: true, google: true }));
+    expect(d["frame-src"]).toEqual([TURNSTILE_ORIGIN, GOOGLE_GSI]);
+  });
+  it("the release only switches it on for a real Google client ID", () => {
+    expect(googleSignInEnabled(JSON.stringify({ googleClientId: "" }))).toBe(false);
+    expect(googleSignInEnabled(JSON.stringify({ googleClientId: "evil.example.com" }))).toBe(false);
+    expect(googleSignInEnabled(JSON.stringify({ googleClientId: "123456789012-abc123def456.apps.googleusercontent.com" }))).toBe(true);
+  });
+});

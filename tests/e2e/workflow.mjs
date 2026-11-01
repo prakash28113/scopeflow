@@ -13,8 +13,20 @@ const browser = await chromium.launch({
   ...(process.env.CHROME_PATH ? { executablePath: process.env.CHROME_PATH } : {}),
   args: ["--no-sandbox"],
 });
-const desk = await browser.newContext({ viewport: { width: 1360, height: 900 }, permissions: ["clipboard-read", "clipboard-write"] });
-const phone = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
+
+/** Every test browser gets a stand-in for Google's sign-in script, so nothing ever contacts Google. */
+const GOOGLE_STUB = `window.google={accounts:{id:{initialize(o){window.__gsi=o},renderButton(el){const b=document.createElement("button");b.type="button";b.textContent="Continue with Google";b.dataset.testid="google-stub";b.onclick=()=>window.__gsi.callback({credential:"test-google:meera@studio.test:Meera Iyer"});el.appendChild(b)}}}};`;
+async function newCtx(opts = {}) {
+  const c = await browser.newContext(opts);
+  await c.route("https://accounts.google.com/**", (route) =>
+    route.request().url().startsWith("https://accounts.google.com/gsi/client")
+      ? route.fulfill({ contentType: "text/javascript", body: GOOGLE_STUB })
+      : route.abort(),
+  );
+  return c;
+}
+const desk = await newCtx({ viewport: { width: 1360, height: 900 }, permissions: ["clipboard-read", "clipboard-write"] });
+const phone = await newCtx({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
 const f = await desk.newPage();
 const c = await phone.newPage();
 const errors = [];
@@ -297,7 +309,7 @@ try {
   await c.getByText("This link isn't working").waitFor();
 
   step("security: another account can't see the project");
-  const intruderCtx = await browser.newContext();
+  const intruderCtx = await newCtx();
   const intruder = await intruderCtx.newPage();
   await intruder.goto(`${BASE}/signup`);
   await intruder.getByLabel("Your name").fill("Mallory");
@@ -313,7 +325,7 @@ try {
   await intruder.getByText("No projects yet").waitFor();
 
   step("security: signed-out access redirects to sign-in");
-  const anonCtx = await browser.newContext();
+  const anonCtx = await newCtx();
   const anon = await anonCtx.newPage();
   await anon.goto(projectUrl);
   await anon.waitForURL(/\/login\?next=/);
@@ -396,7 +408,7 @@ try {
   assert.equal(await c.getByTestId("upi-pay").count(), 1);
 
   step("password reset by email: request, open the link, choose a new password, sign in with it");
-  const resetCtx = await browser.newContext();
+  const resetCtx = await newCtx();
   const a = await resetCtx.newPage();
   a.on("pageerror", (e) => errors.push(`reset pageerror: ${e.message}`));
   await a.goto(`${BASE}/login`);
@@ -437,6 +449,41 @@ try {
   await a.getByText("Open the reset link from your email to choose a new password.").waitFor();
   await resetCtx.close();
   const PASSWORD = "new-horse-42";
+
+  step("Sign in with Google: new account → onboarding with name filled; returning user → dashboard");
+  {
+    const g = await newCtx({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+    // newCtx() stubs Google's script, so this never contacts Google.
+    const gp = await g.newPage();
+    gp.on("pageerror", (e) => errors.push(`google pageerror: ${e.message}`));
+    const signup = await gp.goto(`${BASE}/signup`);
+    assert.equal(signup.headers()["cross-origin-opener-policy"], "same-origin-allow-popups");
+    assert.equal(signup.headers()["referrer-policy"], "strict-origin");
+    assert.match(signup.headers()["content-security-policy"], /script-src [^;]*https:\/\/accounts\.google\.com\/gsi\/client/);
+    await gp.getByText("By continuing with Google you agree to the").waitFor();
+    await gp.getByTestId("google-stub").waitFor();
+    const init = await gp.evaluate(() => ({ nonce: window.__gsi.nonce, client: window.__gsi.client_id, mode: window.__gsi.ux_mode }));
+    assert.match(init.nonce, /^[0-9a-f]{64}$/, "Google gets a hashed nonce");
+    assert.equal(init.client, "1234567890-scopeflowtest.apps.googleusercontent.com");
+    assert.equal(init.mode, "popup");
+    await shot(gp, "27-signup-google-mobile", false);
+    await gp.getByTestId("google-stub").click();
+    await gp.waitForURL("**/onboarding");
+    assert.equal(await gp.getByLabel("Your name").inputValue(), "Meera Iyer");
+    await gp.getByLabel("Business or studio name").fill("Iyer Design");
+    await gp.getByLabel("Default currency").selectOption("INR");
+    await gp.getByRole("button", { name: "Continue" }).click();
+    await gp.waitForURL("**/projects/new?welcome=1");
+    // Returning: sign out, then Continue with Google on the sign-in page goes straight in.
+    await gp.goto(`${BASE}/dashboard`);
+    await gp.locator('summary[aria-label="Account menu"]').click();
+    await gp.getByRole("button", { name: "Sign out" }).click();
+    await gp.waitForURL(/\/login/);
+    await gp.getByTestId("google-stub").click();
+    await gp.waitForURL("**/dashboard");
+    await gp.getByText("Hello, Meera").waitFor();
+    await g.close();
+  }
 
   step("clients: profile, history and private notes");
   await f.goto(`${BASE}/clients`);

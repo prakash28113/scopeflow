@@ -15,20 +15,31 @@ export const TURNSTILE_ORIGIN = "https://challenges.cloudflare.com";
  *   script-src  https://static.cloudflareinsights.com  (beacon.min.js)
  *   connect-src https://cloudflareinsights.com         (sends the page-view beacon)
  */
+/**
+ * Sign in with Google (Google Identity Services), only when a Google client ID is configured.
+ * Paths per Google's CSP guidance: the client script, its button frame/requests, and its stylesheet.
+ */
+export const GOOGLE_GSI_SCRIPT = "https://accounts.google.com/gsi/client";
+export const GOOGLE_GSI = "https://accounts.google.com/gsi/";
+export const GOOGLE_GSI_STYLE = "https://accounts.google.com/gsi/style";
 export const ANALYTICS_SCRIPT_ORIGIN = "https://static.cloudflareinsights.com";
 export const ANALYTICS_BEACON_ORIGIN = "https://cloudflareinsights.com";
 
-export function buildCsp(opts: { supabaseUrl: string; turnstile: boolean }): string {
+type HeaderOptions = { supabaseUrl: string; turnstile: boolean; google?: boolean };
+
+export function buildCsp(opts: HeaderOptions): string {
   const supabase = new URL(opts.supabaseUrl).origin;
   const t = opts.turnstile ? ` ${TURNSTILE_ORIGIN}` : "";
+  const g = (src: string) => (opts.google ? ` ${src}` : "");
+  const frames = [opts.turnstile ? TURNSTILE_ORIGIN : "", opts.google ? GOOGLE_GSI : ""].filter(Boolean);
   return [
     "default-src 'self'",
-    `script-src 'self' ${ANALYTICS_SCRIPT_ORIGIN}${t}`,
-    "style-src 'self' 'unsafe-inline'",
+    `script-src 'self' ${ANALYTICS_SCRIPT_ORIGIN}${t}${g(GOOGLE_GSI_SCRIPT)}`,
+    `style-src 'self' 'unsafe-inline'${g(GOOGLE_GSI_STYLE)}`,
     "img-src 'self' data:",
     "font-src 'self'",
-    `connect-src 'self' ${supabase} ${ANALYTICS_BEACON_ORIGIN}${t}`,
-    `frame-src ${opts.turnstile ? TURNSTILE_ORIGIN : "'none'"}`,
+    `connect-src 'self' ${supabase} ${ANALYTICS_BEACON_ORIGIN}${t}${g(GOOGLE_GSI)}`,
+    `frame-src ${frames.length ? frames.join(" ") : "'none'"}`,
     "frame-ancestors 'none'",
     "base-uri 'none'",
     "form-action 'self'",
@@ -38,15 +49,17 @@ export function buildCsp(opts: { supabaseUrl: string; turnstile: boolean }): str
 }
 
 /** Headers every page gets (also used by the Worker for its page fallback). */
-export function pageHeaders(opts: { supabaseUrl: string; turnstile: boolean }): Record<string, string> {
+export function pageHeaders(opts: HeaderOptions): Record<string, string> {
   return {
     "Content-Security-Policy": buildCsp(opts),
     "X-Content-Type-Options": "nosniff",
     "X-Frame-Options": "DENY",
-    "Referrer-Policy": "no-referrer",
+    // Google's sign-in button needs to know which site it's on; "strict-origin" sends only https://scopeflow.in, never a path.
+    "Referrer-Policy": opts.google ? "strict-origin" : "no-referrer",
     "Permissions-Policy": "camera=(), microphone=(), geolocation=(), payment=(), usb=()",
     "Strict-Transport-Security": "max-age=31536000; includeSubDomains",
-    "Cross-Origin-Opener-Policy": "same-origin",
+    // Google's sign-in popup must be able to report back to this page.
+    "Cross-Origin-Opener-Policy": opts.google ? "same-origin-allow-popups" : "same-origin",
   };
 }
 
@@ -61,7 +74,7 @@ export const PRIVATE_PATHS = ["/p", "/reset-password", "/forgot-password"] as co
 
 const block = (h: Record<string, string>) => Object.entries(h).map(([k, v]) => `  ${k}: ${v}`).join("\n");
 
-export function buildHeadersFile(opts: { supabaseUrl: string; turnstile: boolean }): string {
+export function buildHeadersFile(opts: HeaderOptions): string {
   return `/*
 ${block(pageHeaders(opts))}
 

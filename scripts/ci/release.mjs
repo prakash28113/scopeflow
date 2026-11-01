@@ -92,6 +92,16 @@ export function publicSupabaseConfig(env) {
 
 const HOSTNAME = /^(?=.{4,253}$)([a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/;
 
+/** True when config/public-site.json has a Google client ID (Sign in with Google is shown). */
+export function googleSignInEnabled(text) {
+  try {
+    const site = JSON.parse(text ?? readFileSync(join(ROOT, "config/public-site.json"), "utf8"));
+    return /^[0-9]+-[a-z0-9]+\.apps\.googleusercontent\.com$/.test(String(site.googleClientId ?? ""));
+  } catch {
+    return false;
+  }
+}
+
 /** Supabase redirect allow-list: only the reset page on ScopeFlow's own addresses. */
 export function authReturnUrls(urls) {
   return [...new Set(urls.filter((u) => /^https:\/\/[a-z0-9.-]+$/i.test(u ?? "")).map((u) => `${u}/reset-password`))].join(",");
@@ -305,7 +315,7 @@ revoke all on all tables in schema scopeflow_admin from public, anon, authentica
 
   const domains = parseDomains(env.CUSTOM_DOMAINS);
   const domainArgs = domains.flatMap((d) => ["--domain", d]);
-  const out = exec("npx", ["wrangler", "deploy", "--var", `SUPABASE_URL:${supabaseUrl}`, "--var", `SUPABASE_ANON_KEY:${publishable}`, "--var", `TURNSTILE_ENABLED:${env.VITE_TURNSTILE_SITE_KEY ? "true" : "false"}`, ...domainArgs], {
+  const out = exec("npx", ["wrangler", "deploy", "--var", `SUPABASE_URL:${supabaseUrl}`, "--var", `SUPABASE_ANON_KEY:${publishable}`, "--var", `TURNSTILE_ENABLED:${env.VITE_TURNSTILE_SITE_KEY ? "true" : "false"}`, "--var", `GOOGLE_SIGNIN_ENABLED:${googleSignInEnabled() ? "true" : "false"}`, ...domainArgs], {
     env: { ...buildEnv, CLOUDFLARE_API_TOKEN: cfToken, CLOUDFLARE_ACCOUNT_ID: accountId, WRANGLER_SEND_METRICS: "false" },
   });
   const workersUrl = (String(out).match(/https:\/\/scopeflow\.[a-z0-9-]+\.workers\.dev/) ?? [`https://scopeflow.${subdomain}.workers.dev`])[0];

@@ -43,7 +43,7 @@ export function PrivacyPage() {
       <section>
         <h2>What we store</h2>
         <ul>
-          <li><strong>Your account:</strong> name, email address and a securely hashed password. We never see your password.</li>
+          <li><strong>Your account:</strong> name, email address and a securely hashed password. We never see your password. If you continue with Google, Google shares only your name, email address and profile picture with us, and we never see your Google password.</li>
           <li><strong>Your business details:</strong> what you enter in onboarding and settings, such as business name and currency.</li>
           <li><strong>Your projects:</strong> client names and email addresses, deliverables, prices, dates, milestones, change orders and payments you record.</li>
           <li>
