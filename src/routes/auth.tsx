@@ -6,15 +6,18 @@ import { Captcha, captchaSiteKey } from "@/components/captcha";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/lib/auth";
 import { safeNext } from "@/lib/safe-redirect";
+import { SUPPORT_EMAIL, supportMailto } from "@/lib/site";
+import { BetaBadge } from "@/components/site-footer";
 import { issuesToFieldErrors, signInSchema, signUpSchema, type FieldErrors } from "@/lib/validation";
 
 function AuthLayout({ children }: { children: ReactNode }) {
   return (
     <div className="flex min-h-dvh flex-col">
-      <header className="px-6 py-5">
+      <header className="flex items-center gap-2 px-6 py-5">
         <Link to="/" aria-label="ScopeFlow home">
           <Logo className="text-[15px]" />
         </Link>
+        <BetaBadge />
       </header>
       <main className="flex flex-1 items-start justify-center px-4 pb-16 pt-6 sm:pt-16">
         <div className="w-full max-w-[400px]">{children}</div>
@@ -72,7 +75,13 @@ export function LoginPage() {
         <SubmitButton className="w-full" pending={f.pending} pendingLabel="Signing in…">
           Sign in
         </SubmitButton>
-        <p className="text-[13px] text-muted">Forgot your password? During the beta, contact the ScopeFlow admin to reset it.</p>
+        <p className="text-[13px] text-muted">
+          Forgot your password? Email{" "}
+          <a href={supportMailto("Password reset")} className="font-medium text-accent hover:underline">
+            {SUPPORT_EMAIL}
+          </a>{" "}
+          from your account email and we&apos;ll help you back in.
+        </p>
       </form>
       <p className="mt-6 text-center text-sm text-muted">
         New to ScopeFlow?{" "}
@@ -108,18 +117,18 @@ export function SignupPage() {
     if (error) {
       const msg = error.message ?? "";
       if (/already registered|already exists/i.test(msg)) return f.setError("An account with this email already exists.");
-      if (/database error saving new user/i.test(msg)) return f.setError("ScopeFlow is in private beta and this email isn't on the invite list.");
+      if (/database error saving new user/i.test(msg)) return f.setError(`Sign-ups are invite-only right now. Email ${SUPPORT_EMAIL} to request access.`);
       if (/password/i.test(msg)) return f.setError(msg);
       return f.setError("Couldn't create the account. Please try again.");
     }
     if (data.session) navigate("/onboarding", { replace: true });
-    else setNotice("Your account was created but needs activation before you can sign in. Please contact the ScopeFlow admin.");
+    else setNotice(`Your account was created but needs activation before you can sign in. Please email ${SUPPORT_EMAIL}.`);
   }
 
   return (
     <AuthLayout>
       <h1 className="text-2xl font-semibold tracking-[-0.02em]">Create your account</h1>
-      <p className="mb-8 mt-1.5 text-sm text-muted">Private beta — free while we test with early users.</p>
+      <p className="mb-8 mt-1.5 text-sm text-muted">Free during the beta. No card needed.</p>
       {notice ? (
         <Alert tone="info">{notice}</Alert>
       ) : (
@@ -138,6 +147,11 @@ export function SignupPage() {
           <SubmitButton className="w-full" pending={f.pending} pendingLabel="Creating account…">
             Create account
           </SubmitButton>
+          <p className="text-[12px] leading-relaxed text-muted">
+            By creating an account you agree to the{" "}
+            <Link to="/terms" className="underline hover:text-ink">Terms</Link> and{" "}
+            <Link to="/privacy" className="underline hover:text-ink">Privacy Policy</Link>.
+          </p>
         </form>
       )}
       <p className="mt-6 text-center text-sm text-muted">

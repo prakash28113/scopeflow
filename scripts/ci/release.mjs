@@ -36,13 +36,20 @@ export const VERIFY_SQL = `select
  (select count(*)::int from pg_trigger where tgrelid = 'auth.users'::regclass and tgname = 'on_auth_user_created') as signup_trigger`;
 
 /** Parses invite emails from a file or variable: commas/whitespace separated, '#' comments allowed. */
+export const OPEN_SIGNUPS = "*";
+
+/** True when the allowlist file opts into public sign-ups (a line containing only "*"). */
+export function signupsOpen(text) {
+  return String(text ?? "").split("\n").some((l) => l.replace(/#.*/, "").trim() === OPEN_SIGNUPS);
+}
+
 export function parseEmails(text) {
   const out = new Set();
   for (const raw of String(text ?? "").split("\n")) {
     const line = raw.replace(/#.*/, "");
     for (const token of line.split(/[\s,;]+/)) {
       const e = token.trim().toLowerCase();
-      if (!e) continue;
+      if (!e || e === OPEN_SIGNUPS) continue;
       if (!EMAIL.test(e) || e.length > 254) throw new Error(`Not a valid email in the beta allowlist: "${token}"`);
       out.add(e);
     }
@@ -179,9 +186,15 @@ revoke all on all tables in schema scopeflow_admin from public, anon, authentica
   });
   ok("Sign-in configured: email + password, no confirmation email, minimum 8 characters");
 
-  const emails = parseEmails([allowlistFile ?? "", env.BETA_EMAILS ?? ""].join("\n"));
-  await sql(allowlistSql(emails));
-  ok(emails.length ? `Beta allowlist synced (${emails.length} email${emails.length === 1 ? "" : "s"})` : "Beta allowlist empty → sign-ups kept **closed**");
+  const allowText = [allowlistFile ?? "", env.BETA_EMAILS ?? ""].join("\n");
+  if (signupsOpen(allowText)) {
+    await sql("delete from public.beta_allowlist;");
+    ok("Sign-ups are **open** to everyone (allowlist cleared)");
+  } else {
+    const emails = parseEmails(allowText);
+    await sql(allowlistSql(emails));
+    ok(emails.length ? `Beta allowlist synced (${emails.length} email${emails.length === 1 ? "" : "s"})` : "Beta allowlist empty → sign-ups kept **closed**");
+  }
 
   const keys = await sb(`/projects/${ref}/api-keys?reveal=false`);
   const publishable = keys.find((k) => k.type === "publishable")?.api_key ?? keys.find((k) => k.name === "anon")?.api_key;

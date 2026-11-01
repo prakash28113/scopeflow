@@ -1,5 +1,6 @@
 import { Link } from "react-router";
 import { Logo, buttonClass } from "@/components/ui";
+import { BetaBadge, SiteFooter } from "@/components/site-footer";
 
 const steps = [
   ["Define the scope", "Deliverables, revision limits, budget and payment milestones in one place."],
@@ -12,7 +13,10 @@ export default function Landing() {
   return (
     <div className="min-h-dvh">
       <header className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4 sm:px-6">
-        <Logo className="text-[15px]" />
+        <span className="flex items-center gap-2">
+          <Logo className="text-[15px]" />
+          <BetaBadge />
+        </span>
         <nav className="flex items-center gap-2">
           <Link to="/login" className={buttonClass("ghost", "sm")}>
             Sign in
@@ -34,7 +38,7 @@ export default function Landing() {
           </p>
           <div className="mt-9 flex flex-wrap gap-3">
             <Link to="/signup" className={buttonClass("primary")}>
-              Join the private beta
+              Start free
             </Link>
             <Link to="/login" className={buttonClass("secondary")}>
               Sign in
@@ -51,9 +55,8 @@ export default function Landing() {
           ))}
         </section>
       </main>
-      <footer className="mx-auto mt-24 max-w-6xl border-t border-line px-4 py-8 text-[12px] text-muted sm:px-6">
-        ScopeFlow tracks payments you record; it doesn't process payments.
-      </footer>
+      <p className="mx-auto mt-10 max-w-6xl px-4 text-[13px] text-muted sm:px-6">Free during the beta. No card needed.</p>
+      <SiteFooter />
     </div>
   );
 }

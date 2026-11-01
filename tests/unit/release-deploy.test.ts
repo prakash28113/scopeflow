@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 // @ts-expect-error — plain ESM script
-import { run, publicSupabaseConfig } from "../../scripts/ci/release.mjs";
+import { run, publicSupabaseConfig, signupsOpen, parseEmails } from "../../scripts/ci/release.mjs";
 
 const REF = "abcdefghijklmnopqrst";
 const SUPA = `https://${REF}.supabase.co`;
@@ -148,5 +148,17 @@ describe("release automation — deploy and live checks", () => {
     expect(() => publicSupabaseConfig({ SUPABASE_URL: SUPA, SUPABASE_PUBLISHABLE_KEY: jwt("service_role") })).toThrow(/service_role/);
     expect(publicSupabaseConfig({ SUPABASE_URL: SUPA + "/", SUPABASE_PUBLISHABLE_KEY: jwt("anon") }).supabaseUrl).toBe(SUPA);
     expect(() => publicSupabaseConfig({ SUPABASE_URL: "https://evil.example.com", SUPABASE_PUBLISHABLE_KEY: "sb_publishable_live123" })).toThrow(/SUPABASE_URL/);
+  });
+
+  it("opens sign-ups only when the allowlist has a lone *", async () => {
+    expect(signupsOpen("# comment *\nme@example.com")).toBe(false);
+    expect(signupsOpen("# open\n*\n")).toBe(true);
+    expect(parseEmails("*\nme@example.com")).toEqual(["me@example.com"]);
+    const w = world();
+    const deps = { ...w.deps(BOTH), allowlistFile: "*" };
+    expect(await run(deps)).toBe("deployed");
+    const queries = w.calls.filter((c) => c.url.endsWith("/database/query")).map((c) => String((c.body as { query: string }).query));
+    expect(queries).toContain("delete from public.beta_allowlist;");
+    expect(queries.some((q) => q.includes("insert into public.beta_allowlist"))).toBe(false);
   });
 });

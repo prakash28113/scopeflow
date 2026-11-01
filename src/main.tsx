@@ -26,6 +26,8 @@ const router = createBrowserRouter([
       { path: "/signup", lazy: lazy(() => import("./routes/auth").then((m) => ({ default: m.SignupPage }))) },
       // Client portal: token-gated, no account. Token is read from the URL fragment.
       { path: "/p", lazy: lazy(() => import("./routes/portal")) },
+      { path: "/privacy", lazy: lazy(() => import("./routes/legal").then((m) => ({ default: m.PrivacyPage }))) },
+      { path: "/terms", lazy: lazy(() => import("./routes/legal").then((m) => ({ default: m.TermsPage }))) },
       {
         element: <RequireAuth allowUnonboarded />,
         children: [{ path: "/onboarding", lazy: lazy(() => import("./routes/settings").then((m) => ({ default: m.OnboardingPage }))) }],
