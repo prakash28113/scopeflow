@@ -1,0 +1,5 @@
+{
+  "_note": "Public values only (they ship in the app's JavaScript). Never put a secret key here — the release refuses one.",
+  "url": "https://esixrjouserdayxxezid.supabase.co",
+  "publishableKey": "sb_publishable_CZYfjCvxMR25z-j6ii5Dsg_pG46XYBV"
+}
