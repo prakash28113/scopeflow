@@ -1,6 +1,6 @@
 # Changelog
 
-## v1.2 — Business tools (branch `feature/v1-2-business-tools`, not deployed)
+## v1.2 — Business tools — live 1 Nov 2026 (release run 41301669884)
 
 - **Itemised quotes** in the project form: price each deliverable (fixed, or hours × rate), add an optional discount and tax (e.g. GST 18%). The database computes the total and sets the budget; the line items and totals are part of the locked scope the client approves (and its fingerprint).
 - **Printable quote** (`/projects/:id/quote`) and **Save as PDF** on the client's scope page — browser printing, no paid PDF service.
