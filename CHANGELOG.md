@@ -1,6 +1,6 @@
 # Changelog
 
-## New logo — ready for review (not released)
+## New logo — live 1 Nov 2026 (release run 41311991024)
 
 - The official ScopeFlow logo (linked hooks + "ScopeFlow" wordmark) is now used everywhere:
   - the home page, app, sign-in, pricing and legal page headers;
