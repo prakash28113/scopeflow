@@ -112,7 +112,7 @@ Audited 1 November 2026 against the live app (scopeflow.in) and the codebase, th
 | Automated tests / regression testing | ✅ | Every release re-runs all checks before deploying |
 | No duplicate or inconsistent records | ✅ | Unique constraints, idempotency, race-tested |
 | Database migrations tested | ✅ | Each re-runs safely and rolls back twice |
-| Backup and rollback plan verified | ⛔ (A–E) | Weekly encrypted backup with a restore check on every run (docs/BACKUPS.md). **Waiting for you to add the `BACKUP_PASSPHRASE` secret** |
+| Backup and rollback plan verified | ✅ (A–E) | Weekly encrypted backup (Sundays, 21:37 UTC), kept 90 days, with a restore check on every run (docs/BACKUPS.md). First backup 1 Nov 2026: restored in full |
 | Invite-only beta access verified | — | **Open by your decision (1 Nov)**. Invite-only mode still works and is tested |
 | Privacy policy and terms reviewed | ✅ (A–E) | The privacy policy now covers business and client billing details, logged requests, invoices, payments, expenses, follow-ups and the encrypted backups |
 | Production deployment readiness | ✅ | Live, with smoke tests on every release |
@@ -122,7 +122,7 @@ Audited 1 November 2026 against the live app (scopeflow.in) and the codebase, th
 Items marked "fixed" were fixed in batches A–E or F–H (live).
 
 1. ✅ Fixed: **Dashboard "Upcoming" showed a part-paid payment's full amount.** It now shows the balance.
-2. ⛔ **No automatic database backups:** the weekly encrypted backup is built and tested, but it needs your `BACKUP_PASSPHRASE` secret.
+2. ✅ Fixed: **No automatic database backups.** Weekly encrypted backups have run since 1 Nov 2026, and each one is checked by restoring it.
 3. ✅ Fixed: **The privacy policy was behind the features.**
 4. ✅ Fixed: **Scope-creep gap.** Requests that arrive on WhatsApp, a call or email can now be logged.
 5. ✅ Fixed (found during A–E): **The dashboard was wider than a phone screen** when a project title was long. Phones quietly zoomed out, so the old check missed it; the check is stricter now.
