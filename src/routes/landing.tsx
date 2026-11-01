@@ -34,7 +34,7 @@ const btnSecondary =
 function AnnouncementBar() {
   return (
     <div className="bg-[var(--lp-ink)] px-4 py-2 text-center text-[13px] text-white/85">
-      ScopeFlow is free during the beta.{" "}
+      Start free: 2 active projects, no card needed.{" "}
       <Link to="/pricing" className="font-semibold text-white underline decoration-white/40 underline-offset-4 hover:decoration-white">
         See what's included
       </Link>

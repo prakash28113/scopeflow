@@ -4,6 +4,7 @@ import { Button, Logo, buttonClass, cx } from "./ui";
 import { displayName, useAuth, useProfile } from "@/lib/auth";
 import { supabase } from "@/lib/supabase";
 import { BetaBadge } from "./site-footer";
+import { feedbackMailto } from "@/lib/site";
 
 export function PageSpinner() {
   return (
@@ -133,6 +134,9 @@ export function AppShell() {
                 <Link to="/settings" className="block rounded-md px-3 py-2 text-sm hover:bg-sunken">
                   Settings
                 </Link>
+                <a href={feedbackMailto(location.pathname)} className="block rounded-md px-3 py-2 text-sm hover:bg-sunken">
+                  Send feedback
+                </a>
                 <button
                   type="button"
                   className="block w-full rounded-md px-3 py-2 text-left text-sm hover:bg-sunken"
@@ -148,6 +152,13 @@ export function AppShell() {
       <main className="mx-auto max-w-6xl px-4 py-8 sm:px-6 sm:py-10">
         <Outlet />
       </main>
+      <footer className="mx-auto max-w-6xl px-4 pb-10 text-[12px] text-muted sm:px-6 print:hidden">
+        Something missing or not working?{" "}
+        <a href={feedbackMailto(location.pathname)} className="font-medium text-accent hover:underline" data-testid="feedback-link">
+          Send feedback
+        </a>{" "}
+        and it comes straight to the person who builds ScopeFlow.
+      </footer>
     </div>
   );
 }

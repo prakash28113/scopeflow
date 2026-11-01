@@ -173,6 +173,7 @@ try {
 
   step("dashboard shows upcoming payment dates");
   await f.goto(`${BASE}/dashboard`);
+  assert.match(await f.getByTestId("feedback-link").getAttribute("href"), /^mailto:.+\?subject=ScopeFlow%20feedback&body=.*Page%3A%20%2Fdashboard/);
   await f.getByText("Payment · 50% deposit · Brand identity for Northwind Coffee").waitFor();
   await f.getByText(/^In 3 days/).waitFor();
 

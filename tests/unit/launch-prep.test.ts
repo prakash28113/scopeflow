@@ -81,3 +81,16 @@ describe("link previews and search", () => {
     expect(sitemap.match(/<loc>/g)).toHaveLength(4);
   });
 });
+
+import { feedbackMailto, SUPPORT_EMAIL } from "@/lib/site";
+
+describe("send feedback", () => {
+  it("opens an email to support with a prompt and the page, never project ids", () => {
+    const href = feedbackMailto("/projects/7f3c1a2b-1234-4abc-9def-0123456789ab/edit");
+    expect(href.startsWith(`mailto:${SUPPORT_EMAIL}?subject=ScopeFlow%20feedback&body=`)).toBe(true);
+    const body = decodeURIComponent(href.split("&body=")[1]);
+    expect(body).toContain("What were you trying to do?");
+    expect(body).toContain("(Page: /projects/:id/edit)");
+    expect(body).not.toMatch(/7f3c1a2b/);
+  });
+});
