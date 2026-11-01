@@ -50,3 +50,23 @@
 @utility num {
   font-variant-numeric: tabular-nums;
 }
+
+/* Printing a quote or scope: only the marked document is printed. */
+@media print {
+  body.print-scope * {
+    visibility: hidden;
+  }
+  body.print-scope [data-print-scope],
+  body.print-scope [data-print-scope] * {
+    visibility: visible;
+  }
+  body.print-scope [data-print-scope] {
+    position: absolute;
+    inset: 0 0 auto 0;
+    border: 0 !important;
+    box-shadow: none !important;
+  }
+  @page {
+    margin: 16mm;
+  }
+}

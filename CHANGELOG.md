@@ -1,5 +1,14 @@
 # Changelog
 
+## v1.2 — Business tools (branch `feature/v1-2-business-tools`, not deployed)
+
+- **Itemised quotes** in the project form: price each deliverable (fixed, or hours × rate), add an optional discount and tax (e.g. GST 18%). The database computes the total and sets the budget; the line items and totals are part of the locked scope the client approves (and its fingerprint).
+- **Printable quote** (`/projects/:id/quote`) and **Save as PDF** on the client's scope page — browser printing, no paid PDF service.
+- **Agreement templates**: graphic design, brand identity, website (starter, every plan), UI/UX, video editing, social media marketing (full library). They pre-fill deliverables, exclusions and terms; everything stays editable.
+- **Clients**: list with projects and outstanding amounts; client page with projects, approval history, payments received, totals, phone and private notes (never shown to the client).
+- **Database:** `supabase/migrations/20261103000000_v1_2_business_tools.sql` (re-runnable; backward compatible) · rollback `supabase/rollback/20261103000000_v1_2_business_tools_down.sql` (tested twice in a row).
+- **Tests:** database tests (server-side totals, 40 random quotes cross-checked with the app's maths, locking, permissions, private notes), unit tests, and 3 new walkthrough steps.
+
 ## Subscription plans, Phase 1–2 — live 1 Nov 2026 (release run 41293215454)
 
 - **Plans in the database** (`plans`): Free ($0; 2 active projects, 5 clients), Solo ($9/mo, $90/yr), Studio ($19/mo, $190/yr). Prices are hypotheses; none is purchasable yet.

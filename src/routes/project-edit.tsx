@@ -3,6 +3,7 @@ import { Alert, PageHeader } from "@/components/ui";
 import { PageSpinner } from "@/components/app-shell";
 import { useProject } from "@/lib/queries";
 import { toInputAmount } from "@/lib/money";
+import { bpsToPercent } from "@/lib/quote";
 import NotFound from "./not-found";
 import { ProjectForm, type FormValues } from "./project-form";
 
@@ -22,10 +23,22 @@ export default function EditProject() {
     startDate: p.start_date ?? "",
     dueDate: p.due_date ?? "",
     client: { name: p.clients.name, email: p.clients.email, company: p.clients.company ?? "" },
-    deliverables: p.deliverables.map((d) => ({ title: d.title, description: d.description ?? "", revisions: d.revisions_included })),
+    deliverables: p.deliverables.map((d) => ({
+      title: d.title,
+      description: d.description ?? "",
+      revisions: d.revisions_included,
+      priceType: d.pricing_type === "hourly" ? "hourly" : "fixed",
+      amount: d.pricing_type === "fixed" && d.amount_cents != null ? toInputAmount(Number(d.amount_cents), p.currency) : "",
+      hours: d.hours != null ? String(Number(d.hours)) : "",
+      rate: d.rate_cents != null ? toInputAmount(Number(d.rate_cents), p.currency) : "",
+    })),
     milestones: p.milestones.map((m) => ({ title: m.title, amount: toInputAmount(Number(m.amount_cents), p.currency), dueDate: m.due_date ?? "" })),
     exclusions: p.exclusions ?? "",
     terms: p.terms ?? "",
+    itemised: p.deliverables.length > 0 && p.deliverables.every((d) => d.pricing_type),
+    discount: bpsToPercent(p.discount_bps),
+    tax: bpsToPercent(p.tax_bps),
+    taxLabel: p.tax_label ?? "",
     extraRevision: p.extra_revision_cents === null || p.extra_revision_cents === undefined ? "" : toInputAmount(Number(p.extra_revision_cents), p.currency),
   };
   return (

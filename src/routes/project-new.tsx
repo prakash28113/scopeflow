@@ -2,7 +2,7 @@ import { useSearchParams } from "react-router";
 import { Alert, PageHeader } from "@/components/ui";
 import { PageSpinner } from "@/components/app-shell";
 import { useProfile } from "@/lib/auth";
-import { ProjectForm, type FormValues } from "./project-form";
+import { ProjectForm, emptyDeliverable, type FormValues } from "./project-form";
 import { useMyPlan } from "@/lib/plans";
 import { PlanLimitCard } from "@/components/plans";
 
@@ -23,11 +23,15 @@ export default function NewProject() {
     startDate: "",
     dueDate: "",
     client: { name: "", email: "", company: "" },
-    deliverables: [{ title: "", description: "", revisions: 2 }],
+    deliverables: [emptyDeliverable(2)],
     milestones: [],
     exclusions: "",
     terms: "",
     extraRevision: "",
+    itemised: false,
+    discount: "",
+    tax: "",
+    taxLabel: "",
   };
   return (
     <div className="mx-auto max-w-3xl">
@@ -52,7 +56,7 @@ export default function NewProject() {
           }}
         />
       ) : (
-        <ProjectForm projectId={null} initial={initial} />
+        <ProjectForm projectId={null} initial={initial} showTemplates />
       )}
     </div>
   );

@@ -20,6 +20,7 @@ import { ActionButton } from "@/components/form-bits";
 import { PageSpinner } from "@/components/app-shell";
 import { ShareLinkDialog } from "@/components/share-link-dialog";
 import { AgreementTerms, RevisionMeter } from "@/components/agreement";
+import { QuoteTable, pricingFrom } from "@/components/quote";
 import { useToast } from "@/components/toast";
 import { useProject, type FullProject } from "@/lib/queries";
 import { supabase } from "@/lib/supabase";
@@ -56,6 +57,7 @@ export default function ProjectPage() {
   /** In-scope rounds plus rounds requested beyond the limit. */
   const requested = (dId: string) => revisions.filter((r) => r.deliverable_id === dId && r.kind === "revision").length;
   const fmt = (n: number) => formatMoney(n, p.currency);
+  const pricing = pricingFrom(p.deliverables, p.discount_bps, p.tax_bps, p.tax_label);
 
   /** Runs a database function, reports the result and refreshes the page data. */
   async function act<T>(fn: () => PromiseLike<{ data: T; error: { code?: string; message?: string } | null }>, success?: string) {
@@ -159,6 +161,17 @@ export default function ProjectPage() {
                 );
               })}
             </ul>
+            {pricing ? (
+              <div className="border-t border-line px-5 py-4">
+                <div className="mb-2 flex items-center justify-between gap-3">
+                  <h3 className="text-[13px] font-semibold">Quote</h3>
+                  <Link to={`/projects/${pid}/quote`} className="text-[13px] font-medium text-accent hover:underline">
+                    Printable quote
+                  </Link>
+                </div>
+                <QuoteTable lines={p.deliverables} pricing={pricing} currency={p.currency} />
+              </div>
+            ) : null}
             <AgreementTerms exclusions={p.exclusions} terms={p.terms} extraRevisionCents={p.extra_revision_cents} currency={p.currency} />
           </Card>
 

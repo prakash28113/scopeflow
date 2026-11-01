@@ -24,6 +24,8 @@ drop function if exists
   public.my_plan, public._check_plan_limits, public._plan_usage, public._effective_plan,
   public._create_subscription, public._forbid_change
 cascade;
+-- v1.2 (if installed).
+drop function if exists public.update_client, public._quote_totals cascade;
 
 drop table if exists
   public.activity_log,

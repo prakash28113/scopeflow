@@ -315,15 +315,55 @@ try {
   await anon.goto(projectUrl);
   await anon.waitForURL(/\/login\?next=/);
 
-  step("plans: Free allows 2 active projects, explains the limit, early access takes no payment");
+  step("v1.2: template, itemised quote with GST, printable quote");
+  // v1.2: start from a template and send an itemised quote with GST.
   await f.goto(`${BASE}/projects/new`);
+  await f.getByRole("button", { name: "Graphic design" }).click();
+  await f.getByText("Graphic design template applied").waitFor();
+  assert.equal(await f.getByLabel("Deliverable 1", { exact: true }).inputValue(), "Concept options");
+  assert.match(await f.getByLabel("Not included").inputValue(), /Copywriting/);
+  assert.equal(await f.getByRole("link", { name: /UI\/UX design/ }).count(), 1); // full-library template points to plans on Free
   await f.getByLabel("Project title").fill("Menu card for Northwind");
   await f.getByLabel("Client name").fill("Dana Whitfield");
   await f.getByLabel("Client email").fill("dana@northwind.test");
-  await f.getByLabel("Deliverable 1", { exact: true }).fill("Menu card");
-  await f.getByLabel("Agreed budget").fill("400");
+  await f.getByText("Price each deliverable").click();
+  await f.locator("#d-price-0").fill("150");
+  await f.getByRole("radio", { name: "Hourly" }).nth(1).click();
+  await f.locator("#d-hours-1").fill("4");
+  await f.locator("#d-rate-1").fill("50");
+  await f.getByLabel("Tax name").fill("GST");
+  await f.getByLabel("Tax %").fill("18");
+  const summary = await f.getByTestId("quote-summary").innerText();
+  assert.match(summary, /Subtotal\s+\$350\.00/);
+  assert.match(summary, /GST\s+\$63\.00/);
+  assert.match(summary, /Total\s+\$413\.00/);
+  await shot(f, "19-quote-builder");
   await f.getByRole("button", { name: "Create project" }).click();
   await f.waitForURL(/\/projects\/[0-9a-f-]{36}$/);
+  await f.getByTestId("quote-table").waitFor();
+  await f.getByRole("link", { name: "Printable quote" }).click();
+  await f.waitForURL(/\/quote$/);
+  await f.getByText("Prepared for").waitFor();
+  assert.match(await f.getByTestId("quote-table").innerText(), /Total\s+\$413\.00/);
+  assert.match(await f.getByTestId("quote-table").innerText(), /4 h × \$50\.00/);
+  await f.getByRole("button", { name: "Print or save as PDF" }).waitFor();
+  await shot(f, "20-printable-quote");
+
+  step("clients: profile, history and private notes");
+  await f.goto(`${BASE}/clients`);
+  await f.getByRole("link", { name: /Dana Whitfield/ }).click();
+  await f.getByRole("heading", { name: "Approval history" }).waitFor();
+  await f.getByText(/Scope approved by Dana Whitfield/).first().waitFor();
+  await f.getByText(/Wise transfer #4471/).waitFor();
+  await f.getByRole("button", { name: "Edit" }).click();
+  await f.getByLabel("Phone").fill("+1 555 0100");
+  await f.getByLabel("Private notes").fill("Prefers email. Approves quickly.");
+  await f.getByRole("button", { name: "Save" }).click();
+  await f.getByText("Client saved.").waitFor();
+  await f.getByText("Prefers email. Approves quickly.").waitFor();
+  await shot(f, "21-client");
+
+  step("plans: the Free limit is reached at 2 active projects");
   await f.goto(`${BASE}/projects/new`);
   await f.getByText("You've reached the Free plan's active projects").waitFor();
   await f.getByText("Your existing projects and client links keep working.").waitFor();

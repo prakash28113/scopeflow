@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { CURRENCIES, parseAmount } from "./money";
 import { parseHours } from "./pricing";
+import { lineAmount, parsePercent, quoteTotals } from "./quote";
 
 export type FieldErrors = Record<string, string>;
 
@@ -54,7 +55,7 @@ export const projectFormSchema = z
     title: text(160, "Project title"),
     summary: optionalText(4000),
     currency: z.enum(CURRENCIES, "Choose a currency"),
-    budget: z.string().trim().min(1, "Enter the agreed budget"),
+    budget: z.string().trim(),
     startDate: optionalDate,
     dueDate: optionalDate,
     client: z.object({
@@ -72,6 +73,10 @@ export const projectFormSchema = z
             .int("Use a whole number")
             .min(0, "Cannot be negative")
             .max(50, "Maximum is 50"),
+          priceType: z.enum(["fixed", "hourly"]).default("fixed"),
+          amount: z.string().trim().default(""),
+          hours: z.string().trim().default(""),
+          rate: z.string().trim().default(""),
         }),
       )
       .min(1, "Add at least one deliverable")
@@ -85,12 +90,29 @@ export const projectFormSchema = z
         }),
       )
       .max(50, "Up to 50 milestones"),
+    itemised: z.boolean().default(false),
+    discount: z.string().trim().default(""),
+    tax: z.string().trim().default(""),
+    taxLabel: optionalText(24).default(""),
     exclusions: optionalText(4000).default(""),
     terms: optionalText(4000).default(""),
     extraRevision: z.string().trim().default(""),
   })
   .superRefine((v, ctx) => {
-    if (parseAmount(v.budget, v.currency) === null) {
+    if (v.itemised) {
+      v.deliverables.forEach((d, i) => {
+        if (d.priceType === "hourly") {
+          if (parseHours(d.hours) === null) ctx.addIssue({ code: "custom", path: ["deliverables", i, "hours"], message: "Enter hours, e.g. 6 or 6.5" });
+          if (parseAmount(d.rate, v.currency) === null) ctx.addIssue({ code: "custom", path: ["deliverables", i, "rate"], message: "Enter the hourly rate" });
+        } else if (parseAmount(d.amount, v.currency) === null) {
+          ctx.addIssue({ code: "custom", path: ["deliverables", i, "amount"], message: "Enter a price" });
+        }
+      });
+      if (parsePercent(v.discount) === null) ctx.addIssue({ code: "custom", path: ["discount"], message: "0–100, e.g. 10" });
+      if (parsePercent(v.tax) === null) ctx.addIssue({ code: "custom", path: ["tax"], message: "0–100, e.g. 18" });
+    } else if (!v.budget) {
+      ctx.addIssue({ code: "custom", path: ["budget"], message: "Enter the agreed budget" });
+    } else if (parseAmount(v.budget, v.currency) === null) {
       ctx.addIssue({ code: "custom", path: ["budget"], message: "Enter a valid amount, e.g. 2500 or 2500.00" });
     }
     if (v.extraRevision && parseAmount(v.extraRevision, v.currency) === null) {
@@ -109,13 +131,37 @@ export const projectFormSchema = z
 
 export type ProjectForm = z.infer<typeof projectFormSchema>;
 
+/** Price of one deliverable row in the form, or null when incomplete. */
+export function formLineAmount(d: { priceType?: string; amount?: string; hours?: string; rate?: string }, currency: string): number | null {
+  if (d.priceType === "hourly") {
+    const h = parseHours(d.hours ?? "");
+    const r = parseAmount(d.rate ?? "", currency);
+    return h === null || r === null ? null : lineAmount({ type: "hourly", hoursHundredths: h, rateMinor: r });
+  }
+  const a = parseAmount(d.amount ?? "", currency);
+  return a === null ? null : lineAmount({ type: "fixed", amountMinor: a });
+}
+
+/** Live quote totals for the form; null unless every line is priced. */
+export function formQuote(f: { itemised: boolean; currency: string; discount: string; tax: string; deliverables: { priceType?: string; amount?: string; hours?: string; rate?: string }[] }) {
+  if (!f.itemised) return null;
+  const amounts = f.deliverables.map((d) => formLineAmount(d, f.currency));
+  if (amounts.some((a) => a === null)) return null;
+  return quoteTotals(amounts as number[], parsePercent(f.discount) ?? 0, parsePercent(f.tax) ?? 0);
+}
+
 /** Converts validated form values into the save_project() payload. */
 export function toProjectPayload(f: ProjectForm) {
+  const quote = formQuote(f);
   return {
     title: f.title,
     summary: f.summary,
     currency: f.currency,
-    budget_cents: parseAmount(f.budget, f.currency)!,
+    // With an itemised quote the database computes the budget; this value is only a fallback.
+    budget_cents: quote ? quote.total : parseAmount(f.budget, f.currency)!,
+    discount_bps: f.itemised ? parsePercent(f.discount) || null : null,
+    tax_bps: f.itemised ? parsePercent(f.tax) || null : null,
+    tax_label: f.itemised ? f.taxLabel : "",
     start_date: f.startDate,
     due_date: f.dueDate,
     client: { name: f.client.name, email: f.client.email.toLowerCase(), company: f.client.company },
@@ -123,6 +169,11 @@ export function toProjectPayload(f: ProjectForm) {
       title: d.title,
       description: d.description,
       revisions_included: d.revisions,
+      ...(f.itemised
+        ? d.priceType === "hourly"
+          ? { pricing_type: "hourly", hours: (parseHours(d.hours)! / 100).toFixed(2), rate_cents: parseAmount(d.rate, f.currency) }
+          : { pricing_type: "fixed", amount_cents: parseAmount(d.amount, f.currency) }
+        : {}),
     })),
     milestones: f.milestones.map((m) => ({
       title: m.title,
@@ -225,4 +276,12 @@ export const changeOrderDecisionSchema = z.object({
   decision: z.enum(["approved", "rejected"]),
   clientName: text(120, "Your name"),
   comment: optionalText(4000),
+});
+
+// ---------------------------------------------------------------- clients
+export const clientSchema = z.object({
+  name: text(120, "Client name"),
+  company: optionalText(120),
+  phone: optionalText(40).refine((v) => v === "" || /^[+()\d\s.-]{5,40}$/.test(v), "Use digits, spaces and + ( ) - only"),
+  notes: optionalText(4000),
 });

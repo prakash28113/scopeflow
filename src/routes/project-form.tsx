@@ -4,22 +4,45 @@ import { useQueryClient } from "@tanstack/react-query";
 import { Alert, Button, Card, CardHeader, Field, Input, Select, Textarea, cx } from "@/components/ui";
 import { SubmitButton } from "@/components/form-bits";
 import { CURRENCIES, formatMoney, parseAmount } from "@/lib/money";
-import { projectFormSchema, toProjectPayload, type ProjectForm as Values } from "@/lib/validation";
+import { formLineAmount, formQuote, projectFormSchema, toProjectPayload, type ProjectForm as Values } from "@/lib/validation";
+import { TEMPLATES, type Template } from "@/lib/templates";
+import { useMyPlan } from "@/lib/plans";
+import { Link } from "react-router";
 import { useAction } from "@/lib/use-action";
 import { supabase } from "@/lib/supabase";
 import { useToast } from "@/components/toast";
 import { checkScope } from "@/lib/scope-check";
 import { PlanLimitCard } from "@/components/plans";
 
-export type FormValues = Omit<Values, "deliverables"> & {
-  deliverables: { title: string; description: string; revisions: number | string }[];
+export type FormDeliverable = {
+  title: string;
+  description: string;
+  revisions: number | string;
+  priceType: "fixed" | "hourly";
+  amount: string;
+  hours: string;
+  rate: string;
 };
+export type FormValues = Omit<Values, "deliverables"> & { deliverables: FormDeliverable[] };
 
-const emptyDeliverable = (revisions: number | string) => ({ title: "", description: "", revisions });
+export const emptyDeliverable = (revisions: number | string): FormDeliverable => ({ title: "", description: "", revisions, priceType: "fixed", amount: "", hours: "", rate: "" });
 const emptyMilestone = () => ({ title: "", amount: "", dueDate: "" });
 
-export function ProjectForm({ projectId, initial }: { projectId: string | null; initial: FormValues }) {
+export function ProjectForm({ projectId, initial, showTemplates = false }: { projectId: string | null; initial: FormValues; showTemplates?: boolean }) {
   const [v, setV] = useState<FormValues>(initial);
+  const [applied, setApplied] = useState<string | null>(null);
+  const plan = useMyPlan(showTemplates);
+  const fullLibrary = Boolean(plan.data && plan.data.effective_plan !== "free");
+  function applyTemplate(t: Template) {
+    setV((p) => ({
+      ...p,
+      summary: t.summary,
+      deliverables: t.deliverables.map((d) => ({ ...emptyDeliverable(d.revisions), title: d.title, description: d.description })),
+      exclusions: t.exclusions.join("\n"),
+      terms: t.terms,
+    }));
+    setApplied(t.name);
+  }
   const action = useAction();
   const navigate = useNavigate();
   const qc = useQueryClient();
@@ -44,11 +67,12 @@ export function ProjectForm({ projectId, initial }: { projectId: string | null; 
   const setMilestone = (i: number, k: string, val: string) =>
     setV((p) => ({ ...p, milestones: p.milestones.map((m, j) => (j === i ? { ...m, [k]: val } : m)) }));
 
+  const quote = useMemo(() => formQuote(v), [v]);
   const totals = useMemo(() => {
-    const budget = parseAmount(v.budget, v.currency);
+    const budget = v.itemised ? (quote?.total ?? null) : parseAmount(v.budget, v.currency);
     const scheduled = v.milestones.reduce((s, m) => s + (parseAmount(m.amount, v.currency) ?? 0), 0);
     return { budget, scheduled };
-  }, [v.budget, v.milestones, v.currency]);
+  }, [v.budget, v.milestones, v.currency, v.itemised, quote]);
 
   const defaultRevisions = v.deliverables[0]?.revisions ?? 2;
   const hints = useMemo(() => checkScope(v), [v]);
@@ -56,6 +80,34 @@ export function ProjectForm({ projectId, initial }: { projectId: string | null; 
   return (
     <form onSubmit={onSubmit} className="space-y-6" noValidate>
       {action.limit ? <PlanLimitCard limit={action.limit} /> : action.error ? <Alert>{action.error}</Alert> : null}
+
+      {showTemplates ? (
+        <Card>
+          <CardHeader
+            title="Start from a template"
+            description={applied ? `${applied} template applied — edit anything below.` : "Optional. Fills in deliverables, exclusions and terms you can edit."}
+          />
+          <div className="flex flex-wrap gap-2 p-5">
+            {TEMPLATES.map((t) => {
+              const locked = !t.starter && !fullLibrary;
+              return locked ? (
+                <Link key={t.id} to="/plan" className="inline-flex items-center gap-1.5 rounded-lg border border-dashed border-line-strong px-3 py-1.5 text-[13px] text-muted hover:text-ink" title="Part of the full template library (Solo)">
+                  {t.name} <span className="rounded bg-sunken px-1.5 text-[11px]">Solo</span>
+                </Link>
+              ) : (
+                <button
+                  key={t.id}
+                  type="button"
+                  onClick={() => applyTemplate(t)}
+                  className={cx("rounded-lg border px-3 py-1.5 text-[13px] font-medium transition-colors", applied === t.name ? "border-accent bg-accent-soft text-accent-hover" : "border-line-strong hover:border-accent")}
+                >
+                  {t.name}
+                </button>
+              );
+            })}
+          </div>
+        </Card>
+      ) : null}
 
       <Card>
         <CardHeader title="Project" description="What you're making and for whom." />
@@ -104,6 +156,44 @@ export function ProjectForm({ projectId, initial }: { projectId: string | null; 
                   onChange={(e) => setDeliverable(i, "description", e.target.value)}
                   placeholder="What's included, formats, sizes… (optional)"
                 />
+                {v.itemised ? (
+                  <div className="flex flex-wrap items-end gap-3 rounded-lg bg-sunken/60 p-3">
+                    <div role="radiogroup" aria-label={`Deliverable ${i + 1} pricing`} className="inline-flex rounded-lg border border-line-strong bg-surface p-0.5">
+                      {(["fixed", "hourly"] as const).map((t) => (
+                        <button
+                          key={t}
+                          type="button"
+                          role="radio"
+                          aria-checked={d.priceType === t}
+                          onClick={() => setDeliverable(i, "priceType", t)}
+                          className={cx("rounded-md px-2.5 py-1 text-[12px] font-medium", d.priceType === t ? "bg-accent-soft text-accent-hover" : "text-muted")}
+                        >
+                          {t === "fixed" ? "Fixed" : "Hourly"}
+                        </button>
+                      ))}
+                    </div>
+                    {d.priceType === "hourly" ? (
+                      <>
+                        <Field label="Hours" htmlFor={`d-hours-${i}`} error={fe[`deliverables.${i}.hours`]} className="w-24">
+                          <Input id={`d-hours-${i}`} inputMode="decimal" value={d.hours} onChange={(e) => setDeliverable(i, "hours", e.target.value)} className="num" />
+                        </Field>
+                        <Field label={`Rate (${v.currency})`} htmlFor={`d-rate-${i}`} error={fe[`deliverables.${i}.rate`]} className="w-32">
+                          <Input id={`d-rate-${i}`} inputMode="decimal" value={d.rate} onChange={(e) => setDeliverable(i, "rate", e.target.value)} className="num" />
+                        </Field>
+                      </>
+                    ) : (
+                      <Field label={`Price (${v.currency})`} htmlFor={`d-price-${i}`} error={fe[`deliverables.${i}.amount`]} className="w-36">
+                        <Input id={`d-price-${i}`} inputMode="decimal" value={d.amount} onChange={(e) => setDeliverable(i, "amount", e.target.value)} className="num" />
+                      </Field>
+                    )}
+                    <p className="num ml-auto pb-2 text-[13px] font-medium" aria-live="polite">
+                      {(() => {
+                        const a = formLineAmount(d, v.currency);
+                        return a === null ? "—" : formatMoney(a, v.currency);
+                      })()}
+                    </p>
+                  </div>
+                ) : null}
               </div>
               <Field label="Revisions included" htmlFor={`d-rev-${i}`} error={fe[`deliverables.${i}.revisions`]}>
                 <Input
@@ -141,6 +231,38 @@ export function ProjectForm({ projectId, initial }: { projectId: string | null; 
 
       <Card>
         <CardHeader title="Budget & timeline" />
+        <label className="flex items-start gap-3 border-b border-line px-5 py-4 text-sm">
+          <input type="checkbox" className="mt-0.5 size-4 accent-[var(--color-accent)]" checked={v.itemised} onChange={(e) => set("itemised", e.target.checked)} />
+          <span>
+            <span className="font-medium">Price each deliverable</span>
+            <span className="block text-[13px] text-muted">Itemised quote with optional discount and tax (e.g. GST). The total becomes the budget your client approves.</span>
+          </span>
+        </label>
+        {v.itemised ? (
+          <div className="grid gap-5 border-b border-line p-5 sm:grid-cols-[1fr_1fr_1fr_1.2fr]">
+            <Field label="Discount %" htmlFor="discount" error={fe.discount} hint="Optional">
+              <Input id="discount" inputMode="decimal" value={v.discount} onChange={(e) => set("discount", e.target.value)} placeholder="0" className="num" />
+            </Field>
+            <Field label="Tax name" htmlFor="tax-label" error={fe.taxLabel} hint="e.g. GST">
+              <Input id="tax-label" value={v.taxLabel} onChange={(e) => set("taxLabel", e.target.value)} placeholder="GST" maxLength={24} />
+            </Field>
+            <Field label="Tax %" htmlFor="tax" error={fe.tax} hint="Optional">
+              <Input id="tax" inputMode="decimal" value={v.tax} onChange={(e) => set("tax", e.target.value)} placeholder="18" className="num" />
+            </Field>
+            <dl className="num space-y-1 self-end rounded-lg bg-sunken/60 px-3 py-2 text-[13px]" data-testid="quote-summary">
+              {quote ? (
+                <>
+                  <div className="flex justify-between gap-3"><dt className="text-muted">Subtotal</dt><dd>{formatMoney(quote.subtotal, v.currency)}</dd></div>
+                  {quote.discount ? <div className="flex justify-between gap-3"><dt className="text-muted">Discount</dt><dd>−{formatMoney(quote.discount, v.currency)}</dd></div> : null}
+                  {quote.tax ? <div className="flex justify-between gap-3"><dt className="text-muted">{v.taxLabel || "Tax"}</dt><dd>{formatMoney(quote.tax, v.currency)}</dd></div> : null}
+                  <div className="flex justify-between gap-3 font-semibold"><dt>Total</dt><dd>{formatMoney(quote.total, v.currency)}</dd></div>
+                </>
+              ) : (
+                <p className="text-muted">Price every deliverable to see the total.</p>
+              )}
+            </dl>
+          </div>
+        ) : null}
         <div className="grid gap-5 p-5 sm:grid-cols-4">
           <Field label="Currency" htmlFor="currency" error={fe.currency}>
             <Select id="currency" value={v.currency} onChange={(e) => set("currency", e.target.value as Values["currency"])}>
@@ -149,9 +271,16 @@ export function ProjectForm({ projectId, initial }: { projectId: string | null; 
               ))}
             </Select>
           </Field>
-          <Field label="Agreed budget" htmlFor="budget" error={fe.budget}>
-            <Input id="budget" inputMode="decimal" value={v.budget} onChange={(e) => set("budget", e.target.value)} placeholder="3000" className="num" aria-invalid={!!fe.budget} />
-          </Field>
+          {v.itemised ? (
+            <div>
+              <p className="mb-1.5 text-[13px] font-medium text-ink-2">Agreed budget</p>
+              <p className="num flex h-10 items-center text-base font-semibold">{quote ? formatMoney(quote.total, v.currency) : "—"}</p>
+            </div>
+          ) : (
+            <Field label="Agreed budget" htmlFor="budget" error={fe.budget}>
+              <Input id="budget" inputMode="decimal" value={v.budget} onChange={(e) => set("budget", e.target.value)} placeholder="3000" className="num" aria-invalid={!!fe.budget} />
+            </Field>
+          )}
           <Field label="Start date" htmlFor="start" error={fe.startDate} hint="Optional">
             <Input id="start" type="date" value={v.startDate} onChange={(e) => set("startDate", e.target.value)} />
           </Field>
