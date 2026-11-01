@@ -1,5 +1,11 @@
 # Changelog
 
+## Public launch — sign-ups open
+
+- `config/beta-allowlist.txt` is now `*`: anyone can create an account (Free plan by default; paid plans remain early access, nothing can be charged). Approved by the owner on 1 Nov 2026.
+- Sign-up page: "Start free. No card needed."
+- To go back to invite-only: replace `*` with a list of emails and run the release (existing accounts are kept).
+
 ## Password reset on — live 1 Nov 2026 (release run 41307038212)
 
 - **"Forgot your password?" now emails a reset link**, sent by free Brevo SMTP (set up in Supabase; see `docs/EMAIL-SETUP.md`). `passwordResetEmail` is now `true`.
