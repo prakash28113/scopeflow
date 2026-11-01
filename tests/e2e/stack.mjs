@@ -32,7 +32,7 @@ writeFileSync(new URL("./keys.json", import.meta.url), JSON.stringify({ anon: AN
 
 // ---------------------------------------------------------------- database
 const db = new PGlite();
-const stub = readFileSync(`${PROJECT}/tests/db/harness.ts`, "utf8").split("export const SUPABASE_STUB = `")[1].split("`;")[0];
+const stub = readFileSync(`${PROJECT}/tests/db/supabase-stub.sql`, "utf8");
 await db.exec(stub);
 for (const f of readdirSync(`${PROJECT}/supabase/migrations`).sort()) {
   await db.exec(readFileSync(`${PROJECT}/supabase/migrations/${f}`, "utf8"));
