@@ -1,6 +1,6 @@
 # Changelog
 
-## Feedback link — ready for review (not released)
+## Feedback link — live 1 Nov 2026 (release run 41314127613)
 
 - **Send feedback** in the account menu, and a short line at the bottom of every app page. It opens the user's own email app, addressed to support, with a short prompt and the page path. Project ids are replaced with `:id`, and no project data is included.
 - Home page banner: "Start free: 2 active projects, no card needed." (was "free during the beta").
