@@ -1,5 +1,14 @@
 # Changelog
 
+## New logo — ready for review (not released)
+
+- The official ScopeFlow logo (linked hooks + "ScopeFlow" wordmark) is now used everywhere:
+  - the home page, app, sign-in, pricing and legal page headers;
+  - the "Powered by" footer on client pages;
+  - the browser tab icon and phone home-screen icons (`apple-touch-icon`, 192/512 icons, web manifest);
+  - the link-preview image (`og.png?v=2`, so WhatsApp and LinkedIn fetch the new one).
+- The logo is traced to vectors, so it's sharp at any size. Source and regeneration steps are in `brand/`. A PNG copy for emails is at `/brand/scopeflow-logo.png`.
+
 ## Terms & Conditions — live 1 Nov 2026 (release run 41310855234)
 
 - Full **Terms & Conditions** at `/terms` (replaces the short beta "Terms of Use"). They cover:
