@@ -5,7 +5,7 @@
  */
 type DbError = { code?: string; message?: string } | null | undefined;
 
-const USER_FACING_CODES = new Set(["22023", "55000", "28000", "P0002"]);
+const USER_FACING_CODES = new Set(["22023", "55000", "28000", "P0002", "SF402"]);
 
 export function userMessage(error: DbError, fallback = "Something went wrong. Please try again."): string {
   if (!error) return fallback;

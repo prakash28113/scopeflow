@@ -9,6 +9,7 @@ import { useAction } from "@/lib/use-action";
 import { supabase } from "@/lib/supabase";
 import { useToast } from "@/components/toast";
 import { checkScope } from "@/lib/scope-check";
+import { PlanLimitCard } from "@/components/plans";
 
 export type FormValues = Omit<Values, "deliverables"> & {
   deliverables: { title: string; description: string; revisions: number | string }[];
@@ -54,7 +55,7 @@ export function ProjectForm({ projectId, initial }: { projectId: string | null; 
 
   return (
     <form onSubmit={onSubmit} className="space-y-6" noValidate>
-      {action.error ? <Alert>{action.error}</Alert> : null}
+      {action.limit ? <PlanLimitCard limit={action.limit} /> : action.error ? <Alert>{action.error}</Alert> : null}
 
       <Card>
         <CardHeader title="Project" description="What you're making and for whom." />

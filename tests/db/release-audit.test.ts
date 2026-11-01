@@ -213,7 +213,8 @@ describe("4 · rejecting a change order leaves the agreement untouched", () => {
 describe("5 · every privileged operation checks the caller", () => {
   it("each SECURITY DEFINER function verifies ownership, the client link, or the signed-in user", async () => {
     const db = await createDb();
-    const rows = (await db.query<Json>("select proname, prosrc from pg_proc where pronamespace = 'public'::regnamespace and prosecdef")).rows;
+    // Every owner-privileged function the app can call (anon or signed-in) must check the caller.
+    const rows = (await db.query<Json>("select proname, prosrc from pg_proc where pronamespace = 'public'::regnamespace and prosecdef and (has_function_privilege('anon', oid, 'EXECUTE') or has_function_privilege('authenticated', oid, 'EXECUTE'))")).rows;
     // Functions that legitimately need no per-project check, and why:
     const exempt: Record<string, string> = {
       health: "public liveness ping; returns 'ok' and purges expired rate counters",
@@ -225,6 +226,7 @@ describe("5 · every privileged operation checks the caller", () => {
       .map((r) => r.proname);
     expect(unguarded).toEqual([]);
     expect(rows.length).toBeGreaterThan(15);
+    // Owner-privileged functions the app can't call at all (triggers, back office) are listed in permissions.test.ts.
   });
 });
 

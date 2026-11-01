@@ -154,3 +154,21 @@ describe("upcoming due dates", () => {
     expect(localToday(new Date("2026-11-01T20:00:00Z"))).toMatch(/^2026-11-0[12]$/);
   });
 });
+
+import { planLimitFrom, priceLabel, type Plan } from "@/lib/plans";
+
+describe("plan display helpers", () => {
+  const solo: Plan = { id: "solo", name: "Solo", position: 2, currency: "USD", monthly_price_cents: 900, annual_price_cents: 9000, max_active_projects: null, max_clients: null, max_team_members: 1, purchasable: false };
+  it("shows monthly and yearly prices with the yearly saving", () => {
+    expect(priceLabel(solo, "month")).toEqual({ main: "$9.00", per: "/month", note: null });
+    expect(priceLabel(solo, "year")).toEqual({ main: "$90.00", per: "/year", note: "$7.50/month · save $18.00 a year" });
+    expect(priceLabel({ ...solo, id: "free", monthly_price_cents: 0, annual_price_cents: 0 }, "year").per).toBe("forever");
+  });
+  it("recognises the database's plan-limit error and nothing else", () => {
+    const l = planLimitFrom({ code: "SF402", message: "Your Free plan includes 2 active projects…", hint: "plan_limit:active_projects", details: '{"limit":2,"used":2,"plan":"free"}' });
+    expect(l).toMatchObject({ kind: "active_projects", limit: 2, used: 2, plan: "free" });
+    expect(planLimitFrom({ code: "SF402", hint: "plan_limit:clients", details: "not json" })).toMatchObject({ kind: "clients", limit: 0 });
+    expect(planLimitFrom({ code: "22023", message: "x" })).toBeNull();
+    expect(planLimitFrom(null)).toBeNull();
+  });
+});

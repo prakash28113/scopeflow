@@ -23,7 +23,7 @@ const SUPABASE_API = "https://api.supabase.com/v1";
 const CF_API = "https://api.cloudflare.com/client/v4";
 
 /** Expected results of the post-migration security check (see DEPLOYMENT.md §2). */
-export const EXPECTED = { tables: 14, without_rls: 0, public_functions: 5, signup_trigger: 1 };
+export const EXPECTED = { tables: 20, without_rls: 0, public_functions: 5, signup_trigger: 1 };
 /** Keeps sign-ups closed when no invited emails are configured. */
 export const CLOSED_SENTINEL = "invites-closed@scopeflow.invalid";
 const EMAIL = /^[a-z0-9._%+-]+@[a-z0-9-]+(\.[a-z0-9-]+)*\.[a-z]{2,}$/;
@@ -204,7 +204,7 @@ revoke all on all tables in schema scopeflow_admin from public, anon, authentica
   for (const [k, v] of Object.entries(EXPECTED)) {
     if (Number(check?.[k]) !== v) throw new Error(`Security check failed: ${k} = ${check?.[k]}, expected ${v}.`);
   }
-  ok("Security check passed: 14 tables, RLS on all, 5 public functions, sign-up trigger present");
+  ok(`Security check passed: ${EXPECTED.tables} tables, RLS on all, ${EXPECTED.public_functions} public functions, sign-up trigger present`);
 
   await optional("Sign-in configured: email + password, no confirmation email, minimum 8 characters", `/projects/${ref}/config/auth`, {
     external_email_enabled: true,

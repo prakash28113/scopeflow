@@ -9,7 +9,7 @@ import { fileURLToPath } from "node:url";
 import { join } from "node:path";
 import { SUPABASE_STUB } from "./harness";
 // @ts-expect-error — plain ESM script
-import { run, allowlistSql, parseEmails, CLOSED_SENTINEL } from "../../scripts/ci/release.mjs";
+import { run, allowlistSql, parseEmails, CLOSED_SENTINEL, EXPECTED } from "../../scripts/ci/release.mjs";
 
 const dir = fileURLToPath(new URL("../../supabase/migrations/", import.meta.url));
 const migrations = readdirSync(dir).filter((f) => f.endsWith(".sql")).map((name) => ({ name, body: readFileSync(join(dir, name), "utf8") }));
@@ -66,7 +66,7 @@ describe("release automation against a real database", () => {
     const api = fakeSupabase(db);
     expect(await run(deps(api.fetch))).toBe("waiting-cloudflare");
 
-    expect((await db.query("select count(*)::int as n from pg_tables where schemaname = 'public'")).rows[0]).toEqual({ n: 14 });
+    expect((await db.query("select count(*)::int as n from pg_tables where schemaname = 'public'")).rows[0]).toEqual({ n: EXPECTED.tables });
     expect((await db.query("select name from scopeflow_admin.applied_migrations")).rows).toEqual(migrations.map((m) => ({ name: m.name })));
     expect((await db.query("select email from public.beta_allowlist")).rows).toEqual([{ email: "owner@example.com" }]);
     const auth = api.calls.find((c) => c.path.endsWith("/config/auth"));

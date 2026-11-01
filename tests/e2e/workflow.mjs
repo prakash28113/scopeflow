@@ -38,6 +38,15 @@ try {
   await f.getByRole("heading", { name: "Privacy Policy" }).waitFor();
   await f.goto(`${BASE}/terms`);
   await f.getByRole("heading", { name: "Terms of Use" }).waitFor();
+  // Public pricing page (signed out): plans come from the database.
+  await f.goto(`${BASE}/pricing`);
+  await f.getByRole("heading", { name: /Simple pricing/ }).waitFor();
+  await f.getByText("Recommended").waitFor();
+  await f.getByText("$90.00").waitFor();
+  await f.getByRole("radio", { name: "Monthly" }).click();
+  await f.getByText("$9.00").waitFor();
+  await f.getByText("Not on sale yet — no payment taken.").first().waitFor();
+  await shot(f, "00-pricing", false);
   await f.goto(BASE);
   await shot(f, "01-landing", false);
   await f.goto(`${BASE}/signup`);
@@ -305,6 +314,30 @@ try {
   const anon = await anonCtx.newPage();
   await anon.goto(projectUrl);
   await anon.waitForURL(/\/login\?next=/);
+
+  step("plans: Free allows 2 active projects, explains the limit, early access takes no payment");
+  await f.goto(`${BASE}/projects/new`);
+  await f.getByLabel("Project title").fill("Menu card for Northwind");
+  await f.getByLabel("Client name").fill("Dana Whitfield");
+  await f.getByLabel("Client email").fill("dana@northwind.test");
+  await f.getByLabel("Deliverable 1", { exact: true }).fill("Menu card");
+  await f.getByLabel("Agreed budget").fill("400");
+  await f.getByRole("button", { name: "Create project" }).click();
+  await f.waitForURL(/\/projects\/[0-9a-f-]{36}$/);
+  await f.goto(`${BASE}/projects/new`);
+  await f.getByText("You've reached the Free plan's active projects").waitFor();
+  await f.getByText("Your existing projects and client links keep working.").waitFor();
+  assert.equal(await f.getByRole("button", { name: "Create project" }).count(), 0);
+  await shot(f, "17-plan-limit", false);
+  await f.getByRole("link", { name: "See plans" }).click();
+  await f.waitForURL("**/plan");
+  await f.getByRole("heading", { name: "Plan & usage" }).waitFor();
+  await f.getByText("2 of 2").first().waitFor();
+  await f.getByRole("button", { name: "Join early access" }).first().click();
+  await f.getByText("On the early-access list", { exact: true }).waitFor();
+  await f.getByText(/ScopeFlow hasn't charged you anything/).waitFor();
+  await shot(f, "18-plan-usage");
+  // Client links at the limit: covered by tests/db/plans.test.ts (this project's link was revoked above).
 
   step("sign out / sign in again");
   await f.goto(`${BASE}/dashboard`);

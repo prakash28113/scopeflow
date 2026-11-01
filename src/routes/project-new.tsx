@@ -3,12 +3,18 @@ import { Alert, PageHeader } from "@/components/ui";
 import { PageSpinner } from "@/components/app-shell";
 import { useProfile } from "@/lib/auth";
 import { ProjectForm, type FormValues } from "./project-form";
+import { useMyPlan } from "@/lib/plans";
+import { PlanLimitCard } from "@/components/plans";
 
 export default function NewProject() {
   const profile = useProfile();
+  const plan = useMyPlan();
   const [params] = useSearchParams();
   const welcome = params.get("welcome");
-  if (!profile.data) return <PageSpinner />;
+  if (!profile.data || plan.isLoading) return <PageSpinner />;
+  const m = plan.data;
+  // Explain the limit before any typing; the database enforces it either way.
+  const atLimit = m && m.limits.active_projects !== null && m.usage.active_projects >= m.limits.active_projects;
   const initial: FormValues = {
     title: "",
     summary: "",
@@ -35,7 +41,19 @@ export default function NewProject() {
           <Alert tone="info">Your workspace is ready. Create your first project to get a private approval link for your client.</Alert>
         </div>
       ) : null}
-      <ProjectForm projectId={null} initial={initial} />
+      {atLimit && m ? (
+        <PlanLimitCard
+          limit={{
+            kind: "active_projects",
+            limit: m.limits.active_projects!,
+            used: m.usage.active_projects,
+            plan: m.effective_plan,
+            message: `Your Free plan includes ${m.limits.active_projects} active projects, and you have ${m.usage.active_projects}. Complete or cancel a project, or see plans to get more.`,
+          }}
+        />
+      ) : (
+        <ProjectForm projectId={null} initial={initial} />
+      )}
     </div>
   );
 }

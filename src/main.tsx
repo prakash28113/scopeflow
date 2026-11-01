@@ -26,6 +26,7 @@ const router = createBrowserRouter([
       { path: "/signup", lazy: lazy(() => import("./routes/auth").then((m) => ({ default: m.SignupPage }))) },
       // Client portal: token-gated, no account. Token is read from the URL fragment.
       { path: "/p", lazy: lazy(() => import("./routes/portal")) },
+      { path: "/pricing", lazy: lazy(() => import("./routes/pricing")) },
       { path: "/privacy", lazy: lazy(() => import("./routes/legal").then((m) => ({ default: m.PrivacyPage }))) },
       { path: "/terms", lazy: lazy(() => import("./routes/legal").then((m) => ({ default: m.TermsPage }))) },
       {
@@ -40,6 +41,7 @@ const router = createBrowserRouter([
             children: [
               { path: "/dashboard", lazy: lazy(() => import("./routes/dashboard")) },
               { path: "/notifications", lazy: lazy(() => import("./routes/notifications")) },
+              { path: "/plan", lazy: lazy(() => import("./routes/plan")) },
               { path: "/settings", lazy: lazy(() => import("./routes/settings").then((m) => ({ default: m.SettingsPage }))) },
               { path: "/projects/new", lazy: lazy(() => import("./routes/project-new")) },
               { path: "/projects/:id", lazy: lazy(() => import("./routes/project-detail")) },

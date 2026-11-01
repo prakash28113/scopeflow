@@ -2,8 +2,9 @@ import { useState } from "react";
 import type { z } from "zod";
 import { issuesToFieldErrors, type FieldErrors } from "./validation";
 import { userMessage } from "./errors";
+import { planLimitFrom, type PlanLimit } from "./plans";
 
-type DbError = { code?: string; message?: string } | null;
+type DbError = { code?: string; message?: string; hint?: string; details?: string } | null;
 
 /**
  * Runs a form submission: validate with zod, call the database, map errors.
@@ -14,6 +15,8 @@ export function useAction() {
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
+  /** Set when the database refused because of a plan limit, so the page can explain and offer plans. */
+  const [limit, setLimit] = useState<PlanLimit | null>(null);
 
   async function run<S extends z.ZodType, R>(
     schema: S,
@@ -21,6 +24,7 @@ export function useAction() {
     call: (data: z.output<S>) => PromiseLike<{ data: R; error: DbError }>,
   ): Promise<R | undefined> {
     setError(null);
+    setLimit(null);
     const parsed = schema.safeParse(input);
     if (!parsed.success) {
       setFieldErrors(issuesToFieldErrors(parsed.error));
@@ -32,6 +36,7 @@ export function useAction() {
     try {
       const { data, error } = await call(parsed.data);
       if (error) {
+        setLimit(planLimitFrom(error));
         setError(userMessage(error));
         return undefined;
       }
@@ -45,7 +50,7 @@ export function useAction() {
     }
   }
 
-  return { run, pending, error, fieldErrors, setError };
+  return { run, pending, error, fieldErrors, setError, limit };
 }
 
 /** Plain database call without a form (buttons like "Mark paid"). */
