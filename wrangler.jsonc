@@ -7,6 +7,7 @@
   // no Worker CPU). Unknown page paths get index.html for client-side routing.
   "assets": {
     "directory": "./dist",
+    "binding": "ASSETS",
     "not_found_handling": "single-page-application"
   },
   // Twice-daily keep-alive so the free Supabase project isn't paused for inactivity.

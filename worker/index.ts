@@ -1,12 +1,20 @@
 /**
  * ScopeFlow Worker. Intentionally tiny and secret-free:
- *  - static files and page navigations never reach this script (served by assets);
- *  - `fetch` only sees non-navigation requests to paths with no file → 404;
- *  - `scheduled` pings Supabase once a day so a free project isn't paused.
+ *  - static files and browser page navigations are served by static assets and never reach
+ *    this script;
+ *  - `fetch` sees only requests to paths with no file that the platform didn't classify as a
+ *    navigation (e.g. some in-app browsers, link previewers, older webviews). If they ask for
+ *    HTML it serves the app shell with the same security headers as the static pages
+ *    (the client portal stays noindex/no-store); anything else gets a JSON 404;
+ *  - `scheduled` pings Supabase twice a day so a free project isn't paused.
  */
+import { PORTAL_HEADERS, pageHeaders } from "../build/security-headers";
+
 export interface Env {
   SUPABASE_URL: string;
   SUPABASE_ANON_KEY: string;
+  TURNSTILE_ENABLED?: string;
+  ASSETS?: { fetch(request: Request): Promise<Response> };
 }
 
 const json = (body: unknown, status: number) =>
@@ -25,9 +33,35 @@ export async function keepAlive(env: Env, fetcher: typeof fetch = fetch): Promis
   return res.ok;
 }
 
-export default {
-  async fetch(): Promise<Response> {
+/** True for a GET/HEAD that wants a page (not a file, not an API call). */
+export function wantsPage(request: Request): boolean {
+  if (request.method !== "GET" && request.method !== "HEAD") return false;
+  const { pathname } = new URL(request.url);
+  if (pathname.startsWith("/assets/") || /\.[a-z0-9]+$/i.test(pathname)) return false;
+  return (request.headers.get("accept") ?? "").includes("text/html");
+}
+
+export async function servePage(request: Request, env: Env): Promise<Response> {
+  if (!env.ASSETS || !wantsPage(request)) return json({ error: "Not found" }, 404);
+  let supabaseUrl: string;
+  try {
+    supabaseUrl = new URL(env.SUPABASE_URL).origin;
+  } catch {
     return json({ error: "Not found" }, 404);
+  }
+  const url = new URL(request.url);
+  const shell = await env.ASSETS.fetch(new Request(new URL("/", url), { method: request.method }));
+  if (!shell.ok) return json({ error: "Not found" }, 404);
+  const headers = new Headers({ "content-type": shell.headers.get("content-type") ?? "text/html; charset=utf-8" });
+  for (const [k, v] of Object.entries(pageHeaders({ supabaseUrl, turnstile: env.TURNSTILE_ENABLED === "true" }))) headers.set(k, v);
+  if (url.pathname === "/p") for (const [k, v] of Object.entries(PORTAL_HEADERS)) headers.set(k, v);
+  else headers.set("Cache-Control", "no-cache");
+  return new Response(shell.body, { status: 200, headers });
+}
+
+export default {
+  async fetch(request: Request, env: Env): Promise<Response> {
+    return servePage(request, env);
   },
   async scheduled(_controller: unknown, env: Env, ctx: { waitUntil(p: Promise<unknown>): void }) {
     ctx.waitUntil(

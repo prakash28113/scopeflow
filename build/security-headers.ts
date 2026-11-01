@@ -30,19 +30,33 @@ export function buildCsp(opts: { supabaseUrl: string; turnstile: boolean }): str
   ].join("; ");
 }
 
+/** Headers every page gets (also used by the Worker for its page fallback). */
+export function pageHeaders(opts: { supabaseUrl: string; turnstile: boolean }): Record<string, string> {
+  return {
+    "Content-Security-Policy": buildCsp(opts),
+    "X-Content-Type-Options": "nosniff",
+    "X-Frame-Options": "DENY",
+    "Referrer-Policy": "no-referrer",
+    "Permissions-Policy": "camera=(), microphone=(), geolocation=(), payment=(), usb=()",
+    "Strict-Transport-Security": "max-age=31536000; includeSubDomains",
+    "Cross-Origin-Opener-Policy": "same-origin",
+  };
+}
+
+/** Extra headers for the client portal: never indexed, never cached. */
+export const PORTAL_HEADERS: Record<string, string> = {
+  "X-Robots-Tag": "noindex, nofollow",
+  "Cache-Control": "no-store",
+};
+
+const block = (h: Record<string, string>) => Object.entries(h).map(([k, v]) => `  ${k}: ${v}`).join("\n");
+
 export function buildHeadersFile(opts: { supabaseUrl: string; turnstile: boolean }): string {
   return `/*
-  Content-Security-Policy: ${buildCsp(opts)}
-  X-Content-Type-Options: nosniff
-  X-Frame-Options: DENY
-  Referrer-Policy: no-referrer
-  Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=(), usb=()
-  Strict-Transport-Security: max-age=31536000; includeSubDomains
-  Cross-Origin-Opener-Policy: same-origin
+${block(pageHeaders(opts))}
 
 /p
-  X-Robots-Tag: noindex, nofollow
-  Cache-Control: no-store
+${block(PORTAL_HEADERS)}
 
 /assets/*
   Cache-Control: public, max-age=31536000, immutable

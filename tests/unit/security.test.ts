@@ -46,11 +46,32 @@ describe("error messages", () => {
 });
 
 describe("worker", () => {
+  const assets = { fetch: async (r: Request) => (new URL(r.url).pathname === "/" ? new Response("<!doctype html>app", { headers: { "content-type": "text/html" } }) : new Response("nope", { status: 404 })) };
+  const env = { SUPABASE_URL: "https://abcdefghijklmnopqrst.supabase.co", SUPABASE_ANON_KEY: "anon", ASSETS: assets };
+  const req = (path: string, accept: string, method = "GET") => new Request(`https://app.example.workers.dev${path}`, { method, headers: { accept } });
+
   it("returns a JSON 404 for stray API requests", async () => {
-    const res = await worker.fetch();
-    expect(res.status).toBe(404);
-    expect(res.headers.get("content-type")).toBe("application/json");
-    expect(res.headers.get("cache-control")).toBe("no-store");
+    for (const r of [req("/api/x", "application/json"), req("/p", "text/html", "POST"), req("/missing.js", "text/html"), req("/assets/x", "text/html")]) {
+      const res = await worker.fetch(r, env);
+      expect(res.status).toBe(404);
+      expect(res.headers.get("content-type")).toBe("application/json");
+      expect(res.headers.get("cache-control")).toBe("no-store");
+    }
+  });
+  it("serves the app shell with full security headers when a page is requested outside a navigation", async () => {
+    const res = await worker.fetch(req("/projects/1", "text/html,*/*"), env);
+    expect(res.status).toBe(200);
+    expect(await res.text()).toContain("app");
+    expect(res.headers.get("content-security-policy")).toContain("connect-src 'self' https://abcdefghijklmnopqrst.supabase.co");
+    expect(res.headers.get("content-security-policy")).not.toContain("challenges.cloudflare.com");
+    expect(res.headers.get("x-frame-options")).toBe("DENY");
+    expect(res.headers.get("x-robots-tag")).toBeNull();
+    const portal = await worker.fetch(req("/p", "text/html"), { ...env, TURNSTILE_ENABLED: "true" });
+    expect(portal.headers.get("x-robots-tag")).toBe("noindex, nofollow");
+    expect(portal.headers.get("cache-control")).toBe("no-store");
+    expect(portal.headers.get("content-security-policy")).toContain("challenges.cloudflare.com");
+    // Misconfigured (no Supabase URL) → no page rather than a page without a pinned policy.
+    expect((await worker.fetch(req("/p", "text/html"), { ...env, SUPABASE_URL: "" })).status).toBe(404);
   });
   it("keep-alive calls only the public health function with the anon key", async () => {
     const calls: { url: string; init: RequestInit }[] = [];

@@ -96,7 +96,7 @@ describe("release automation — deploy and live checks", () => {
     expect(build.env.VITE_SUPABASE_PUBLISHABLE_KEY).toBe("sb_publishable_live123");
     expect(w.execs.map((e) => e.args[0])).toEqual(["run", "scripts/predeploy-check.mjs", "wrangler"]);
     const deploy = w.execs.find((e) => e.args[0] === "wrangler")!;
-    expect(deploy.args).toEqual(["wrangler", "deploy", "--var", `SUPABASE_URL:${SUPA}`, "--var", "SUPABASE_ANON_KEY:sb_publishable_live123"]);
+    expect(deploy.args).toEqual(["wrangler", "deploy", "--var", `SUPABASE_URL:${SUPA}`, "--var", "SUPABASE_ANON_KEY:sb_publishable_live123", "--var", "TURNSTILE_ENABLED:false"]);
     expect(deploy.env.CLOUDFLARE_ACCOUNT_ID).toBe("acc0");
     // The Supabase token is never handed to the build or to Cloudflare tooling.
     for (const e of w.execs) expect(JSON.stringify(e.env)).not.toContain("sbp_secret_value");
