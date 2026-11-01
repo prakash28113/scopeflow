@@ -1,4 +1,7 @@
 import { useState, type FormEvent } from "react";
+import { methodLabel } from "@/lib/payments";
+import { invoiceStatus } from "@/lib/invoice";
+import { localToday } from "@/lib/upcoming";
 import { received } from "@/lib/pricing";
 import { Link, useParams } from "react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -24,6 +27,9 @@ type ClientProject = {
   milestones: { title: string; amount_cents: number; status: string; paid_at: string | null; payment_note: string | null }[];
   scope_decisions?: { decision: "approved" | "rejected"; client_name: string; created_at: string }[];
   change_orders?: { number: number; title: string; status: string; amount_cents: number; decided_at: string | null }[];
+  client_invoices?: { id: string; number: string; issue_date: string; due_date: string | null; amount_cents: number; voided_at: string | null; milestones: { status: string; paid_cents: number } | null }[];
+  payments?: { id: string; amount_cents: number; paid_on: string; method: string; reference: string | null }[];
+  approved_at?: string | null;
 };
 type ClientRow = {
   id: string;
@@ -42,10 +48,11 @@ const OPEN: ProjectStatus[] = ["draft", "awaiting_approval", "changes_requested"
 
 /** Contracted, paid and outstanding per currency (approved work only). */
 function money(projects: ClientProject[]) {
-  const by = new Map<string, { contracted: number; paid: number }>();
+  const by = new Map<string, { contracted: number; paid: number; count: number }>();
   for (const p of projects) {
     if (p.status !== "active" && p.status !== "completed") continue;
-    const t = by.get(p.currency) ?? { contracted: 0, paid: 0 };
+    const t = by.get(p.currency) ?? { contracted: 0, paid: 0, count: 0 };
+    t.count += 1;
     t.contracted += Number(p.budget_cents) + Number(p.approved_extras_cents);
     t.paid += p.milestones.reduce((s, m) => s + received(m), 0);
     by.set(p.currency, t);
@@ -117,7 +124,7 @@ export function ClientPage() {
       const { data, error } = await supabase
         .from("clients")
         .select(
-          "id, name, email, company, phone, notes, billing_address, gstin, created_at, projects(id, title, status, currency, budget_cents, approved_extras_cents, created_at, milestones(title, amount_cents, status, paid_at, payment_note, paid_cents), scope_decisions(decision, client_name, created_at), change_orders(number, title, status, amount_cents, decided_at))",
+          "id, name, email, company, phone, notes, billing_address, gstin, created_at, projects(id, title, status, currency, budget_cents, approved_extras_cents, created_at, approved_at, milestones(title, amount_cents, status, paid_at, payment_note, paid_cents), scope_decisions(decision, client_name, created_at), change_orders(number, title, status, amount_cents, decided_at), client_invoices(id, number, issue_date, due_date, amount_cents, voided_at, milestones(status, paid_cents)), payments(id, amount_cents, paid_on, method, reference))",
         )
         .eq("id", id!)
         .maybeSingle();
@@ -140,8 +147,15 @@ export function ClientPage() {
     ])
     .sort((a, b) => b.at.localeCompare(a.at));
   const payments = c.projects
-    .flatMap((p) => p.milestones.filter((m) => m.status === "paid" && m.paid_at).map((m) => ({ ...m, project: p })))
-    .sort((a, b) => (b.paid_at ?? "").localeCompare(a.paid_at ?? ""));
+    .flatMap((p) => (p.payments ?? []).map((x) => ({ ...x, project: p })))
+    .sort((a, b) => b.paid_on.localeCompare(a.paid_on));
+  const invoices = c.projects
+    .flatMap((p) => (p.client_invoices ?? []).filter((i) => !i.voided_at).map((i) => ({ ...i, project: p })))
+    .sort((a, b) => b.issue_date.localeCompare(a.issue_date) || b.number.localeCompare(a.number));
+  const today = localToday();
+  const quotes = c.projects.slice().sort((a, b) => b.created_at.localeCompare(a.created_at));
+  const approvedProjects = c.projects.filter((p) => p.approved_at && p.status !== "cancelled");
+  const repeat = approvedProjects.length >= 2;
 
   async function save(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -208,17 +222,69 @@ export function ClientPage() {
           </Card>
 
           <Card>
+            <CardHeader title="Invoices" />
+            {invoices.length ? (
+              <ul className="divide-y divide-line" data-testid="client-invoices">
+                {invoices.map((i) => {
+                  const s = invoiceStatus(i, i.milestones?.status === "paid", today, Number(i.milestones?.paid_cents ?? 0));
+                  return (
+                    <li key={i.id}>
+                      <Link to={`/invoices/${i.id}`} className="flex items-center justify-between gap-3 px-5 py-3 text-[13px] hover:bg-sunken/60">
+                        <span className="min-w-0">
+                          <span className="num font-medium">{i.number}</span>
+                          <span className="block truncate text-[12px] text-muted">
+                            {i.project.title} · {formatDate(i.issue_date)}
+                          </span>
+                        </span>
+                        <span className="flex shrink-0 items-center gap-2">
+                          <span className="num">{formatMoney(Number(i.amount_cents), i.project.currency)}</span>
+                          {s === "paid" ? <Tag tone="positive">Paid</Tag> : s === "overdue" ? <Tag tone="warning">Overdue</Tag> : s === "partial" ? <Tag tone="accent">Part paid</Tag> : <Tag>Due</Tag>}
+                        </span>
+                      </Link>
+                    </li>
+                  );
+                })}
+              </ul>
+            ) : (
+              <p className="px-5 py-5 text-[13px] text-muted">No invoices yet.</p>
+            )}
+          </Card>
+
+          <Card>
+            <CardHeader title="Quotes" description="Every project's quote, as sent or as drafted." />
+            <ul className="divide-y divide-line" data-testid="client-quotes">
+              {quotes.map((p) => (
+                <li key={p.id} className="flex items-center justify-between gap-3 px-5 py-3 text-[13px]">
+                  <span className="min-w-0">
+                    <span className="block truncate font-medium">{p.title}</span>
+                    <span className="text-[12px] text-muted">{formatDate(p.created_at)}</span>
+                  </span>
+                  <span className="flex shrink-0 items-center gap-3">
+                    <span className="num">{formatMoney(Number(p.budget_cents), p.currency)}</span>
+                    <Link to={`/projects/${p.id}/quote`} className="font-medium text-accent hover:underline">
+                      Quote
+                    </Link>
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </Card>
+
+          <Card>
             <CardHeader title="Payments received" />
             {payments.length ? (
               <ul className="divide-y divide-line">
-                {payments.map((m, i) => (
-                  <li key={i} className="flex flex-wrap items-center justify-between gap-2 px-5 py-3 text-[13px]">
+                {payments.map((x) => (
+                  <li key={x.id} className="flex flex-wrap items-center justify-between gap-2 px-5 py-3 text-[13px]">
                     <span>
-                      {m.title} · <span className="text-muted">{m.project.title}</span>
-                      {m.payment_note ? <span className="block text-[12px] text-muted">{m.payment_note}</span> : null}
+                      <Link to={`/projects/${x.project.id}`} className="hover:underline">{x.project.title}</Link>
+                      <span className="block text-[12px] text-muted">
+                        {methodLabel(x.method)}
+                        {x.reference ? ` · ${x.reference}` : ""}
+                      </span>
                     </span>
                     <span className="num">
-                      {formatMoney(Number(m.amount_cents), m.project.currency)} <span className="text-[12px] text-muted">· {formatDate(m.paid_at)}</span>
+                      {formatMoney(Number(x.amount_cents), x.project.currency)} <span className="text-[12px] text-muted">· {formatDate(x.paid_on)}</span>
                     </span>
                   </li>
                 ))}
@@ -232,6 +298,12 @@ export function ClientPage() {
         <div className="min-w-0 space-y-6">
           <Card>
             <CardHeader title="Totals" description="Approved work only" />
+            <dl className="num grid grid-cols-2 gap-x-4 gap-y-1 border-b border-line px-5 py-3 text-[13px]">
+              <dt className="text-muted">Projects</dt>
+              <dd className="text-right">{c.projects.length}{repeat ? <span className="ml-2"><Tag tone="positive">Repeat client</Tag></span> : null}</dd>
+              <dt className="text-muted">Client since</dt>
+              <dd className="text-right">{formatDate(c.created_at)}</dd>
+            </dl>
             {totals.length ? (
               <dl className="num space-y-2 px-5 py-4 text-[13px]">
                 {totals.map((t) => (
@@ -239,6 +311,7 @@ export function ClientPage() {
                     <div className="flex justify-between"><dt className="text-muted">Contracted</dt><dd>{formatMoney(t.contracted, t.currency)}</dd></div>
                     <div className="flex justify-between"><dt className="text-muted">Received</dt><dd className="text-positive">{formatMoney(t.paid, t.currency)}</dd></div>
                     <div className="flex justify-between font-semibold"><dt>Outstanding</dt><dd>{formatMoney(t.outstanding, t.currency)}</dd></div>
+                    <div className="flex justify-between"><dt className="text-muted">Average project</dt><dd>{formatMoney(Math.round(t.contracted / t.count), t.currency)}</dd></div>
                   </div>
                 ))}
               </dl>

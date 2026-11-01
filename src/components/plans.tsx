@@ -25,7 +25,7 @@ export function IntervalToggle({ value, onChange }: { value: Interval; onChange:
 /** What each plan offers, honestly: features that aren't built yet say "Coming". */
 const HIGHLIGHTS: Record<PlanId, string[]> = {
   free: ["Scope agreements, approvals, revision tracking", "Change orders, quotes and GST invoices", "Payments, expenses and analytics (free during the beta)"],
-  solo: ["Everything in Free", "Unlimited projects and clients", "Full template library · exports — coming"],
+  solo: ["Everything in Free", "Unlimited projects and clients", "Full template library"],
   studio: ["Everything in Solo", "Up to 3 team members — coming", "White-label client portal — coming"],
 };
 
@@ -122,7 +122,7 @@ const ROWS: { label: string; cells: [Cell, Cell, Cell]; soon?: boolean }[] = [
   { label: "Upcoming deadlines and payments", cells: ["✓", "✓", "✓"] },
   { label: "Expense log and monthly analytics (profit, trends, top clients)", cells: ["✓ in beta", "✓", "✓"] },
   { label: "Agreement templates", cells: ["Starter set", "Full library", "Full library"] },
-  { label: "Export project records", cells: ["—", "✓", "✓"], soon: true },
+  { label: "Approval record: printable proof of everything agreed", cells: ["✓ in beta", "✓", "✓"] },
   { label: "Team members and roles", cells: ["—", "—", "Up to 3"], soon: true },
   { label: "White-label client portal", cells: ["—", "—", "✓"], soon: true },
 ];

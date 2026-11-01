@@ -1,6 +1,25 @@
 # Changelog
 
-## Reminders — ready for review (not released)
+## Approval record + client history — ready for review (not released)
+
+- **Approval record** (project page → *Approval record*, printable / Save as PDF): proof of everything agreed on a project:
+  - a summary of the money (contract, received, outstanding);
+  - the **approved scope** with its full SHA-256 fingerprint, and who approved it, when, from which browser and IP;
+  - every scope version and client decision, including comments;
+  - change orders with their decisions;
+  - every revision or new-work request, marked as an included round or outside the scope;
+  - payments and invoices;
+  - the full activity log.
+- **Client page history:**
+  - the client's **invoices** (with paid / part paid / overdue status);
+  - **quotes** (every project's quote);
+  - **payment records** (date, method, reference);
+  - project count, client since, a **Repeat client** tag, and average project value in Totals.
+- **Pricing page:** "Export project records — coming" becomes "Approval record" (available, free during the beta).
+- No database change: everything reads existing records. The privacy policy already discloses that approvals store the time, IP address and browser.
+- **Tests:** a browser-summary unit test, and walkthrough checks for the record and the client history (34 steps).
+
+## Reminders — live 1 Nov 2026 (release run 41324286514)
 
 - **Reminders card** at the top of the dashboard, most urgent first, worked out automatically from existing data:
   - a scope or change order not answered after **3 days** ("Follow up with Dana");
