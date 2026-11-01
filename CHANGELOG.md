@@ -1,6 +1,6 @@
 # Changelog
 
-## Password reset on — ready for review (not released)
+## Password reset on — live 1 Nov 2026 (release run 41307038212)
 
 - **"Forgot your password?" now emails a reset link**, sent by free Brevo SMTP (set up in Supabase; see `docs/EMAIL-SETUP.md`). `passwordResetEmail` is now `true`.
 - **Privacy policy:** names Brevo, which receives only the email address and the reset link.
