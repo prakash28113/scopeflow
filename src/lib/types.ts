@@ -2,7 +2,8 @@ export type ProjectStatus = "draft" | "awaiting_approval" | "changes_requested" 
 
 export type Client = { id: string; name: string; email: string; company: string | null; phone?: string | null; notes?: string | null; billing_address?: string | null; gstin?: string | null };
 
-export type PricingType = "fixed" | "hourly";
+/** Deliverable pricing. Change orders stay fixed or hourly. */
+export type PricingType = "fixed" | "hourly" | "unit";
 export type QuotePricing = {
   subtotal_cents: number;
   discount_bps: number;
@@ -28,6 +29,7 @@ export type Project = {
   exclusions: string | null;
   terms: string | null;
   extra_revision_cents: number | null;
+  valid_until?: string | null;
   discount_bps?: number | null;
   tax_bps?: number | null;
   tax_label?: string | null;
@@ -52,6 +54,8 @@ export type Deliverable = {
   hours?: string | number | null;
   rate_cents?: number | null;
   amount_cents?: number | null;
+  quantity?: string | number | null;
+  unit_label?: string | null;
 };
 
 export type Milestone = {
@@ -80,6 +84,8 @@ export type ScopeData = {
   exclusions?: string | null;
   terms?: string | null;
   extra_revision_cents?: number | null;
+  /** Last day the quote can be approved (added in 20261111000000). */
+  valid_until?: string | null;
   /** v1.2 — itemised quote totals; null/absent when deliverables aren't priced. */
   pricing?: QuotePricing | null;
   /** email is present for the freelancer; the public portal omits it. */
@@ -93,6 +99,8 @@ export type ScopeData = {
     hours?: string | number | null;
     rate_cents?: number | null;
     amount_cents?: number | null;
+    quantity?: string | number | null;
+    unit_label?: string | null;
     /** Added in 20261110000000; older snapshots don't have it. */
     due_date?: string | null;
   }[];

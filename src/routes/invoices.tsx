@@ -4,7 +4,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Alert, Card, EmptyState, PageHeader, Tag, cx } from "@/components/ui";
 import { ActionButton } from "@/components/form-bits";
 import { PageSpinner } from "@/components/app-shell";
-import { PrintButton } from "@/components/quote";
+import { DownloadPdfButton, PrintButton } from "@/components/quote";
 import { InvoiceDocument } from "@/components/invoice-document";
 import { useToast } from "@/components/toast";
 import { supabase } from "@/lib/supabase";
@@ -184,7 +184,8 @@ export function InvoicePage() {
               Void invoice
             </ActionButton>
           ) : null}
-          <PrintButton label="Print or save as PDF" size="md" />
+          <PrintButton label="Print" size="md" />
+          <DownloadPdfButton name={`Invoice ${inv.number}`} selector='[data-testid="invoice-document"]' size="md" variant="primary" />
         </div>
       </div>
       {status === "void" ? (

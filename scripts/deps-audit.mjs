@@ -67,7 +67,9 @@ const hosts = [...new Set([...js.matchAll(/https:\/\/([a-z0-9.-]+\.[a-z]{2,})/gi
 // json-schema.org is a "$schema" string constant inside zod, not a network call.
 // accounts.google.com is Sign in with Google (free), loaded only when a Google client ID is configured.
 // wa.me is WhatsApp's free share link: opened only when the freelancer taps "Send on WhatsApp", never called by the app.
-const INFORMATIONAL = /^(accounts\.google\.com|wa\.me|json-schema\.org|react\.dev|reactjs\.org|reactrouter\.com|github\.com|supabase\.com|www\.w3\.org|developer\.mozilla\.org|zod\.dev|tanstack\.com|challenges\.cloudflare\.com|.*\.supabase\.(co|in))$/;
+// cdnjs.cloudflare.com is inside jsPDF's optional "open in a new window with PDFObject" output mode, which ScopeFlow never
+// uses (it only calls pdf.save()); the site's CSP would block it anyway.
+const INFORMATIONAL = /^(cdnjs\.cloudflare\.com|accounts\.google\.com|wa\.me|json-schema\.org|react\.dev|reactjs\.org|reactrouter\.com|github\.com|supabase\.com|www\.w3\.org|developer\.mozilla\.org|zod\.dev|tanstack\.com|challenges\.cloudflare\.com|.*\.supabase\.(co|in))$/;
 const unexpected = hosts.filter((h) => !INFORMATIONAL.test(h) && h !== "auditproject.supabase.co");
 for (const h of unexpected) problems.push(`bundle references unexpected external host: ${h}`);
 

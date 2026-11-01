@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Alert, Card, Logo, Meter, Tag } from "@/components/ui";
 import { AgreementTerms, RevisionMeter } from "@/components/agreement";
-import { PrintButton, QuoteTable } from "@/components/quote";
+import { DownloadPdfButton, PrintButton, QuoteTable } from "@/components/quote";
 import { UpiPay } from "@/components/upi-pay";
 import { InvoiceDocument } from "@/components/invoice-document";
 import { invoiceStatus } from "@/lib/invoice";
@@ -17,6 +17,7 @@ import { formatDate, formatDateTime, pluralize, shortHash, STATUS_LABEL } from "
 import { currentDueDate, received } from "@/lib/pricing";
 import type { ScopeData } from "@/lib/types";
 import { ChangeOrderDecisionForm, RevisionRequestForm, ScopeDecisionForm } from "./portal-forms";
+import { quoteExpired } from "@/lib/quote";
 
 function useHashToken() {
   const [token, setToken] = useState(() => tokenFromHash(window.location.hash));
@@ -99,7 +100,7 @@ export default function PortalPage() {
           <ScopeDocument data={snapshot.data} hash={snapshot.content_hash} version={snapshot.version} sentAt={snapshot.created_at} />
           <Card className="mt-6 p-5 sm:p-6">
             <h2 className="mb-4 text-[15px] font-semibold">Your decision</h2>
-            <ScopeDecisionForm token={token} snapshotId={snapshot.id} clientName={v.client.name} />
+            <ScopeDecisionForm token={token} snapshotId={snapshot.id} clientName={v.client.name} validUntil={snapshot.data.valid_until} freelancer={v.freelancer.name} />
           </Card>
         </>
       ) : null}
@@ -401,6 +402,15 @@ function ScopeDocument({
           <p className="text-muted">Due</p>
           <p className="mt-0.5 text-base font-semibold">{formatDate(data.due_date)}</p>
         </div>
+        {data.valid_until ? (
+          <div data-testid="quote-valid-until">
+            <p className="text-muted">Quote valid until</p>
+            <p className={`mt-0.5 text-base font-semibold ${quoteExpired(data.valid_until) ? "text-danger" : ""}`}>
+              {formatDate(data.valid_until)}
+              {quoteExpired(data.valid_until) ? " (expired)" : ""}
+            </p>
+          </div>
+        ) : null}
       </section>
 
       <AgreementTerms
@@ -432,7 +442,10 @@ function ScopeDocument({
         <p className="text-[11px] text-muted">
           Version {version} · sent {formatDateTime(sentAt)} · fingerprint <span className="font-mono">{shortHash(hash)}</span>
         </p>
-        <PrintButton />
+        <div className="flex gap-2">
+          <PrintButton label="Print" />
+          <DownloadPdfButton name={`${data.title} scope v${version}`} />
+        </div>
       </div>
     </article>
   );
@@ -473,8 +486,9 @@ function PortalInvoices({ invoices }: { invoices: NonNullable<import("@/lib/type
       </ul>
       {shown ? (
         <div className="border-t border-line p-3 sm:p-5">
-          <div className="mb-3 flex justify-end print:hidden">
-            <PrintButton label="Print or save as PDF" />
+          <div className="mb-3 flex justify-end gap-2 print:hidden">
+            <PrintButton label="Print" />
+            <DownloadPdfButton name={`Invoice ${shown.number}`} selector='[data-testid="invoice-document"]' variant="primary" />
           </div>
           <InvoiceDocument inv={shown} status={invoiceStatus(shown, shown.paid, today, Number(shown.paid_cents ?? 0))} paidAt={shown.paid_at} paidCents={Number(shown.paid_cents ?? 0)} className="border-0 p-0 sm:p-2" />
         </div>

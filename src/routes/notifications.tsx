@@ -4,13 +4,16 @@ import { useQueryClient } from "@tanstack/react-query";
 import { Alert, Card, EmptyState, PageHeader, cx } from "@/components/ui";
 import { PageSpinner } from "@/components/app-shell";
 import { useProfile } from "@/lib/auth";
-import { useNotifications } from "@/lib/queries";
+import { useDashboard, useNotifications } from "@/lib/queries";
+import { openProjects, remindersFrom } from "@/lib/use-reminders";
+import { RemindersCard } from "@/components/reminders";
 import { supabase } from "@/lib/supabase";
 import { formatDateTime } from "@/lib/format";
 
 export default function Notifications() {
   const profile = useProfile();
   const list = useNotifications();
+  const dash = useDashboard();
   const qc = useQueryClient();
   // Remember what was unread when the page opened, then mark everything as seen.
   const seenBefore = useRef<string | null>(null);
@@ -26,14 +29,16 @@ export default function Notifications() {
     });
   }, [list.data, qc]);
 
-  if (list.isLoading || !profile.data) return <PageSpinner />;
+  if (list.isLoading || dash.isLoading || !profile.data) return <PageSpinner />;
   if (list.isError) return <Alert>Couldn't load notifications. Please refresh.</Alert>;
   const items = list.data ?? [];
   const cutoff = seenBefore.current ?? "";
 
   return (
     <div className="mx-auto max-w-2xl">
-      <PageHeader title="Notifications" description="What your clients did on their project pages." />
+      <PageHeader title="Notifications" description="Everything that needs you, in one place: reminders, and what your clients did on their project pages." />
+      {dash.data ? <RemindersCard reminders={remindersFrom(dash.data)} projects={openProjects(dash.data)} /> : null}
+      <h2 className="mb-3 text-[15px] font-semibold">Client activity</h2>
       <Card>
         {items.length === 0 ? (
           <EmptyState title="Nothing yet" body="Approvals, change requests and change-order decisions from clients will appear here." />

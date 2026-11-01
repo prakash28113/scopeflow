@@ -17,13 +17,21 @@ import {
   EXPENSE_CATEGORIES,
   categoryLabel,
   change,
+  customPeriod,
+  financialYears,
+  fyQuarters,
   lastMonths,
   monthLabel,
-  monthOf,
+  monthPeriod,
   monthly,
+  periodTotals,
+  projectProfits,
   receivables,
-  topClients,
+  topClientsIn,
   remaining,
+  within,
+  type Period,
+  type PeriodKind,
   type PaymentFact,
   type ReceiptFact,
 } from "@/lib/analytics";
@@ -66,7 +74,7 @@ function useAnalyticsData() {
   });
 }
 
-function Kpi({ label, value, delta, hint, testid }: { label: string; value: string; delta?: number | null; hint?: string; testid?: string }) {
+function Kpi({ label, value, delta, vs, hint, testid }: { label: string; value: string; delta?: number | null; vs: string; hint?: string; testid?: string }) {
   return (
     <Card className="px-4 py-3">
       <p className="text-[12px] text-muted">{label}</p>
@@ -74,7 +82,7 @@ function Kpi({ label, value, delta, hint, testid }: { label: string; value: stri
         {value}
       </p>
       <p className="num mt-0.5 text-[12px] text-muted">
-        {delta === null || delta === undefined ? (hint ?? " ") : `${delta > 0 ? "▲" : delta < 0 ? "▼" : "■"} ${Math.abs(delta)}% vs last month`}
+        {delta === null || delta === undefined ? (hint ?? " ") : `${delta > 0 ? "▲" : delta < 0 ? "▼" : "■"} ${Math.abs(delta)}% vs ${vs}`}
       </p>
     </Card>
   );
@@ -86,6 +94,12 @@ export default function AnalyticsPage() {
   const today = localToday();
   const months = lastMonths(12, today);
   const [month, setMonth] = useState(months[months.length - 1]);
+  const [kind, setKind] = useState<PeriodKind>("month");
+  const quarters = fyQuarters(today);
+  const years = financialYears(today);
+  const [quarterKey, setQuarterKey] = useState(quarters[0].key);
+  const [yearKey, setYearKey] = useState(years[0].key);
+  const [range, setRange] = useState({ from: `${today.slice(0, 7)}-01`, to: today });
   const [currencyChoice, setCurrency] = useState<string | null>(null);
 
   if (q.isLoading || profile.isLoading) return <PageSpinner />;
@@ -108,36 +122,98 @@ export default function AnalyticsPage() {
     return p ? [{ paid_on: r.paid_on, amount_cents: r.amount_cents, currency: p.currency, client: p.clients?.company || p.clients?.name || "Client" }] : [];
   });
   const rows = monthly(months, currency, { receipts, invoices, expenses });
-  const idx = rows.findIndex((r) => r.month === month);
-  const cur = rows[idx];
-  const prev = rows[idx - 1];
+  const custom = customPeriod(range.from, range.to);
+  const period: Period =
+    kind === "quarter"
+      ? (quarters.find((x) => x.key === quarterKey) ?? quarters[0])
+      : kind === "fy"
+        ? (years.find((x) => x.key === yearKey) ?? years[0])
+        : kind === "custom" && custom
+          ? custom
+          : monthPeriod(month);
+  const facts = { receipts, invoices, expenses };
+  const cur = periodTotals(period, currency, facts);
+  const prev = period.prev ? periodTotals(period.prev, currency, facts) : null;
   const owed = receivables(payments, currency, today);
-  const clients = topClients(receipts, currency, months);
+  const clients = topClientsIn(receipts, currency, period);
+  const profits = projectProfits(
+    projects.map((p) => ({
+      id: p.id,
+      title: p.title,
+      client: p.clients?.company || p.clients?.name || "Client",
+      status: p.status,
+      currency: p.currency,
+      approved_at: p.approved_at,
+      contract: Number(p.budget_cents) + Number(p.approved_extras_cents),
+    })),
+    paymentRows,
+    expenses,
+    currency,
+  );
   const approvedInCur = projects.filter((p) => p.currency === currency && p.approved_at && p.status !== "cancelled");
   const avgValue = approvedInCur.length
     ? Math.round(approvedInCur.reduce((s, p) => s + Number(p.budget_cents) + Number(p.approved_extras_cents), 0) / approvedInCur.length)
     : 0;
   const inCur = projects.filter((p) => p.currency === currency);
   const active = inCur.filter((p) => p.status === "active");
-  const approvedThisMonth = inCur.filter((p) => p.approved_at && monthOf(p.approved_at) === month).length;
-  const completedThisMonth = inCur.filter((p) => p.completed_at && monthOf(p.completed_at) === month).length;
-  const monthExpenses = expenses.filter((e) => e.currency === currency && monthOf(e.spent_on) === month);
+  const approvedInPeriod = inCur.filter((p) => p.approved_at && within(p.approved_at, period)).length;
+  const completedInPeriod = inCur.filter((p) => p.completed_at && within(p.completed_at, period)).length;
+  const monthExpenses = expenses.filter((e) => e.currency === currency && within(e.spent_on, period));
   const byCategory = [...monthExpenses.reduce((m, e) => m.set(e.category, (m.get(e.category) ?? 0) + Number(e.amount_cents)), new Map<string, number>())].sort((a, b) => b[1] - a[1]);
   const hasAnything = payments.length || expenses.length || invoices.length || receipts.length;
 
   return (
     <>
-      <PageHeader title="Analytics" description="Money in, money out and how your projects are going, month by month." />
-      <div className="mb-5 flex flex-wrap items-end gap-3">
-        <Field label="Month" htmlFor="a-month">
-          <Select id="a-month" value={month} onChange={(e) => setMonth(e.target.value)} className="w-44">
-            {[...months].reverse().map((m) => (
-              <option key={m} value={m}>
-                {monthLabel(m, "long")}
-              </option>
-            ))}
+      <PageHeader title="Analytics" description="Money in, money out and how your projects are going, by month, quarter or financial year." />
+      <div className="mb-5 flex flex-wrap items-end gap-3" data-testid="period-filter">
+        <Field label="Period" htmlFor="a-kind">
+          <Select id="a-kind" value={kind} onChange={(e) => setKind(e.target.value as PeriodKind)} className="w-40">
+            <option value="month">Month</option>
+            <option value="quarter">Quarter</option>
+            <option value="fy">Financial year</option>
+            <option value="custom">Custom dates</option>
           </Select>
         </Field>
+        {kind === "month" ? (
+          <Field label="Month" htmlFor="a-month">
+            <Select id="a-month" value={month} onChange={(e) => setMonth(e.target.value)} className="w-44">
+              {[...months].reverse().map((m) => (
+                <option key={m} value={m}>
+                  {monthLabel(m, "long")}
+                </option>
+              ))}
+            </Select>
+          </Field>
+        ) : kind === "quarter" ? (
+          <Field label="Quarter" htmlFor="a-quarter">
+            <Select id="a-quarter" value={quarterKey} onChange={(e) => setQuarterKey(e.target.value)} className="w-64">
+              {quarters.map((x) => (
+                <option key={x.key} value={x.key}>
+                  {x.label}
+                </option>
+              ))}
+            </Select>
+          </Field>
+        ) : kind === "fy" ? (
+          <Field label="Financial year" htmlFor="a-fy" hint="April to March">
+            <Select id="a-fy" value={yearKey} onChange={(e) => setYearKey(e.target.value)} className="w-40">
+              {years.map((x) => (
+                <option key={x.key} value={x.key}>
+                  {x.label}
+                </option>
+              ))}
+            </Select>
+          </Field>
+        ) : (
+          <>
+            <Field label="From" htmlFor="a-from">
+              <Input id="a-from" type="date" value={range.from} max={range.to} onChange={(e) => setRange((r) => ({ ...r, from: e.target.value }))} />
+            </Field>
+            <Field label="To" htmlFor="a-to" error={custom ? undefined : "Choose a start date on or before the end date"}>
+              <Input id="a-to" type="date" value={range.to} min={range.from} onChange={(e) => setRange((r) => ({ ...r, to: e.target.value }))} />
+            </Field>
+          </>
+        )}
         {currencies.length > 1 ? (
           <Field label="Currency" htmlFor="a-currency">
             <Select id="a-currency" value={currency} onChange={(e) => setCurrency(e.target.value)} className="w-28">
@@ -150,10 +226,10 @@ export default function AnalyticsPage() {
       </div>
 
       <div className="mb-6 grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <Kpi label="Received" value={fmt(cur.received)} delta={change(cur.received, prev?.received ?? 0)} hint="Payments marked as received" testid="kpi-received" />
-        <Kpi label="Invoiced" value={fmt(cur.invoiced)} delta={change(cur.invoiced, prev?.invoiced ?? 0)} hint="Invoices issued (not void)" />
-        <Kpi label="Expenses" value={fmt(cur.expenses)} delta={change(cur.expenses, prev?.expenses ?? 0)} hint="From your expense log" testid="kpi-expenses" />
-        <Kpi label="Profit" value={fmt(cur.profit)} delta={change(cur.profit, prev?.profit ?? 0)} hint="Received − expenses" testid="kpi-profit" />
+        <Kpi label="Received" value={fmt(cur.received)} delta={prev ? change(cur.received, prev.received) : null} vs={period.prevLabel} hint="Payments marked as received" testid="kpi-received" />
+        <Kpi label="Invoiced" value={fmt(cur.invoiced)} delta={prev ? change(cur.invoiced, prev.invoiced) : null} vs={period.prevLabel} hint="Invoices issued (not void)" />
+        <Kpi label="Expenses" value={fmt(cur.expenses)} delta={prev ? change(cur.expenses, prev.expenses) : null} vs={period.prevLabel} hint="From your expense log" testid="kpi-expenses" />
+        <Kpi label="Profit" value={fmt(cur.profit)} delta={prev ? change(cur.profit, prev.profit) : null} vs={period.prevLabel} hint="Received − expenses" testid="kpi-profit" />
       </div>
 
       {!hasAnything ? (
@@ -164,7 +240,15 @@ export default function AnalyticsPage() {
         <Card className="mb-6">
           <CardHeader title="Monthly trend" description={`In ${currency}. Last 12 months (6 on a phone; the table has all 12). Tap a month to see its details.`} />
           <div className="px-4 py-4 sm:px-5">
-            <MonthlyChart rows={rows} currency={currency} selected={month} onSelect={setMonth} />
+            <MonthlyChart
+              rows={rows}
+              currency={currency}
+              selected={kind === "month" ? month : ""}
+              onSelect={(m) => {
+                setKind("month");
+                setMonth(m);
+              }}
+            />
           </div>
         </Card>
       )}
@@ -198,7 +282,7 @@ export default function AnalyticsPage() {
         </Card>
 
         <Card>
-          <CardHeader title="Top clients" description="By money received in the last 12 months." />
+          <CardHeader title="Top clients" description={`By money received · ${period.label}`} />
           {clients.length ? (
             <ul className="space-y-3 px-5 py-4">
               {clients.map((c) => (
@@ -212,25 +296,25 @@ export default function AnalyticsPage() {
               ))}
             </ul>
           ) : (
-            <p className="px-5 py-4 text-[13px] text-muted">No payments received yet.</p>
+            <p className="px-5 py-4 text-[13px] text-muted">No payments received in this period.</p>
           )}
         </Card>
       </div>
 
       <Card className="mb-6">
-        <CardHeader title="Projects" description={`${monthLabel(month, "long")} · ${currency}`} />
+        <CardHeader title="Projects" description={`${period.label} · ${currency}`} />
         <dl className="num grid grid-cols-2 gap-4 border-b border-line px-5 py-4 text-center text-[13px] sm:grid-cols-4">
           <div>
             <dt className="text-muted">In progress</dt>
             <dd className="mt-1 text-lg font-semibold">{active.length}</dd>
           </div>
           <div>
-            <dt className="text-muted">Approved this month</dt>
-            <dd className="mt-1 text-lg font-semibold">{approvedThisMonth}</dd>
+            <dt className="text-muted">Approved in period</dt>
+            <dd className="mt-1 text-lg font-semibold">{approvedInPeriod}</dd>
           </div>
           <div>
-            <dt className="text-muted">Completed this month</dt>
-            <dd className="mt-1 text-lg font-semibold">{completedThisMonth}</dd>
+            <dt className="text-muted">Completed in period</dt>
+            <dd className="mt-1 text-lg font-semibold">{completedInPeriod}</dd>
           </div>
           <div>
             <dt className="text-muted">Average project value</dt>
@@ -259,20 +343,22 @@ export default function AnalyticsPage() {
         )}
       </Card>
 
-      <ExpensesCard month={month} currency={currency} expenses={monthExpenses} byCategory={byCategory} projects={inCur.filter((p) => p.status !== "cancelled")} today={today} />
+      <ProfitByProject rows={profits} currency={currency} />
+
+      <ExpensesCard period={period} currency={currency} expenses={monthExpenses} byCategory={byCategory} projects={inCur.filter((p) => p.status !== "cancelled")} today={today} />
     </>
   );
 }
 
 function ExpensesCard({
-  month,
+  period,
   currency,
   expenses,
   byCategory,
   projects,
   today,
 }: {
-  month: string;
+  period: Period;
   currency: string;
   expenses: ExpenseRow[];
   byCategory: [string, number][];
@@ -285,7 +371,7 @@ function ExpensesCard({
   const [pending, setPending] = useState(false);
   const fmt = (n: number) => formatMoney(n, currency);
   const total = expenses.reduce((s, e) => s + Number(e.amount_cents), 0);
-  const defaultDate = month === today.slice(0, 7) ? today : `${month}-01`;
+  const defaultDate = within(today, period) ? today : period.to < today ? period.to : period.from;
 
   async function add(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -311,12 +397,12 @@ function ExpensesCard({
     if (!r.ok) return setError(r.message);
     form.reset();
     toast("positive", "Expense added.");
-    await qc.invalidateQueries({ queryKey: ["analytics"] });
+    await Promise.all([qc.invalidateQueries({ queryKey: ["analytics"] }), qc.invalidateQueries({ queryKey: ["project"] })]);
   }
 
   return (
     <Card>
-      <CardHeader title={`Expenses · ${monthLabel(month, "long")}`} description="Log what you spend for work, so profit is real. Only you can see this." />
+      <CardHeader title={`Expenses · ${period.label}`} description="Log what you spend for work, so profit is real. Only you can see this." />
       <form onSubmit={add} className="grid gap-3 border-b border-line px-5 py-4 sm:grid-cols-[140px_1fr_140px] lg:grid-cols-[140px_200px_140px_1fr_200px_auto] lg:items-end" noValidate data-testid="expense-form">
         {error ? <div className="sm:col-span-full"><Alert>{error}</Alert></div> : null}
         <Field label="Date" htmlFor="x-date">
@@ -380,7 +466,7 @@ function ExpensesCard({
                     onAction={async () => {
                       const r = await call(() => supabase.rpc("delete_expense", { p_expense_id: e.id }));
                       if (!r.ok) toast("danger", r.message);
-                      await qc.invalidateQueries({ queryKey: ["analytics"] });
+                      await Promise.all([qc.invalidateQueries({ queryKey: ["analytics"] }), qc.invalidateQueries({ queryKey: ["project"] })]);
                     }}
                   >
                     Delete
@@ -395,7 +481,64 @@ function ExpensesCard({
           </p>
         </>
       ) : (
-        <p className="px-5 py-4 text-[13px] text-muted">No expenses logged for {monthLabel(month, "long")}.</p>
+        <p className="px-5 py-4 text-[13px] text-muted">No expenses logged for {period.label}.</p>
+      )}
+    </Card>
+  );
+}
+
+/** All-time profit per project: received minus the expenses you linked to it. */
+function ProfitByProject({ rows, currency }: { rows: ReturnType<typeof projectProfits>; currency: string }) {
+  const [all, setAll] = useState(false);
+  const fmt = (n: number) => formatMoney(n, currency);
+  const shown = all ? rows : rows.slice(0, 8);
+  return (
+    <Card className="mb-6">
+      <CardHeader title="Profit by project" description={`All time · ${currency}. Received minus the expenses you linked to each project.`} />
+      {rows.length ? (
+        <>
+          <div className="overflow-x-auto">
+            <table className="num w-full min-w-[520px] text-[13px]" data-testid="project-profit">
+              <thead className="text-left text-[12px] text-muted">
+                <tr>
+                  <th scope="col" className="px-5 py-2 font-medium">Project</th>
+                  <th scope="col" className="px-3 py-2 text-right font-medium">Contract</th>
+                  <th scope="col" className="px-3 py-2 text-right font-medium">Received</th>
+                  <th scope="col" className="px-3 py-2 text-right font-medium">Expenses</th>
+                  <th scope="col" className="px-5 py-2 text-right font-medium">Profit</th>
+                </tr>
+              </thead>
+              <tbody>
+                {shown.map((r) => (
+                  <tr key={r.id} className="border-t border-line">
+                    <td className="max-w-[220px] px-5 py-2.5">
+                      <Link to={`/projects/${r.id}`} className="block truncate font-medium hover:underline">
+                        {r.title}
+                      </Link>
+                      <span className="block truncate text-[12px] text-muted">{r.client}</span>
+                    </td>
+                    <td className="px-3 py-2.5 text-right text-muted">{fmt(r.contract)}</td>
+                    <td className="px-3 py-2.5 text-right">{fmt(r.received)}</td>
+                    <td className="px-3 py-2.5 text-right">{r.expenses ? `−${fmt(r.expenses)}` : "—"}</td>
+                    <td className={`px-5 py-2.5 text-right font-semibold ${r.profit < 0 ? "text-danger" : ""}`}>
+                      {fmt(r.profit)}
+                      {r.margin !== null ? <span className="block text-[11px] font-normal text-muted">{r.margin}% margin</span> : null}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          {rows.length > 8 ? (
+            <div className="border-t border-line px-5 py-2">
+              <Button type="button" size="sm" variant="ghost" onClick={() => setAll((x) => !x)}>
+                {all ? "Show fewer" : `Show all ${rows.length}`}
+              </Button>
+            </div>
+          ) : null}
+        </>
+      ) : (
+        <p className="px-5 py-4 text-[13px] text-muted">Once a client approves a project, its profit appears here. Link expenses to a project when you log them.</p>
       )}
     </Card>
   );

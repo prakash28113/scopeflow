@@ -1,6 +1,8 @@
 import { useMemo, useState, type FormEvent } from "react";
 import { useNavigate } from "react-router";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { fromTemplateData, toTemplateData } from "@/lib/saved-templates";
+import { call } from "@/lib/use-action";
 import { Alert, Button, Card, CardHeader, Field, Input, Select, Textarea, cx } from "@/components/ui";
 import { SubmitButton } from "@/components/form-bits";
 import { CURRENCIES, formatMoney, parseAmount } from "@/lib/money";
@@ -18,15 +20,17 @@ export type FormDeliverable = {
   title: string;
   description: string;
   revisions: number | string;
-  priceType: "fixed" | "hourly";
+  priceType: "fixed" | "hourly" | "unit";
   amount: string;
   hours: string;
   rate: string;
+  quantity: string;
+  unit: string;
   dueDate?: string;
 };
 export type FormValues = Omit<Values, "deliverables"> & { deliverables: FormDeliverable[] };
 
-export const emptyDeliverable = (revisions: number | string): FormDeliverable => ({ title: "", description: "", revisions, priceType: "fixed", amount: "", hours: "", rate: "", dueDate: "" });
+export const emptyDeliverable = (revisions: number | string): FormDeliverable => ({ title: "", description: "", revisions, priceType: "fixed", amount: "", hours: "", rate: "", quantity: "", unit: "", dueDate: "" });
 const emptyMilestone = () => ({ title: "", amount: "", dueDate: "" });
 
 export function ProjectForm({ projectId, initial, showTemplates = false }: { projectId: string | null; initial: FormValues; showTemplates?: boolean }) {
@@ -43,6 +47,38 @@ export function ProjectForm({ projectId, initial, showTemplates = false }: { pro
       terms: t.terms,
     }));
     setApplied(t.name);
+  }
+  const saved = useQuery({
+    queryKey: ["templates"],
+    queryFn: async () => {
+      const { data, error } = await supabase.from("scope_templates").select("id, name, data, updated_at").order("name");
+      if (error) throw error;
+      return data as { id: string; name: string; data: unknown; updated_at: string }[];
+    },
+  });
+  function applySaved(t: { name: string; data: unknown }) {
+    const d = fromTemplateData(t.data);
+    if (!d) return toast("danger", "This template couldn't be read. Delete it and save it again.");
+    setV((p) => ({
+      ...p,
+      currency: d.currency ?? p.currency,
+      summary: d.summary,
+      deliverables: d.deliverables.map((x) => ({ ...emptyDeliverable(x.revisions), ...x, dueDate: "" })),
+      exclusions: d.exclusions,
+      terms: d.terms,
+      extraRevision: d.extraRevision,
+      itemised: d.itemised,
+      discount: d.discount,
+      tax: d.tax,
+      taxLabel: d.taxLabel,
+    }));
+    setApplied(t.name);
+  }
+  async function deleteSaved(id: string, name: string) {
+    const r = await call(() => supabase.rpc("delete_template", { p_template_id: id }));
+    if (!r.ok) return toast("danger", r.message);
+    await qc.invalidateQueries({ queryKey: ["templates"] });
+    toast("positive", `Template “${name}” deleted.`);
   }
   const action = useAction();
   const navigate = useNavigate();
@@ -88,6 +124,23 @@ export function ProjectForm({ projectId, initial, showTemplates = false }: { pro
             title="Start from a template"
             description={applied ? `${applied} template applied — edit anything below.` : "Optional. Fills in deliverables, exclusions and terms you can edit."}
           />
+          {saved.data?.length ? (
+            <div className="border-b border-line px-5 py-4" data-testid="saved-templates">
+              <p className="mb-2 text-[12px] font-semibold uppercase tracking-[0.06em] text-muted">Your templates</p>
+              <ul className="flex flex-wrap gap-2">
+                {saved.data.map((t) => (
+                  <li key={t.id} className={cx("inline-flex items-center rounded-lg border text-[13px] font-medium", applied === t.name ? "border-accent bg-accent-soft text-accent-hover" : "border-line-strong")}>
+                    <button type="button" className="py-1.5 pl-3 pr-1.5 hover:text-accent" onClick={() => applySaved(t)}>
+                      {t.name}
+                    </button>
+                    <button type="button" className="px-2 py-1.5 text-muted hover:text-danger" aria-label={`Delete template ${t.name}`} onClick={() => deleteSaved(t.id, t.name)}>
+                      ×
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
           <div className="flex flex-wrap gap-2 p-5">
             {TEMPLATES.map((t) => {
               const locked = !t.starter && !fullLibrary;
@@ -160,7 +213,7 @@ export function ProjectForm({ projectId, initial, showTemplates = false }: { pro
                 {v.itemised ? (
                   <div className="flex flex-wrap items-end gap-3 rounded-lg bg-sunken/60 p-3">
                     <div role="radiogroup" aria-label={`Deliverable ${i + 1} pricing`} className="inline-flex rounded-lg border border-line-strong bg-surface p-0.5">
-                      {(["fixed", "hourly"] as const).map((t) => (
+                      {(["fixed", "hourly", "unit"] as const).map((t) => (
                         <button
                           key={t}
                           type="button"
@@ -169,11 +222,23 @@ export function ProjectForm({ projectId, initial, showTemplates = false }: { pro
                           onClick={() => setDeliverable(i, "priceType", t)}
                           className={cx("rounded-md px-2.5 py-1 text-[12px] font-medium", d.priceType === t ? "bg-accent-soft text-accent-hover" : "text-muted")}
                         >
-                          {t === "fixed" ? "Fixed" : "Hourly"}
+                          {t === "fixed" ? "Fixed" : t === "hourly" ? "Hourly" : "Per unit"}
                         </button>
                       ))}
                     </div>
-                    {d.priceType === "hourly" ? (
+                    {d.priceType === "unit" ? (
+                      <>
+                        <Field label="Quantity" htmlFor={`d-qty-${i}`} error={fe[`deliverables.${i}.quantity`]} className="w-20">
+                          <Input id={`d-qty-${i}`} inputMode="decimal" value={d.quantity} onChange={(e) => setDeliverable(i, "quantity", e.target.value)} className="num" />
+                        </Field>
+                        <Field label="Unit" htmlFor={`d-unit-${i}`} error={fe[`deliverables.${i}.unit`]} className="w-24">
+                          <Input id={`d-unit-${i}`} value={d.unit} maxLength={24} onChange={(e) => setDeliverable(i, "unit", e.target.value)} placeholder="posts" />
+                        </Field>
+                        <Field label={`Price each (${v.currency})`} htmlFor={`d-each-${i}`} error={fe[`deliverables.${i}.rate`]} className="w-32">
+                          <Input id={`d-each-${i}`} inputMode="decimal" value={d.rate} onChange={(e) => setDeliverable(i, "rate", e.target.value)} className="num" />
+                        </Field>
+                      </>
+                    ) : d.priceType === "hourly" ? (
                       <>
                         <Field label="Hours" htmlFor={`d-hours-${i}`} error={fe[`deliverables.${i}.hours`]} className="w-24">
                           <Input id={`d-hours-${i}`} inputMode="decimal" value={d.hours} onChange={(e) => setDeliverable(i, "hours", e.target.value)} className="num" />
@@ -363,6 +428,9 @@ export function ProjectForm({ projectId, initial, showTemplates = false }: { pro
           <Field label="Terms" htmlFor="terms" error={fe.terms} hint="Payment, ownership, cancellation. Optional." className="sm:col-span-2">
             <Textarea id="terms" rows={4} value={v.terms} onChange={(e) => set("terms", e.target.value)} placeholder="50% advance before work starts. Final files are delivered after full payment." />
           </Field>
+          <Field label="Quote valid until" htmlFor="valid-until" error={fe.validUntil} hint="Optional. After this date your client can't approve it; you can send an updated quote.">
+            <Input id="valid-until" type="date" value={v.validUntil} onChange={(e) => set("validUntil", e.target.value)} />
+          </Field>
         </div>
       </Card>
 
@@ -388,9 +456,65 @@ export function ProjectForm({ projectId, initial, showTemplates = false }: { pro
         )}
       </Card>
 
-      <div className="flex items-center justify-end gap-3">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <SaveAsTemplate values={v} />
         <SubmitButton pending={action.pending} pendingLabel="Saving…">{projectId ? "Save changes" : "Create project"}</SubmitButton>
       </div>
     </form>
+  );
+}
+
+/** Save the reusable parts of this scope (not the client, dates or payments) as your own template. */
+function SaveAsTemplate({ values }: { values: FormValues }) {
+  const [open, setOpen] = useState(false);
+  const [name, setName] = useState("");
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const qc = useQueryClient();
+  const toast = useToast();
+  if (!open)
+    return (
+      <Button type="button" variant="secondary" onClick={() => { setName(values.title); setOpen(true); }}>
+        Save as template
+      </Button>
+    );
+  async function save() {
+    if (!values.deliverables.some((d) => d.title.trim())) return setError("Add at least one deliverable first.");
+    setPending(true);
+    setError(null);
+    const data = toTemplateData({ ...values, deliverables: values.deliverables.filter((d) => d.title.trim()) });
+    const r = await call(() => supabase.rpc("save_template", { p_name: name, p_data: data }));
+    setPending(false);
+    if (!r.ok) return setError(r.message);
+    await qc.invalidateQueries({ queryKey: ["templates"] });
+    setOpen(false);
+    toast("positive", `Saved as template “${name.trim()}”. It's under “Start from a template” on new projects.`);
+  }
+  return (
+    <div className="w-full space-y-2 rounded-lg border border-line bg-surface p-3 sm:w-auto" data-testid="save-template">
+      <p className="text-[12px] text-muted">Saves the summary, deliverables, prices, exclusions and terms. Not the client, dates or payments.</p>
+      <div className="flex flex-wrap items-end gap-2">
+        <Field label="Template name" htmlFor="template-name" error={error ?? undefined} className="min-w-0 flex-1">
+          <Input
+            id="template-name"
+            value={name}
+            maxLength={60}
+            onChange={(e) => setName(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                void save();
+              }
+            }}
+          />
+        </Field>
+        <Button type="button" size="sm" disabled={pending || !name.trim()} onClick={save}>
+          {pending ? "Saving…" : "Save template"}
+        </Button>
+        <Button type="button" size="sm" variant="ghost" onClick={() => setOpen(false)}>
+          Cancel
+        </Button>
+      </div>
+    </div>
   );
 }

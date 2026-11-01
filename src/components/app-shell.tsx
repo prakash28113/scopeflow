@@ -1,6 +1,8 @@
 import type { ReactNode } from "react";
 import { Link, NavLink, Navigate, Outlet, useLocation } from "react-router";
 import { useQuery } from "@tanstack/react-query";
+import { useDashboard } from "@/lib/queries";
+import { needsAttention, remindersFrom } from "@/lib/use-reminders";
 import { Button, Logo, buttonClass, cx } from "./ui";
 import { displayName, useAuth, useProfile } from "@/lib/auth";
 import { supabase } from "@/lib/supabase";
@@ -56,12 +58,13 @@ export function useUnreadCount() {
   });
 }
 
-function Bell({ count }: { count: number }) {
+function Bell({ count, attention }: { count: number; attention: number }) {
+  const label = ["Notifications", count ? `${count} unread` : "", attention ? `${attention} need${attention === 1 ? "s" : ""} attention` : ""].filter(Boolean).join(", ");
   return (
     <NavLink
       to="/notifications"
       className={({ isActive }) => cx(buttonClass("ghost", "sm"), "relative px-2.5", isActive && "bg-sunken")}
-      aria-label={count ? `Notifications, ${count} unread` : "Notifications"}
+      aria-label={label}
     >
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
         <path d="M6 8a6 6 0 1 1 12 0c0 7 3 9 3 9H3s3-2 3-9" />
@@ -72,12 +75,15 @@ function Bell({ count }: { count: number }) {
           {count > 99 ? "99+" : count}
         </span>
       ) : null}
+      {attention ? <span className="absolute -bottom-0.5 -right-0.5 size-2.5 rounded-full border-2 border-canvas bg-danger" data-testid="bell-attention" /> : null}
     </NavLink>
   );
 }
 
 export function AppShell() {
   const location = useLocation();
+  const { session } = useAuth();
+  const dash = useDashboard(Boolean(session));
   const profile = useProfile();
   const unread = useUnreadCount();
   const nav = ({ isActive }: { isActive: boolean }) => cx(buttonClass("ghost", "sm"), isActive && "bg-sunken text-ink");
@@ -115,7 +121,7 @@ export function AppShell() {
             {profile.data ? (
               <span className="mr-1 hidden max-w-[180px] truncate text-[13px] text-muted md:block">{displayName(profile.data)}</span>
             ) : null}
-            <Bell count={unread.data ?? 0} />
+            <Bell count={unread.data ?? 0} attention={dash.data ? needsAttention(remindersFrom(dash.data)) : 0} />
             <Link to="/projects/new" className={buttonClass("primary", "sm")}>
               <span className="sm:hidden">New</span>
               <span className="hidden sm:inline">New project</span>

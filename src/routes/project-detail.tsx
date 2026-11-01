@@ -1,3 +1,4 @@
+import { quoteExpired } from "@/lib/quote";
 import { useState, type FormEvent, type ReactNode } from "react";
 import { Link, useNavigate, useParams } from "react-router";
 import { useQueryClient } from "@tanstack/react-query";
@@ -55,7 +56,7 @@ export default function ProjectPage() {
   if (q.isError) return <Alert>Couldn't load this project. Please refresh.</Alert>;
   if (!q.data) return <NotFound />;
 
-  const { project: p, snapshots, decisions, revisions, changeOrders, activity, link, invoices, payments, followUps } = q.data;
+  const { project: p, snapshots, decisions, revisions, changeOrders, activity, link, invoices, payments, followUps, expenses } = q.data;
   const liveInvoice = (milestoneId: string) => invoices.find((i) => i.milestone_id === milestoneId && !i.voided_at);
   const pid = p.id;
   const latest = snapshots[0];
@@ -63,6 +64,8 @@ export default function ProjectPage() {
   const editable = p.status === "draft" || p.status === "changes_requested";
   const approved = Boolean(p.approved_at);
   const money = projectTotals(Number(p.budget_cents), Number(p.approved_extras_cents), p.milestones);
+  /** Expenses you linked to this project (in its currency) and profit so far. */
+  const spent = expenses.filter((e) => e.currency === p.currency).reduce((s, e) => s + Number(e.amount_cents), 0);
   const due = currentDueDate(p.due_date, p.extra_days);
   /** In-scope rounds plus rounds requested beyond the limit. */
   const requested = (dId: string) => revisions.filter((r) => r.deliverable_id === dId && r.kind === "revision").length;
@@ -162,9 +165,9 @@ export default function ProjectPage() {
               description={
                 approved
                   ? `Approved ${formatDate(p.approved_at)} — changes go through change orders.`
-                  : editable
-                    ? "Draft — editable until your client approves it."
-                    : "Locked while your client reviews it."
+                  : `${editable ? "Draft — editable until your client approves it." : "Locked while your client reviews it."}${
+                      p.valid_until ? ` Quote valid until ${formatDate(p.valid_until)}${quoteExpired(p.valid_until) ? " (expired: edit the scope to set a new date)" : ""}.` : ""
+                    }`
               }
             />
             {p.summary ? <p className="whitespace-pre-line border-b border-line px-5 py-4 text-sm text-ink-2">{p.summary}</p> : null}
@@ -434,6 +437,16 @@ export default function ProjectPage() {
               <dd className="text-right text-positive">{fmt(money.paid)}</dd>
               <dt className="text-muted">Outstanding</dt>
               <dd className="text-right">{fmt(money.outstanding)}</dd>
+              {spent ? (
+                <>
+                  <dt className="text-muted">Expenses (linked)</dt>
+                  <dd className="text-right">−{fmt(spent)}</dd>
+                  <dt className="font-medium">Profit so far</dt>
+                  <dd className={`text-right font-semibold ${money.paid - spent < 0 ? "text-danger" : ""}`} data-testid="project-profit-so-far">
+                    {fmt(money.paid - spent)}
+                  </dd>
+                </>
+              ) : null}
             </dl>
             {money.contract > 0 ? (
               <div className="border-b border-line px-5 py-3">

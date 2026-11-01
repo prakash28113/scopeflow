@@ -29,7 +29,9 @@ drop function if exists public.update_client, public._quote_totals cascade;
 drop function if exists public.set_payment_details cascade;
 -- Outside requests (if installed).
 drop function if exists public.log_client_request, public.create_client cascade;
+drop function if exists public.save_template, public.delete_template, public._check_quote_validity, public._today_anywhere cascade;
 -- Follow-ups (if installed).
+drop table if exists public.scope_templates cascade;
 drop table if exists public.follow_ups cascade;
 drop function if exists public.add_follow_up, public.set_follow_up_done, public.delete_follow_up cascade;
 -- Payments (if installed).
