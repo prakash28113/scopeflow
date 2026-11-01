@@ -10,6 +10,8 @@ import { useProfile, type Profile } from "@/lib/auth";
 import { supabase } from "@/lib/supabase";
 import { useAction } from "@/lib/use-action";
 import { CURRENCIES } from "@/lib/money";
+import { UPI_ID } from "@/lib/upi";
+import { PASSWORD_RESET_EMAIL } from "@/lib/site";
 import { issuesToFieldErrors, onboardingSchema, type FieldErrors } from "@/lib/validation";
 
 function WorkspaceForm({ profile, onDone, submitLabel }: { profile: Profile; onDone: () => void; submitLabel: string }) {
@@ -122,6 +124,36 @@ function PasswordForm({ email }: { email: string }) {
   );
 }
 
+function UpiForm({ current }: { current: string }) {
+  const qc = useQueryClient();
+  const toast = useToast();
+  const action = useAction();
+  async function onSubmit(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const ok = await action.run(upiSchema, Object.fromEntries(new FormData(e.currentTarget)), (d) =>
+      supabase.rpc("set_payment_details", { p_upi_id: d.upiId }).then((r) => ({ data: true, error: r.error })),
+    );
+    if (!ok) return;
+    await qc.invalidateQueries({ queryKey: ["profile"] });
+    toast("positive", "Payment details saved.");
+  }
+  return (
+    <form onSubmit={onSubmit} className="space-y-4" noValidate>
+      {action.error ? <Alert>{action.error}</Alert> : null}
+      <Field label="UPI ID" htmlFor="upiId" error={action.fieldErrors.upiId} hint="Like yourname@okicici. Leave empty to hide the UPI button. Payments go straight to you; ScopeFlow never handles money.">
+        <Input id="upiId" name="upiId" defaultValue={current} autoComplete="off" autoCapitalize="none" spellCheck={false} placeholder="yourname@okicici" />
+      </Field>
+      <SubmitButton variant="secondary" pending={action.pending}>
+        Save payment details
+      </SubmitButton>
+    </form>
+  );
+}
+
+const upiSchema = z.object({
+  upiId: z.string().trim().refine((v) => v === "" || UPI_ID.test(v), "Enter a UPI ID like yourname@okicici"),
+});
+
 export function SettingsPage() {
   const profile = useProfile();
   const toast = useToast();
@@ -137,7 +169,13 @@ export function SettingsPage() {
           </div>
         </Card>
         <Card>
-          <CardHeader title="Password" description="There are no password-reset emails during the beta, so keep this somewhere safe." />
+          <CardHeader title="Getting paid" description="For projects in Indian rupees, clients see a “Pay via UPI” button and QR code on each unpaid milestone." />
+          <div className="p-5">
+            <UpiForm current={profile.data.upi_id ?? ""} />
+          </div>
+        </Card>
+        <Card>
+          <CardHeader title="Password" description={PASSWORD_RESET_EMAIL ? "Change the password you sign in with." : "Password resets go through support during the beta, so keep this somewhere safe."} />
           <div className="p-5">
             <PasswordForm email={profile.data.email} />
           </div>

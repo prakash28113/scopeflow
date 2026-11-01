@@ -49,15 +49,16 @@ export const PORTAL_HEADERS: Record<string, string> = {
   "Cache-Control": "no-store",
 };
 
+/** Pages that carry one-time secrets in the address (client links, reset links): never indexed or cached. */
+export const PRIVATE_PATHS = ["/p", "/reset-password", "/forgot-password"] as const;
+
 const block = (h: Record<string, string>) => Object.entries(h).map(([k, v]) => `  ${k}: ${v}`).join("\n");
 
 export function buildHeadersFile(opts: { supabaseUrl: string; turnstile: boolean }): string {
   return `/*
 ${block(pageHeaders(opts))}
 
-/p
-${block(PORTAL_HEADERS)}
-
+${PRIVATE_PATHS.map((p) => `${p}\n${block(PORTAL_HEADERS)}\n`).join("\n")}
 /assets/*
   Cache-Control: public, max-age=31536000, immutable
 `;

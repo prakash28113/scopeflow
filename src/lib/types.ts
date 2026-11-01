@@ -177,6 +177,8 @@ export type PortalView = {
     approved_at: string | null;
   };
   freelancer: { name: string };
+  /** UPI details for rupee projects (null otherwise). */
+  payment?: { upi_id: string; payee_name: string | null } | null;
   client: { name: string; company: string | null };
   snapshot: null | {
     id: string;

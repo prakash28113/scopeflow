@@ -43,6 +43,17 @@ export const signInSchema = z.object({
   password: z.string().min(1, "Enter your password"),
 });
 
+export const resetRequestSchema = z.object({
+  email: z.email("Enter a valid email").max(254),
+});
+
+export const newPasswordSchema = z
+  .object({
+    password: z.string().min(8, "Use at least 8 characters").max(72, "Use 72 characters or fewer"),
+    confirm: z.string(),
+  })
+  .refine((v) => v.password === v.confirm, { path: ["confirm"], message: "The passwords don't match" });
+
 export const onboardingSchema = z.object({
   fullName: text(120, "Name"),
   businessName: optionalText(120),

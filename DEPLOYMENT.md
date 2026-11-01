@@ -94,7 +94,8 @@ Supabase → **Authentication**:
    - **Enable email provider:** on
    - **Confirm email:** **OFF** — the beta sends no email
    - **Minimum password length:** **8**. If it isn't on this screen in your dashboard version, look for "password" in the Authentication settings.
-2. **URL Configuration → Site URL:** set it after the first deploy (§5, step 6).
+2. **URL Configuration → Site URL:** the automatic release sets it, together with the redirect allow-list for password-reset links.
+   **Password-reset emails:** need free SMTP (Brevo). Follow `docs/EMAIL-SETUP.md`, then turn on `passwordResetEmail` in `config/public-site.json`.
 3. **Rate limits:** leave the defaults.
 4. *(Optional)* **CAPTCHA (free Cloudflare Turnstile):**
    - Cloudflare dashboard → **Turnstile** → add a widget for your `workers.dev` hostname → copy the **site key** and **secret key**.
