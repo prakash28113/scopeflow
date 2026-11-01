@@ -45,6 +45,8 @@ export type Deliverable = {
   title: string;
   description: string | null;
   revisions_included: number;
+  progress?: import("./progress").Progress;
+  progress_updated_at?: string | null;
   pricing_type?: PricingType | null;
   hours?: string | number | null;
   rate_cents?: number | null;
@@ -196,6 +198,8 @@ export type PortalView = {
     revisions_used: number;
     /** Rounds requested beyond the included ones (v1.1; absent before). */
     revisions_extra?: number;
+    progress?: import("./progress").Progress;
+    progress_updated_at?: string | null;
   }[];
   revision_requests: {
     id: string;

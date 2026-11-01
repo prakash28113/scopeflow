@@ -465,6 +465,49 @@ try {
   await c.getByText("Payment schedule").first().waitFor();
   assert.equal(await c.getByTestId("portal-invoices").count(), 0);
 
+  step("progress & timeline: mark deliverables, client sees progress, timeline filters");
+  await f.goto(menuUrl);
+  await f.getByTestId("project-progress").getByText("0 of 2 delivered").waitFor();
+  await f.getByRole("radiogroup", { name: "Concept options progress" }).getByRole("radio", { name: "Delivered" }).click();
+  await f.getByText("Concept options: delivered.").waitFor();
+  await f.getByRole("radiogroup", { name: "Final design progress" }).getByRole("radio", { name: "In progress" }).click();
+  await f.getByText("Final design: in progress.").waitFor();
+  await f.getByTestId("project-progress").getByText(/1 of 2 delivered · 75%/).waitFor();
+  const timeline = f.getByTestId("project-timeline");
+  await timeline.getByText("Concept options marked delivered").waitFor();
+  await f.getByRole("tab", { name: "Payments" }).click();
+  await timeline.getByText(/Invoice RS-\d{4}-001 issued/).waitFor();
+  assert.equal(await timeline.getByText("Concept options marked delivered").count(), 0);
+  await f.getByRole("tab", { name: "Client" }).click();
+  await timeline.getByText(/approved by Dana Whitfield/i).first().waitFor();
+  await shot(f, "31-progress-timeline");
+  await c.reload();
+  await c.getByTestId("portal-progress").getByText("1 of 2 delivered").waitFor();
+  await c.getByText("Delivered", { exact: true }).first().waitFor();
+  await c.getByText("In progress", { exact: true }).first().waitFor();
+
+  step("analytics: this month's received, expenses and profit, chart and table, expense log");
+  await f.goto(`${BASE}/analytics`);
+  await f.getByRole("heading", { name: "Analytics" }).waitFor();
+  // Priya's default currency is USD; $1,600 was marked received earlier.
+  assert.equal(await f.getByTestId("kpi-received").innerText(), "$1,600.00");
+  await f.getByLabel("Amount (USD)").fill("50");
+  await f.getByLabel("What for (optional)").fill("Figma");
+  await f.getByRole("button", { name: "Add expense" }).click();
+  await f.getByText("Expense added.").waitFor();
+  await f.getByTestId("expense-list").getByText("Figma").waitFor();
+  assert.equal(await f.getByTestId("kpi-expenses").innerText(), "$50.00");
+  assert.equal(await f.getByTestId("kpi-profit").innerText(), "$1,550.00");
+  await f.getByText("Show as a table").click();
+  assert.match(await f.getByTestId("monthly-table").innerText(), /\$1,600\.00\s+\$0\.00\s+\$50\.00\s+\$1,550\.00/);
+  await f.getByLabel("Currency").selectOption("INR");
+  await f.getByTestId("owed-outstanding").getByText("₹206.50").waitFor();
+  await f.getByLabel("Currency").selectOption("USD");
+  await shot(f, "32-analytics");
+  accept(f);
+  await f.getByRole("button", { name: "Delete expense Figma" }).click();
+  await f.getByText("No expenses logged for").waitFor();
+
   step("password reset by email: request, open the link, choose a new password, sign in with it");
   const resetCtx = await newCtx();
   const a = await resetCtx.newPage();

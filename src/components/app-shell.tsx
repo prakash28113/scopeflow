@@ -99,6 +99,9 @@ export function AppShell() {
               <NavLink to="/invoices" className={nav}>
                 Invoices
               </NavLink>
+              <NavLink to="/analytics" className={nav}>
+                Analytics
+              </NavLink>
               <NavLink to="/plan" className={nav}>
                 Plan
               </NavLink>
@@ -133,6 +136,9 @@ export function AppShell() {
                 </Link>
                 <Link to="/invoices" className="block rounded-md px-3 py-2 text-sm hover:bg-sunken sm:hidden">
                   Invoices
+                </Link>
+                <Link to="/analytics" className="block rounded-md px-3 py-2 text-sm hover:bg-sunken sm:hidden">
+                  Analytics
                 </Link>
                 <Link to="/plan" className="block rounded-md px-3 py-2 text-sm hover:bg-sunken sm:hidden">
                   Plan & usage

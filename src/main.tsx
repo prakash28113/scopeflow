@@ -49,6 +49,7 @@ const router = createBrowserRouter([
               { path: "/projects/:id", lazy: lazy(() => import("./routes/project-detail")) },
               { path: "/projects/:id/edit", lazy: lazy(() => import("./routes/project-edit")) },
               { path: "/projects/:id/quote", lazy: lazy(() => import("./routes/project-quote")) },
+              { path: "/analytics", lazy: lazy(() => import("./routes/analytics")) },
               { path: "/invoices", lazy: lazy(() => import("./routes/invoices").then((m) => ({ default: m.InvoicesPage }))) },
               { path: "/invoices/:id", lazy: lazy(() => import("./routes/invoices").then((m) => ({ default: m.InvoicePage }))) },
               { path: "/clients", lazy: lazy(() => import("./routes/clients").then((m) => ({ default: m.ClientsPage }))) },

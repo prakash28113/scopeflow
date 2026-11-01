@@ -1,5 +1,26 @@
 # Changelog
 
+## Progress, project timeline and monthly analytics — ready for review (not released)
+
+- **Deliverable progress:**
+  - after approval, each deliverable is *Not started / In progress / Delivered*, with a progress bar on the project;
+  - the client page shows each deliverable's status and "1 of 2 delivered";
+  - every change is logged.
+- **Project timeline:** the old activity list is now a timeline grouped by day. Filters: All / Client / Scope & changes / Progress / Payments. The dates card is renamed "Key dates".
+- **Analytics** (new page in the nav):
+  - month and currency pickers;
+  - Received / Invoiced / Expenses / Profit for the month, with the change vs last month;
+  - a 12-month chart of received vs expenses, with hover tooltips and a table view (palette checked for colour-blind safety);
+  - money owed to you, and overdue items;
+  - top clients;
+  - projects in progress (with progress bars), approved this month and completed this month.
+- **Expense log** (on the Analytics page): date, category, amount, note and an optional project; only you can see it; delete anytime. Profit = received − expenses.
+- **Database:** `supabase/migrations/20261106000000_progress_and_expenses.sql` is re-runnable. It adds `deliverables.progress`, an `expenses` table (RLS, owner read-only, written through functions) and `portal_view` with progress. Rollback is `supabase/rollback/20261106000000_progress_and_expenses_down.sql`, tested twice in a row.
+- **Tests:**
+  - 5 database tests;
+  - 8 unit tests;
+  - the browser walkthrough is now **31 steps**, adding progress & timeline and analytics & expenses.
+
 ## Invoices — ready for review (not released)
 
 - **Create invoice** next to any payment of an approved project, including change-order payments. You choose the tax (defaults to the project's, e.g. GST 18%), optional CGST + SGST split, the due date (default 7 days) and a note.

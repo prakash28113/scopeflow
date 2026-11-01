@@ -1,11 +1,12 @@
 import { useEffect, useState } from "react";
-import { Alert, Card, Logo, Tag } from "@/components/ui";
+import { Alert, Card, Logo, Meter, Tag } from "@/components/ui";
 import { AgreementTerms, RevisionMeter } from "@/components/agreement";
 import { PrintButton, QuoteTable } from "@/components/quote";
 import { UpiPay } from "@/components/upi-pay";
 import { InvoiceDocument } from "@/components/invoice-document";
 import { invoiceStatus } from "@/lib/invoice";
 import { localToday } from "@/lib/upcoming";
+import { progressLabel, progressSummary } from "@/lib/progress";
 import { PageSpinner } from "@/components/app-shell";
 import { usePortal } from "@/lib/queries";
 import { tokenFromHash } from "@/lib/portal-link";
@@ -176,7 +177,15 @@ export default function PortalPage() {
 
           <Card>
             <div className="border-b border-line px-5 py-4 sm:px-6">
-              <h2 className="text-[15px] font-semibold">Deliverables</h2>
+              <div className="flex items-center justify-between gap-3">
+                <h2 className="text-[15px] font-semibold">Deliverables</h2>
+                <span className="num text-[12px] text-muted" data-testid="portal-progress">
+                  {progressSummary(v.deliverables).label}
+                </span>
+              </div>
+              <div className="mt-2">
+                <Meter value={progressSummary(v.deliverables).pct} max={100} tone="positive" />
+              </div>
             </div>
             <ul className="divide-y divide-line">
               {v.deliverables.map((d) => (
@@ -186,6 +195,7 @@ export default function PortalPage() {
                       <p className="text-sm font-medium">{d.title}</p>
                       {d.description ? <p className="mt-0.5 whitespace-pre-line text-[13px] text-muted">{d.description}</p> : null}
                     </div>
+                    <Tag tone={d.progress === "delivered" ? "positive" : d.progress === "in_progress" ? "accent" : "neutral"}>{progressLabel(d.progress)}</Tag>
                   </div>
                   <RevisionMeter used={d.revisions_used + (d.revisions_extra ?? 0)} included={d.revisions_included} />
                 </li>

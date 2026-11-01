@@ -23,6 +23,7 @@ import { AgreementTerms, RevisionMeter } from "@/components/agreement";
 import { QuoteTable, pricingFrom } from "@/components/quote";
 import { useToast } from "@/components/toast";
 import { CreateInvoice } from "@/components/create-invoice";
+import { PROGRESS, progressSummary, type Progress } from "@/lib/progress";
 import { useProfile } from "@/lib/auth";
 import { useProject, type FullProject } from "@/lib/queries";
 import { supabase } from "@/lib/supabase";
@@ -147,6 +148,17 @@ export default function ProjectPage() {
               }
             />
             {p.summary ? <p className="whitespace-pre-line border-b border-line px-5 py-4 text-sm text-ink-2">{p.summary}</p> : null}
+            {approved && p.deliverables.length ? (
+              <div className="border-b border-line px-5 py-3" data-testid="project-progress">
+                <div className="mb-1.5 flex items-center justify-between text-[13px]">
+                  <span className="font-medium">Progress</span>
+                  <span className="num text-muted">
+                    {progressSummary(p.deliverables).label} · {progressSummary(p.deliverables).pct}%
+                  </span>
+                </div>
+                <Meter value={progressSummary(p.deliverables).pct} max={100} tone="positive" />
+              </div>
+            ) : null}
             <ul className="divide-y divide-line">
               {p.deliverables.map((d) => {
                 return (
@@ -161,6 +173,16 @@ export default function ProjectPage() {
                       </p>
                     </div>
                     {approved ? <RevisionMeter used={requested(d.id)} included={d.revisions_included} /> : null}
+                    {approved ? (
+                      <ProgressControl
+                        title={d.title}
+                        value={d.progress ?? "not_started"}
+                        disabled={p.status === "completed" || p.status === "cancelled"}
+                        onChange={(next) =>
+                          act(() => supabase.rpc("set_deliverable_progress", { p_deliverable_id: d.id, p_progress: next }), `${d.title}: ${PROGRESS.find((x) => x.value === next)!.label.toLowerCase()}.`)
+                        }
+                      />
+                    ) : null}
                   </li>
                 );
               })}
@@ -456,7 +478,7 @@ export default function ProjectPage() {
           </Card>
 
           <Card>
-            <CardHeader title="Timeline" />
+            <CardHeader title="Key dates" />
             <dl className="grid grid-cols-2 gap-x-4 gap-y-3 px-5 py-4 text-[13px]">
               <dt className="text-muted">Start</dt>
               <dd className="text-right">{formatDate(p.start_date)}</dd>
@@ -469,18 +491,7 @@ export default function ProjectPage() {
             </dl>
           </Card>
 
-          <Card>
-            <CardHeader title="Activity" />
-            <ol className="max-h-[480px] space-y-3.5 overflow-y-auto px-5 py-4">
-              {activity.map((a) => (
-                <li key={a.id} className="relative pl-4 text-[13px]">
-                  <span className={`absolute left-0 top-[7px] size-1.5 rounded-full ${a.actor === "client" ? "bg-accent" : "bg-line-strong"}`} aria-hidden />
-                  <p className="text-ink-2">{a.summary}</p>
-                  <p className="text-[12px] text-muted">{formatDateTime(a.created_at)}</p>
-                </li>
-              ))}
-            </ol>
-          </Card>
+          <ProjectTimeline activity={activity} />
 
           <div className="flex flex-wrap gap-2">
             {p.status === "awaiting_approval" ? (
@@ -717,5 +728,112 @@ function TimelineStep({ label, done = false, tone = "accent" }: { label: string;
       <span className={`size-2 shrink-0 rounded-full ${dot}`} aria-hidden />
       <span className={done ? "text-ink-2" : undefined}>{label}</span>
     </li>
+  );
+}
+
+/** Not started / In progress / Delivered for one deliverable. */
+function ProgressControl({ title, value, disabled, onChange }: { title: string; value: Progress; disabled: boolean; onChange: (p: Progress) => Promise<unknown> }) {
+  const [pending, setPending] = useState<Progress | null>(null);
+  return (
+    <div className="mt-3 inline-flex rounded-lg border border-line bg-canvas p-0.5" role="radiogroup" aria-label={`${title} progress`}>
+      {PROGRESS.map((o) => {
+        const on = value === o.value;
+        return (
+          <button
+            key={o.value}
+            type="button"
+            role="radio"
+            aria-checked={on}
+            disabled={disabled || pending !== null}
+            onClick={async () => {
+              if (on) return;
+              setPending(o.value);
+              await onChange(o.value);
+              setPending(null);
+            }}
+            className={`rounded-md px-2.5 py-1 text-[12px] font-medium transition disabled:opacity-60 ${
+              on ? (o.value === "delivered" ? "bg-positive text-white" : o.value === "in_progress" ? "bg-accent text-white" : "bg-surface text-ink shadow-sm") : "text-muted hover:text-ink"
+            }`}
+          >
+            {pending === o.value ? "…" : o.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+type TimelineFilter = "all" | "client" | "money" | "scope" | "progress";
+const TIMELINE_FILTERS: { value: TimelineFilter; label: string }[] = [
+  { value: "all", label: "All" },
+  { value: "client", label: "Client" },
+  { value: "scope", label: "Scope & changes" },
+  { value: "progress", label: "Progress" },
+  { value: "money", label: "Payments" },
+];
+function timelineKind(event: string): Exclude<TimelineFilter, "all" | "client"> {
+  if (/^(milestone|invoice)\./.test(event)) return "money";
+  if (/^deliverable\./.test(event) || /^project\.(completed|cancelled)/.test(event)) return "progress";
+  return "scope";
+}
+const KIND_DOT: Record<Exclude<TimelineFilter, "all" | "client">, string> = {
+  money: "bg-positive",
+  progress: "bg-warning",
+  scope: "bg-line-strong",
+};
+
+/** Everything that happened on the project, newest first, grouped by day. */
+function ProjectTimeline({ activity }: { activity: { id: string; event: string; actor: string; summary: string; created_at: string }[] }) {
+  const [filter, setFilter] = useState<TimelineFilter>("all");
+  const shown = activity.filter((a) => filter === "all" || (filter === "client" ? a.actor === "client" : timelineKind(a.event) === filter));
+  const days = new Map<string, typeof shown>();
+  for (const a of shown) {
+    const day = formatDate(a.created_at);
+    days.set(day, [...(days.get(day) ?? []), a]);
+  }
+  return (
+    <Card>
+      <CardHeader title="Project timeline" description="Approvals, requests, changes, progress and payments: everything, with dates." />
+      <div className="flex flex-wrap gap-1 border-b border-line px-4 py-2" role="tablist" aria-label="Filter timeline">
+        {TIMELINE_FILTERS.map((f) => (
+          <button
+            key={f.value}
+            type="button"
+            role="tab"
+            aria-selected={filter === f.value}
+            onClick={() => setFilter(f.value)}
+            className={`rounded-md px-2.5 py-1 text-[12px] ${filter === f.value ? "bg-sunken font-medium text-ink" : "text-muted hover:text-ink"}`}
+          >
+            {f.label}
+          </button>
+        ))}
+      </div>
+      {shown.length === 0 ? (
+        <p className="px-5 py-4 text-[13px] text-muted">Nothing here yet.</p>
+      ) : (
+        <div className="max-h-[560px] overflow-y-auto px-5 py-4" data-testid="project-timeline">
+          {[...days].map(([day, items]) => (
+            <section key={day} className="mb-4 last:mb-0">
+              <h3 className="mb-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-muted">{day}</h3>
+              <ol className="space-y-3 border-l border-line pl-4">
+                {items.map((a) => (
+                  <li key={a.id} className="relative text-[13px]">
+                    <span
+                      className={`absolute -left-[20.5px] top-[6px] size-2 rounded-full ring-2 ring-surface ${a.actor === "client" ? "bg-accent" : KIND_DOT[timelineKind(a.event)]}`}
+                      aria-hidden
+                    />
+                    <p className="text-ink-2">{a.summary}</p>
+                    <p className="text-[12px] text-muted">
+                      {a.actor === "client" ? "Client · " : ""}
+                      {new Date(a.created_at).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })}
+                    </p>
+                  </li>
+                ))}
+              </ol>
+            </section>
+          ))}
+        </div>
+      )}
+    </Card>
   );
 }
