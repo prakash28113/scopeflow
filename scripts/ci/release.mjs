@@ -23,7 +23,7 @@ const SUPABASE_API = "https://api.supabase.com/v1";
 const CF_API = "https://api.cloudflare.com/client/v4";
 
 /** Expected results of the post-migration security check (see DEPLOYMENT.md §2). */
-export const EXPECTED = { tables: 23, without_rls: 0, public_functions: 5, signup_trigger: 1 };
+export const EXPECTED = { tables: 24, without_rls: 0, public_functions: 5, signup_trigger: 1 };
 /** Keeps sign-ups closed when no invited emails are configured. */
 export const CLOSED_SENTINEL = "invites-closed@scopeflow.invalid";
 const EMAIL = /^[a-z0-9._%+-]+@[a-z0-9-]+(\.[a-z0-9-]+)*\.[a-z]{2,}$/;

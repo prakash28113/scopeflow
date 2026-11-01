@@ -1,5 +1,21 @@
 # Changelog
 
+## Reminders — ready for review (not released)
+
+- **Reminders card** at the top of the dashboard, most urgent first, worked out automatically from existing data:
+  - a scope or change order not answered after **3 days** ("Follow up with Dana");
+  - **overdue invoices** (showing the unpaid balance), and overdue payments that have no invoice;
+  - **project deadlines**: past due (counting extension days), or due within 3 days;
+  - a **client link expiring** within 3 days while approval is still pending;
+  - your own **follow-ups**, from the day they're due, each with a Done button.
+- **Follow-ups:** add one from the dashboard (with an optional project) or from a project's new Follow-ups card. They're private, can be marked done or deleted, and future ones wait for their day.
+- **In-app only.** No emails, SMS or WhatsApp messages are sent, and nothing claims to send them.
+- **Database:** `supabase/migrations/20261108000000_follow_ups.sql` adds a `follow_ups` table (RLS, owner read-only, written through functions, capped at 200 open per account). Rollback is `supabase/rollback/20261108000000_follow_ups_down.sql`, tested twice.
+- **Tests:**
+  - 3 database tests;
+  - 6 unit tests for the reminder rules (thresholds, extensions, balances, voided and paid invoices, link expiry, follow-up timing);
+  - the browser walkthrough is now **33 steps**.
+
 ## Payments done right + audit fixes — live 1 Nov 2026 (release run 41323474103)
 
 - **Record payment** replaces "Mark paid":

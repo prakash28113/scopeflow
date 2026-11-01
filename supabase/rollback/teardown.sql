@@ -27,6 +27,9 @@ cascade;
 -- v1.2 (if installed).
 drop function if exists public.update_client, public._quote_totals cascade;
 drop function if exists public.set_payment_details cascade;
+-- Follow-ups (if installed).
+drop table if exists public.follow_ups cascade;
+drop function if exists public.add_follow_up, public.set_follow_up_done, public.delete_follow_up cascade;
 -- Payments (if installed).
 drop table if exists public.payments cascade;
 drop function if exists public.record_payment, public.delete_payment, public._sync_milestone cascade;
