@@ -9,6 +9,8 @@ import { formatDate, formatDateTime } from "@/lib/format";
 import { currentDueDate } from "@/lib/pricing";
 import { localToday, upcomingItems, whenLabel } from "@/lib/upcoming";
 import type { ProjectStatus } from "@/lib/types";
+import { buildReminders } from "@/lib/reminders";
+import { RemindersCard } from "@/components/reminders";
 
 const OPEN: ProjectStatus[] = ["draft", "awaiting_approval", "changes_requested", "active"];
 
@@ -23,7 +25,21 @@ export default function Dashboard() {
   const q = useDashboard();
   if (q.isLoading) return <PageSpinner />;
   if (q.isError || !q.data) return <Alert>Couldn't load your projects. Please refresh.</Alert>;
-  const { projects, changeOrders, revisions, activity } = q.data;
+  const { projects, changeOrders, revisions, activity, snapshots, invoices, links, followUps } = q.data;
+  const invoicedMilestones = new Set(invoices.map((i) => i.milestone_id));
+  const reminders = buildReminders({
+    today: localToday(),
+    now: new Date(),
+    projects: projects.map((p) => ({ id: p.id, title: p.title, status: p.status, due_date: p.due_date, extra_days: p.extra_days, client: p.clients.company || p.clients.name, currency: p.currency })),
+    scopeSent: [...new Map([...snapshots].reverse().map((s) => [s.project_id, s])).values()],
+    changeOrders,
+    invoices: invoices.map((i) => ({ ...i, paid: i.milestones?.status === "paid", paid_cents: Number(i.milestones?.paid_cents ?? 0) })),
+    payments: projects
+      .filter((p) => p.status === "active" || p.status === "completed")
+      .flatMap((p) => p.milestones.map((m) => ({ ...m, paid_cents: Number(m.paid_cents ?? 0), project_id: p.id, has_invoice: invoicedMilestones.has(m.id) }))),
+    links,
+    followUps,
+  });
 
   const open = projects.filter((p) => OPEN.includes(p.status));
   const awaitingScope = projects.filter((p) => p.status === "awaiting_approval");
@@ -61,6 +77,8 @@ export default function Dashboard() {
             <Stat label="Outstanding" value={outstanding.map(([c, v]) => formatMoney(v, c)).join(" · ") || "—"} />
             <Stat label="Collected" value={collected.map(([c, v]) => formatMoney(v, c)).join(" · ") || "—"} />
           </div>
+
+          <RemindersCard reminders={reminders} projects={projects.filter((p) => p.status !== "cancelled" && p.status !== "completed").map((p) => ({ id: p.id, title: p.title }))} />
 
           <div className="grid gap-6 lg:grid-cols-[1fr_340px]">
             <Card>

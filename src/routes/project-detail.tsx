@@ -24,6 +24,7 @@ import { QuoteTable, pricingFrom } from "@/components/quote";
 import { useToast } from "@/components/toast";
 import { CreateInvoice } from "@/components/create-invoice";
 import { RecordPayment } from "@/components/record-payment";
+import { AddFollowUp } from "@/components/reminders";
 import { methodLabel } from "@/lib/payments";
 import { PROGRESS, progressSummary, type Progress } from "@/lib/progress";
 import { useProfile } from "@/lib/auth";
@@ -52,7 +53,7 @@ export default function ProjectPage() {
   if (q.isError) return <Alert>Couldn't load this project. Please refresh.</Alert>;
   if (!q.data) return <NotFound />;
 
-  const { project: p, snapshots, decisions, revisions, changeOrders, activity, link, invoices, payments } = q.data;
+  const { project: p, snapshots, decisions, revisions, changeOrders, activity, link, invoices, payments, followUps } = q.data;
   const liveInvoice = (milestoneId: string) => invoices.find((i) => i.milestone_id === milestoneId && !i.voided_at);
   const pid = p.id;
   const latest = snapshots[0];
@@ -508,6 +509,39 @@ export default function ProjectPage() {
               <dt className="font-medium">Current due date</dt>
               <dd className="text-right font-semibold">{formatDate(due)}</dd>
             </dl>
+          </Card>
+
+          <Card>
+            <CardHeader title="Follow-ups" description="Your own reminders for this project. They appear in the dashboard's Reminders on the day." />
+            {followUps.length ? (
+              <ul className="divide-y divide-line" data-testid="project-follow-ups">
+                {followUps.map((f) => (
+                  <li key={f.id} className="flex items-start justify-between gap-3 px-5 py-3 text-[13px]">
+                    <div className="min-w-0">
+                      <p className="break-words">{f.note}</p>
+                      <p className="text-[12px] text-muted">{formatDate(f.due_on)}</p>
+                    </div>
+                    <div className="flex shrink-0 gap-1">
+                      <ActionButton size="sm" variant="ghost" onAction={() => act(() => supabase.rpc("set_follow_up_done", { p_follow_up_id: f.id, p_done: true }), "Follow-up done.")}>
+                        Done
+                      </ActionButton>
+                      <ActionButton
+                        size="sm"
+                        variant="ghost"
+                        aria-label={`Delete follow-up ${f.note}`}
+                        confirm="Delete this follow-up?"
+                        onAction={() => act(() => supabase.rpc("delete_follow_up", { p_follow_up_id: f.id }), "Follow-up deleted.")}
+                      >
+                        Delete
+                      </ActionButton>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+            <div className="px-5 py-3">
+              <AddFollowUp projectId={pid} />
+            </div>
           </Card>
 
           <ProjectTimeline activity={activity} />

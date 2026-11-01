@@ -545,6 +545,33 @@ try {
   await f.getByTestId("owed-outstanding").getByText("₹106.50").waitFor();
   await f.getByTestId("avg-project-value").getByText("₹413.00").waitFor();
 
+  step("reminders: dashboard reminders, add a follow-up for today, mark it done; project follow-ups");
+  await f.goto(`${BASE}/dashboard`);
+  await f.getByRole("heading", { name: /^Reminders/ }).waitFor();
+  await f.getByRole("button", { name: "Add a follow-up" }).click();
+  const fu = f.getByTestId("add-follow-up");
+  await fu.getByRole("button", { name: "Save follow-up" }).click();
+  await fu.getByText("Write what to follow up on.").waitFor();
+  await fu.getByLabel("Remind me to").fill("Send Dana the final files");
+  const todayLocal = await f.evaluate(() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; });
+  await fu.getByLabel("Remind me on").fill(todayLocal);
+  await fu.getByLabel("Project (optional)").selectOption({ label: "Menu card for Northwind" });
+  await fu.getByRole("button", { name: "Save follow-up" }).click();
+  const rem = f.getByTestId("reminders");
+  await rem.getByText("Send Dana the final files").waitFor();
+  await rem.getByText("Due today · Menu card for Northwind").waitFor();
+  await shot(f, "34-reminders", false);
+  await f.getByRole("button", { name: "Mark “Send Dana the final files” done" }).click();
+  await rem.getByText("Send Dana the final files").waitFor({ state: "detached" });
+  await f.goto(menuUrl);
+  await f.getByRole("button", { name: "Add a follow-up" }).click();
+  await f.getByTestId("add-follow-up").getByLabel("Remind me to").fill("Check in on the concepts");
+  await f.getByTestId("add-follow-up").getByRole("button", { name: "Save follow-up" }).click();
+  await f.getByTestId("project-follow-ups").getByText("Check in on the concepts").waitFor();
+  await f.goto(`${BASE}/dashboard`);
+  await f.getByRole("heading", { name: /^Reminders/ }).waitFor();
+  assert.equal(await f.getByText("Check in on the concepts").count(), 0, "future follow-ups wait for their day");
+
   step("password reset by email: request, open the link, choose a new password, sign in with it");
   const resetCtx = await newCtx();
   const a = await resetCtx.newPage();
