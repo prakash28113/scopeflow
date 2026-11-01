@@ -1,6 +1,6 @@
 # Changelog
 
-## Terms & Conditions — ready for review (not released)
+## Terms & Conditions — live 1 Nov 2026 (release run 41310855234)
 
 - Full **Terms & Conditions** at `/terms` (replaces the short beta "Terms of Use"). They cover:
   - operator Prakash Mummidisetti, users 18+;
