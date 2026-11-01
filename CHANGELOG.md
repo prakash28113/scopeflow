@@ -1,5 +1,16 @@
 # Changelog
 
+## Terms & Conditions — ready for review (not released)
+
+- Full **Terms & Conditions** at `/terms` (replaces the short beta "Terms of Use"). They cover:
+  - operator Prakash Mummidisetti, users 18+;
+  - client links, plans and fees, UPI payments made directly between you and your client;
+  - acceptable use, content ownership, suspension and closing an account;
+  - disclaimer, a liability cap (greater of 12 months' fees or ₹1,000) and indemnity;
+  - Indian law with Hyderabad, Telangana courts;
+  - a grievance officer under the IT Act, and 7 days' notice of important changes.
+- Privacy Policy names the operator. Footer and sign-up page say "Terms & Conditions".
+
 ## Public launch — sign-ups open — live 1 Nov 2026 (release run 41310079526)
 
 - `config/beta-allowlist.txt` is now `*`: anyone can create an account (Free plan by default; paid plans remain early access, nothing can be charged). Approved by the owner on 1 Nov 2026.
