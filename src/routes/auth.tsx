@@ -127,7 +127,7 @@ export function SignupPage() {
   return (
     <AuthLayout>
       <h1 className="text-2xl font-semibold tracking-[-0.02em]">Create your account</h1>
-      <p className="mb-8 mt-1.5 text-sm text-muted">Free during the beta. No card needed.</p>
+      <p className="mb-8 mt-1.5 text-sm text-muted">Start free. No card needed.</p>
       {notice ? (
         <Alert tone="info">{notice}</Alert>
       ) : (

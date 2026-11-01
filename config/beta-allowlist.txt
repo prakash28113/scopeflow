@@ -5,5 +5,6 @@
 #   - otherwise only the emails listed may sign up; removing an email removes the invite
 #     (existing accounts are not deleted);
 #   - if nothing is listed, sign-ups stay CLOSED.
-# Kept invite-only until the owner approves the public launch.
-prakashmummidisetti@gmail.com
+# Public launch approved by the owner on 1 Nov 2026: sign-ups are open to everyone.
+# To go back to invite-only, remove the * line and list emails instead.
+*
