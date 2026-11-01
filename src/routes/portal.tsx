@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Alert, Card, Logo, Tag } from "@/components/ui";
 import { AgreementTerms, RevisionMeter } from "@/components/agreement";
 import { PrintButton, QuoteTable } from "@/components/quote";
+import { UpiPay } from "@/components/upi-pay";
 import { PageSpinner } from "@/components/app-shell";
 import { usePortal } from "@/lib/queries";
 import { tokenFromHash } from "@/lib/portal-link";
@@ -220,17 +221,22 @@ export default function PortalPage() {
               </div>
               <ul className="divide-y divide-line">
                 {v.milestones.map((m, i) => (
-                  <li key={i} className="flex items-center justify-between gap-3 px-5 py-3.5 sm:px-6">
-                    <div className="min-w-0">
-                      <p className="text-[13px] font-medium">{m.title}</p>
-                      <p className="text-[12px] text-muted">
-                        {m.status === "paid" ? `Received ${formatDate(m.paid_at)}` : m.due_date ? `Due ${formatDate(m.due_date)}` : "Upcoming"}
-                      </p>
+                  <li key={i} className="px-5 py-3.5 sm:px-6">
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="text-[13px] font-medium">{m.title}</p>
+                        <p className="text-[12px] text-muted">
+                          {m.status === "paid" ? `Received ${formatDate(m.paid_at)}` : m.due_date ? `Due ${formatDate(m.due_date)}` : "Upcoming"}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="num text-[13px] font-medium">{fmt(m.amount_cents)}</span>
+                        {m.status === "paid" ? <Tag tone="positive">Paid</Tag> : null}
+                      </div>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <span className="num text-[13px] font-medium">{fmt(m.amount_cents)}</span>
-                      {m.status === "paid" ? <Tag tone="positive">Paid</Tag> : null}
-                    </div>
+                    {m.status !== "paid" && v.payment ? (
+                      <UpiPay upiId={v.payment.upi_id} payee={v.payment.payee_name || v.freelancer.name} amountPaise={Number(m.amount_cents)} note={`${p.title} ${m.title}`} />
+                    ) : null}
                   </li>
                 ))}
               </ul>

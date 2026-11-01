@@ -11,7 +11,8 @@ cleanup() {
     echo "----- stack.log (tail) -----"; tail -n 60 "$LOGS/stack.log" 2>/dev/null || true
     echo "----- wrangler.log (tail) -----"; tail -n 40 "$LOGS/wrangler.log" 2>/dev/null || true
   fi
-  [[ -n "${STACK_PID:-}" ]] && kill "$STACK_PID" 2>/dev/null || true
+  # Stop the stand-in's children (PostgREST) too, so a failed run never leaves ports busy.
+  [[ -n "${STACK_PID:-}" ]] && { pkill -P "$STACK_PID" 2>/dev/null; kill "$STACK_PID" 2>/dev/null; } || true
   [[ -n "${WRANGLER_PID:-}" ]] && kill "$WRANGLER_PID" 2>/dev/null || true
 }
 trap cleanup EXIT

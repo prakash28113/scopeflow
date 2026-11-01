@@ -92,7 +92,7 @@ export default function ProjectPage() {
 
   return (
     <>
-      <ShareLinkDialog link={newLink} clientName={p.clients.name} projectTitle={p.title} onClose={() => setNewLink(null)} />
+      <ShareLinkDialog link={newLink} clientName={p.clients.name} clientEmail={p.clients.email} projectTitle={p.title} onClose={() => setNewLink(null)} />
       <PageHeader
         eyebrow={
           <Link to="/dashboard" className="hover:text-ink">

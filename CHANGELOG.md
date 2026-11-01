@@ -1,5 +1,20 @@
 # Changelog
 
+## Launch prep — ready for review (not released)
+
+- **Get paid by UPI.** Freelancers add their UPI ID in **Settings → Getting paid**. On rupee projects the client's page shows **Pay via UPI** on every unpaid milestone: it opens GPay, PhonePe, Paytm or BHIM with the amount filled in. There's also a QR code for desktop (made in the browser, no outside service) and **Copy UPI ID**. Money goes straight to the freelancer; ScopeFlow never handles payments and charges nothing. Non-rupee projects and accounts without a UPI ID see no button.
+- **Share on WhatsApp or by email** from the "Client link ready" dialog, with the ready-made message and link (free `wa.me` / `mailto:` links; nothing is sent by ScopeFlow).
+- **Link previews.** Links to scopeflow.in, including client links, now show a title, description and a 1200×630 preview card in WhatsApp, LinkedIn, X, Slack and iMessage. Also added `robots.txt` and `sitemap.xml`. Client links and reset pages stay out of search results through their `noindex` header (not through robots.txt, which would also hide the preview).
+- **Password reset** (`/forgot-password`, `/reset-password`). Built and tested, but behind `passwordResetEmail` in `config/public-site.json`, which is **off** until free email (Brevo SMTP) is set up: see `docs/EMAIL-SETUP.md`. While it's off, "Forgot your password?" shows the support email, as before.
+  - The same answer is given whether or not an account exists.
+  - One-time codes are removed from the address bar immediately.
+  - Reset pages are never cached or indexed.
+  - The release now limits Supabase's redirect allow-list to `/reset-password` on ScopeFlow's own addresses.
+- **Database:** `supabase/migrations/20261104000000_upi_payments.sql` is re-runnable and backward compatible: a new nullable `profiles.upi_id`, the same format check in the database and the app, `set_payment_details()` for signed-in users only, and `portal_view` returning payment details only for INR projects. Rollback is `supabase/rollback/20261104000000_upi_payments_down.sql` (tested twice in a row).
+- **Tests:** 209 unit and database tests (new: UPI links and format, recovery-link parsing, redirect allow-list, private-page headers, preview tags and image size, the UPI database function). The 5 real-PostgreSQL race checks pass. The browser walkthrough now has **27 steps**, with 2 new ones:
+  - the UPI ID is saved, the WhatsApp and email links are checked, and the client sees **Pay via UPI** with the exact amount plus a QR code;
+  - the reset pages show the support fallback and the expired-link handling.
+
 ## v1.2 — Business tools — live 1 Nov 2026 (release run 41301669884)
 
 - **Itemised quotes** in the project form: price each deliverable (fixed, or hours × rate), add an optional discount and tax (e.g. GST 18%). The database computes the total and sets the budget; the line items and totals are part of the locked scope the client approves (and its fingerprint).

@@ -8,7 +8,7 @@
  *    (the client portal stays noindex/no-store); anything else gets a JSON 404;
  *  - `scheduled` pings Supabase twice a day so a free project isn't paused.
  */
-import { PORTAL_HEADERS, pageHeaders } from "../build/security-headers";
+import { PORTAL_HEADERS, PRIVATE_PATHS, pageHeaders } from "../build/security-headers";
 
 export interface Env {
   SUPABASE_URL: string;
@@ -54,7 +54,7 @@ export async function servePage(request: Request, env: Env): Promise<Response> {
   if (!shell.ok) return json({ error: "Not found" }, 404);
   const headers = new Headers({ "content-type": shell.headers.get("content-type") ?? "text/html; charset=utf-8" });
   for (const [k, v] of Object.entries(pageHeaders({ supabaseUrl, turnstile: env.TURNSTILE_ENABLED === "true" }))) headers.set(k, v);
-  if (url.pathname === "/p") for (const [k, v] of Object.entries(PORTAL_HEADERS)) headers.set(k, v);
+  if ((PRIVATE_PATHS as readonly string[]).includes(url.pathname)) for (const [k, v] of Object.entries(PORTAL_HEADERS)) headers.set(k, v);
   else headers.set("Cache-Control", "no-cache");
   return new Response(shell.body, { status: 200, headers });
 }

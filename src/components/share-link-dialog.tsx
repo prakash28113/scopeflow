@@ -10,11 +10,13 @@ import { formatDate } from "@/lib/format";
 export function ShareLinkDialog({
   link,
   clientName,
+  clientEmail,
   projectTitle,
   onClose,
 }: {
   link: { url: string; expiresAt: string } | null;
   clientName: string;
+  clientEmail?: string;
   projectTitle: string;
   onClose: () => void;
 }) {
@@ -54,6 +56,23 @@ export function ShareLinkDialog({
           <p className="mt-2 text-[12px] text-muted">Works until {formatDate(link.expiresAt)}. Anyone with the link can view and respond.</p>
           <div className="mt-5 flex flex-wrap gap-2">
             <CopyButton value={link.url} label="Copy link" size="md" variant="primary" />
+            <a
+              href={`https://wa.me/?text=${encodeURIComponent(message)}`}
+              target="_blank"
+              rel="noreferrer noopener"
+              className={buttonClass("secondary")}
+              data-testid="share-whatsapp"
+            >
+              Send on WhatsApp
+            </a>
+            {clientEmail ? (
+              <a
+                href={`mailto:${encodeURIComponent(clientEmail)}?subject=${encodeURIComponent(`Scope for ${projectTitle}`)}&body=${encodeURIComponent(message)}`}
+                className={buttonClass("secondary")}
+              >
+                Email
+              </a>
+            ) : null}
             <CopyButton value={message} label="Copy with message" size="md" />
             <a href={link.url} target="_blank" rel="noreferrer noopener" className={buttonClass("ghost")}>
               Open

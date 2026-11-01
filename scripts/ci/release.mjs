@@ -92,6 +92,11 @@ export function publicSupabaseConfig(env) {
 
 const HOSTNAME = /^(?=.{4,253}$)([a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/;
 
+/** Supabase redirect allow-list: only the reset page on ScopeFlow's own addresses. */
+export function authReturnUrls(urls) {
+  return [...new Set(urls.filter((u) => /^https:\/\/[a-z0-9.-]+$/i.test(u ?? "")).map((u) => `${u}/reset-password`))].join(",");
+}
+
 /** Custom domains from config/public-site.json, e.g. "scopeflow.in, www.scopeflow.in". First = primary. */
 export function parseDomains(text) {
   const list = String(text ?? "").split(/[\s,]+/).map((d) => d.trim().toLowerCase()).filter(Boolean);
@@ -244,7 +249,12 @@ revoke all on all tables in schema scopeflow_admin from public, anon, authentica
   return {
     supabaseUrl,
     publishable,
-    setSiteUrl: (appUrl) => optional("Supabase Site URL set to the live address", `/projects/${ref}/config/auth`, { site_url: appUrl }),
+    // Password-reset links may only return to ScopeFlow's own addresses.
+    setSiteUrl: (appUrl, allUrls = [appUrl]) =>
+      optional("Supabase Site URL and sign-in return addresses set to the live addresses", `/projects/${ref}/config/auth`, {
+        site_url: appUrl,
+        uri_allow_list: authReturnUrls(allUrls),
+      }),
   };
   }
 
@@ -303,7 +313,7 @@ revoke all on all tables in schema scopeflow_admin from public, anon, authentica
   const appUrl = domains.length ? `https://${domains[0]}` : workersUrl;
   ok(`Deployed to Cloudflare Workers Free: ${appUrl}${domains.length ? ` (also ${domains.slice(1).map((d) => `https://${d}`).concat(workersUrl).join(", ")})` : ""}`);
 
-  if (setSiteUrl) await setSiteUrl(appUrl);
+  if (setSiteUrl) await setSiteUrl(appUrl, [...domains.map((d) => `https://${d}`), workersUrl]);
 
   // ------------------------------------------------------------------ live smoke tests
   const checks = await smokeTest({ fetch, wait, appUrl, supabaseUrl, publishable });
