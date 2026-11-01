@@ -38,7 +38,8 @@ try {
   await f.getByRole("link", { name: "Privacy" }).click();
   await f.getByRole("heading", { name: "Privacy Policy" }).waitFor();
   await f.goto(`${BASE}/terms`);
-  await f.getByRole("heading", { name: "Terms of Use" }).waitFor();
+  await f.getByRole("heading", { name: "Terms & Conditions" }).waitFor();
+  await f.getByText("courts at Hyderabad, Telangana").waitFor();
   // Public pricing page (signed out): plans come from the database.
   await f.goto(`${BASE}/pricing`);
   await f.getByRole("heading", { name: /Simple pricing/ }).waitFor();

@@ -25,8 +25,8 @@ function LegalLayout({ title, children }: { title: string; children: ReactNode }
   );
 }
 
-const Contact = () => (
-  <a href={supportMailto("ScopeFlow privacy")} className="font-medium text-accent hover:underline">
+const Contact = ({ subject = "ScopeFlow privacy" }: { subject?: string }) => (
+  <a href={supportMailto(subject)} className="font-medium text-accent hover:underline">
     {SUPPORT_EMAIL}
   </a>
 );
@@ -37,7 +37,7 @@ export function PrivacyPage() {
       <section>
         <p>
           ScopeFlow helps freelancers and studios agree project scope with their clients. This policy explains what we store, why, and
-          the choices you have. ScopeFlow is currently a free beta run by an independent developer in India. Questions: <Contact />.
+          the choices you have. ScopeFlow is run by Prakash Mummidisetti, an independent developer in India, and is in beta with a free plan. Questions: <Contact />.
         </p>
       </section>
       <section>
@@ -96,56 +96,179 @@ export function PrivacyPage() {
   );
 }
 
+/** Plain-language Terms & Conditions. Operator and courts confirmed by the owner (1 Nov 2026). */
+export const OPERATOR = "Prakash Mummidisetti";
+export const COURTS = "Hyderabad, Telangana";
+
 export function TermsPage() {
+  const Mail = () => <Contact subject="ScopeFlow terms" />;
   return (
-    <LegalLayout title="Terms of Use">
+    <LegalLayout title="Terms & Conditions">
       <section>
         <p>
-          By creating an account you agree to these terms. If you don&apos;t agree, please don&apos;t use ScopeFlow. Questions: <Contact />.
+          These terms are an agreement between you and {OPERATOR}, who runs ScopeFlow (&ldquo;ScopeFlow&rdquo;, &ldquo;we&rdquo;,
+          &ldquo;us&rdquo;). By creating an account or using ScopeFlow you agree to them. If you don&apos;t agree, please don&apos;t use
+          ScopeFlow. Questions: <Mail />.
         </p>
       </section>
+
       <section>
-        <h2>The service</h2>
+        <h2>1. Who can use ScopeFlow</h2>
         <ul>
-          <li>ScopeFlow is a free beta. Features may change, and the service may be paused or discontinued with reasonable notice where possible.</li>
-          <li>It is provided &ldquo;as is&rdquo;, without guarantees of availability or fitness for a particular purpose.</li>
-          <li>ScopeFlow records agreements and payments you enter. It isn&apos;t a payment processor, a law firm or a substitute for a written contract or legal advice. UPI payments go directly from your client to your UPI ID; ScopeFlow never receives, holds or confirms them, so check your bank app and mark payments as received yourself.</li>
+          <li>You must be at least 18 and able to enter into a binding contract under Indian law.</li>
+          <li>If you use ScopeFlow for a business, you confirm you&apos;re allowed to accept these terms for it.</li>
         </ul>
       </section>
+
       <section>
-        <h2>Your account</h2>
+        <h2>2. What ScopeFlow does, and doesn&apos;t do</h2>
         <ul>
-          <li>Use your own email address and keep your password safe. If you forget it, use “Forgot your password?” on the sign-in page; the reset link is sent to your account email.</li>
-          <li>You&apos;re responsible for what you and your clients enter, and for having the right to share client details with us.</li>
-          <li>Keep client links private. Anyone with a link can view and act on that project until you replace or revoke it.</li>
+          <li>ScopeFlow helps you write a project scope, share it with your client by link, record their approval, count revisions, price extra work as change orders and keep track of payments.</li>
+          <li>The agreement about the work is between <strong>you and your client</strong>. ScopeFlow is not a party to it, doesn&apos;t check the work and doesn&apos;t settle disputes between you.</li>
+          <li>ScopeFlow keeps a record of what was approved and when. It isn&apos;t a law firm, and it isn&apos;t a substitute for legal advice or a formal contract where you need one.</li>
+          <li>Templates and the scope checker are suggestions. You decide what goes into your agreements.</li>
         </ul>
       </section>
+
       <section>
-        <h2>Acceptable use</h2>
+        <h2>3. Your account</h2>
+        <ul>
+          <li>Give accurate details and use an email address you control. One account is for one person.</li>
+          <li>Keep your password safe. You&apos;re responsible for activity on your account. Tell us at once if you think someone else has accessed it.</li>
+          <li>If you forget your password, use &ldquo;Forgot your password?&rdquo; on the sign-in page; the reset link is sent to your account email.</li>
+        </ul>
+      </section>
+
+      <section>
+        <h2>4. Your clients and client links</h2>
+        <ul>
+          <li>Your clients don&apos;t need an account. They open the link you share, and can review, approve, request changes and see payments.</li>
+          <li>Anyone who has a client link can view and act on that project until the link expires, or you replace or revoke it. Share links only with your client and keep them private.</li>
+          <li>Actions taken through a client link (such as approving a scope or a change order) are recorded as your client&apos;s actions. Approved versions can&apos;t be edited afterwards.</li>
+          <li>You&apos;re responsible for having your client&apos;s permission to store their name, email and other details in ScopeFlow and to share project links with them.</li>
+        </ul>
+      </section>
+
+      <section>
+        <h2>5. Plans and fees</h2>
+        <ul>
+          <li>The <strong>Free plan</strong> costs nothing and has the limits shown on the <Link to="/pricing" className="font-medium text-accent hover:underline">Pricing</Link> page (currently 2 active projects and 5 clients).</li>
+          <li>Paid plans aren&apos;t on sale yet. Before you can buy one, its price, billing period, taxes and refund terms will be shown clearly, and you&apos;ll be charged only after you choose a paid plan yourself.</li>
+          <li>If a paid plan ends or you move to a lower plan, your existing projects, client links and approval records keep working. Only new projects above the plan&apos;s limits are blocked.</li>
+          <li>We may change plan limits or prices in the future. We&apos;ll give notice before a change affects a plan you pay for.</li>
+        </ul>
+      </section>
+
+      <section>
+        <h2>6. Payments between you and your client</h2>
+        <ul>
+          <li>ScopeFlow is not a payment service. It never receives, holds, transfers or refunds money between you and your client.</li>
+          <li>If you add a UPI ID, your client&apos;s UPI app pays you directly. ScopeFlow can&apos;t see or confirm those payments. Check your bank or UPI app, then mark a payment as received yourself.</li>
+          <li>Invoices, taxes (including GST) and any payment disputes are between you and your client.</li>
+        </ul>
+      </section>
+
+      <section>
+        <h2>7. Acceptable use</h2>
+        <p>Don&apos;t use ScopeFlow to:</p>
+        <ul>
+          <li>do anything unlawful, fraudulent or misleading, or collect payments for goods or services you don&apos;t provide;</li>
+          <li>upload content that is defamatory, obscene, hateful, or that infringes someone else&apos;s rights;</li>
+          <li>send spam, impersonate anyone, or share client links with people who aren&apos;t part of the project;</li>
+          <li>try to access accounts or data that aren&apos;t yours, test or bypass our security, or overload or disrupt the service;</li>
+          <li>copy, resell or reverse-engineer the service, or access it with bots or scrapers.</li>
+        </ul>
+      </section>
+
+      <section>
+        <h2>8. Your content and our rights</h2>
+        <ul>
+          <li>Your projects, agreements and client details remain yours. You give us permission to store, process and display them only to run ScopeFlow for you and the clients you share them with.</li>
+          <li>The ScopeFlow name, logo, design and software belong to {OPERATOR}. These terms don&apos;t give you any rights to them beyond using the service.</li>
+          <li>If you send us feedback or ideas, we may use them to improve ScopeFlow without owing you anything.</li>
+        </ul>
+      </section>
+
+      <section>
+        <h2>9. Privacy</h2>
         <p>
-          Don&apos;t use ScopeFlow for anything unlawful, to send spam, to impersonate others, or to try to access accounts or data that
-          aren&apos;t yours. We may suspend accounts that do.
+          How we handle personal data is explained in our{" "}
+          <Link to="/privacy" className="font-medium text-accent hover:underline">Privacy Policy</Link>, which is part of these terms.
         </p>
       </section>
+
       <section>
-        <h2>Your content</h2>
+        <h2>10. Availability and changes to the service</h2>
+        <ul>
+          <li>ScopeFlow is in beta. We work to keep it available and your data safe, but we can&apos;t promise it will always be available, error-free or never lose data. Keep your own copies of important agreements (the printable quote and PDF help with this).</li>
+          <li>We may add, change or remove features. If we ever shut ScopeFlow down, we&apos;ll give at least 30 days&apos; notice by email where possible, so you can save your records.</li>
+        </ul>
+      </section>
+
+      <section>
+        <h2>11. Suspension and closing your account</h2>
+        <ul>
+          <li>You can stop using ScopeFlow at any time. To delete your account and projects, email <Mail /> from your account email.</li>
+          <li>We may suspend or close an account that breaks these terms or the law, or that puts other users or the service at risk. Where reasonable, we&apos;ll tell you why first.</li>
+          <li>When an account is closed, its client links stop working.</li>
+        </ul>
+      </section>
+
+      <section>
+        <h2>12. Disclaimer</h2>
         <p>
-          Your projects remain yours. You allow us to store and display them only to run the service for you and the clients you share
-          them with.
+          ScopeFlow is provided &ldquo;as is&rdquo; and &ldquo;as available&rdquo;. To the extent the law allows, we make no promises
+          about it beyond those in these terms, including that it will suit a particular purpose.
         </p>
       </section>
+
       <section>
-        <h2>Liability</h2>
+        <h2>13. Limitation of liability</h2>
         <p>
-          To the extent the law allows, ScopeFlow isn&apos;t liable for indirect losses, lost profits or lost data arising from use of the
-          beta. Keep your own records of important agreements.
+          To the extent the law allows, we aren&apos;t liable for indirect or consequential losses, lost profits, lost business or lost
+          data. We also aren&apos;t liable for disputes between you and your clients. Our total liability for any claim about ScopeFlow
+          is limited to the greater of the amount you paid us in the 12 months before the claim and ₹1,000. Nothing in these terms
+          limits liability that can&apos;t be limited by law.
         </p>
       </section>
+
       <section>
-        <h2>Changes</h2>
+        <h2>14. Indemnity</h2>
         <p>
-          We may update these terms; the date at the top shows the latest version. See also our{" "}
-          <Link to="/privacy" className="font-medium text-accent hover:underline">Privacy Policy</Link>.
+          If someone makes a claim against us because of content you put into ScopeFlow, your dealings with your clients, or your
+          breach of these terms or the law, you agree to cover our reasonable losses and costs from that claim.
+        </p>
+      </section>
+
+      <section>
+        <h2>15. Governing law and disputes</h2>
+        <p>
+          These terms are governed by the laws of India. Please contact us first; most issues can be sorted out quickly. Any dispute
+          that can&apos;t be resolved informally will be handled exclusively by the courts at {COURTS}.
+        </p>
+      </section>
+
+      <section>
+        <h2>16. Grievance officer</h2>
+        <p>
+          In line with the Information Technology Act, 2000 and the rules under it, complaints about content on ScopeFlow or about
+          these terms can be sent to our grievance officer, <strong>{OPERATOR}</strong>, at <Mail />. We&apos;ll acknowledge your
+          complaint within 24 hours and aim to resolve it within 15 days.
+        </p>
+      </section>
+
+      <section>
+        <h2>17. Changes to these terms</h2>
+        <p>
+          We may update these terms. The date at the top shows the latest version. For important changes, we&apos;ll tell you by email
+          or in the app at least 7 days before they apply. If you keep using ScopeFlow after that, you accept the new terms.
+        </p>
+      </section>
+
+      <section>
+        <h2>18. Contact</h2>
+        <p>
+          {OPERATOR}, ScopeFlow · <Mail />
         </p>
       </section>
     </LegalLayout>

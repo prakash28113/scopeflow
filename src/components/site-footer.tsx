@@ -8,7 +8,7 @@ export function SiteFooter() {
       <nav className="flex flex-wrap gap-x-5 gap-y-2">
         <Link to="/pricing" className="hover:text-ink">Pricing</Link>
         <Link to="/privacy" className="hover:text-ink">Privacy</Link>
-        <Link to="/terms" className="hover:text-ink">Terms</Link>
+        <Link to="/terms" className="hover:text-ink">Terms &amp; Conditions</Link>
         <a href={supportMailto("ScopeFlow support")} className="hover:text-ink">{SUPPORT_EMAIL}</a>
       </nav>
     </footer>

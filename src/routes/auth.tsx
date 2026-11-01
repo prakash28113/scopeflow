@@ -148,7 +148,7 @@ export function SignupPage() {
           </SubmitButton>
           <p className="text-[12px] leading-relaxed text-muted">
             By creating an account you agree to the{" "}
-            <Link to="/terms" className="underline hover:text-ink">Terms</Link> and{" "}
+            <Link to="/terms" className="underline hover:text-ink">Terms &amp; Conditions</Link> and{" "}
             <Link to="/privacy" className="underline hover:text-ink">Privacy Policy</Link>.
           </p>
         </form>
