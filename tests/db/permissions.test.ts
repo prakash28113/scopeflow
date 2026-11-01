@@ -20,7 +20,7 @@ const FREELANCER_FUNCTIONS = [
   "complete_onboarding", "save_project", "delete_draft_project", "rotate_share_link", "revoke_share_link",
   "send_scope", "recall_scope", "resolve_revision", "create_change_order", "withdraw_change_order",
   "complete_change_order_work", "set_milestone_paid", "complete_project", "cancel_project",
-  "unread_notification_count", "mark_notifications_seen", "my_plan", "join_early_access", "update_client", "set_payment_details",
+  "unread_notification_count", "mark_notifications_seen", "my_plan", "join_early_access", "update_client", "set_payment_details", "set_invoice_details", "update_client_billing", "create_invoice", "void_invoice", "set_deliverable_progress", "add_expense", "delete_expense", "record_payment", "delete_payment",
 ];
 // Plan changes: never callable from the app. admin_set_plan = SQL editor; process_billing_event = service role (future webhook).
 const BACK_OFFICE = ["admin_set_plan", "process_billing_event"];
@@ -30,7 +30,7 @@ const SECURITY_DEFINER = [...FREELANCER_FUNCTIONS, ...PORTAL_FUNCTIONS, ...BACK_
 const OWNER_READABLE = [
   "profiles", "clients", "projects", "deliverables", "scope_snapshots", "scope_decisions", "revision_requests",
   "change_orders", "change_order_decisions", "milestones", "activity_log",
-  "subscription_changes", "invoices", "early_access_requests",
+  "subscription_changes", "invoices", "early_access_requests", "client_invoices", "expenses", "payments",
 ].sort();
 // share_links, subscriptions: column grants only (never the token hash / provider ids).
 const NOT_READABLE = ["beta_allowlist", "portal_rate_limits", "share_links", "subscriptions", "billing_events"].sort();

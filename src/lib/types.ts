@@ -1,6 +1,6 @@
 export type ProjectStatus = "draft" | "awaiting_approval" | "changes_requested" | "active" | "completed" | "cancelled";
 
-export type Client = { id: string; name: string; email: string; company: string | null; phone?: string | null; notes?: string | null };
+export type Client = { id: string; name: string; email: string; company: string | null; phone?: string | null; notes?: string | null; billing_address?: string | null; gstin?: string | null };
 
 export type PricingType = "fixed" | "hourly";
 export type QuotePricing = {
@@ -45,6 +45,8 @@ export type Deliverable = {
   title: string;
   description: string | null;
   revisions_included: number;
+  progress?: import("./progress").Progress;
+  progress_updated_at?: string | null;
   pricing_type?: PricingType | null;
   hours?: string | number | null;
   rate_cents?: number | null;
@@ -62,6 +64,8 @@ export type Milestone = {
   paid_at: string | null;
   payment_note: string | null;
   change_order_id: string | null;
+  /** Money received so far (part payments add up). */
+  paid_cents?: number;
 };
 
 export type ScopeData = {
@@ -196,6 +200,8 @@ export type PortalView = {
     revisions_used: number;
     /** Rounds requested beyond the included ones (v1.1; absent before). */
     revisions_extra?: number;
+    progress?: import("./progress").Progress;
+    progress_updated_at?: string | null;
   }[];
   revision_requests: {
     id: string;
@@ -224,5 +230,7 @@ export type PortalView = {
     work_completed_at: string | null;
     decision: null | { client_name: string; comment: string | null; created_at: string };
   }[];
-  milestones: { title: string; amount_cents: number; due_date: string | null; status: "pending" | "paid"; paid_at: string | null }[];
+  milestones: { title: string; amount_cents: number; due_date: string | null; status: "pending" | "paid"; paid_at: string | null; paid_cents?: number; invoice_number?: string | null }[];
+  /** Invoices the freelancer issued for this project (void ones are hidden). */
+  invoices?: (import("./invoice").InvoiceDoc & { paid: boolean; paid_at: string | null; paid_cents?: number })[];
 };

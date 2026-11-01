@@ -1,5 +1,71 @@
 # Changelog
 
+## Payments done right + audit fixes — ready for release (owner approved: release together with invoices, progress and analytics)
+
+- **Record payment** replaces "Mark paid":
+  - an amount (part or full, prefilled with what's still due), the date it was **actually received**, the method (UPI, bank transfer, cash, card, cheque, PayPal, other) and a reference;
+  - several part payments add up, and the payment becomes *Paid* when covered;
+  - each payment is listed with a Remove button;
+  - overpaying is refused, including when two payments are recorded at the same moment (race-tested).
+- **Everywhere uses part payments:**
+  - project totals, the dashboard and the client page;
+  - invoices: a new *Part paid* status, with "Paid so far" and "Balance due" lines;
+  - analytics: money counts in the month it was received;
+  - the client's Pay via UPI asks only for the balance.
+- **Analytics:** adds average project value.
+- **Pricing page:** now matches what's built. Quotes, invoices, payments, progress, expenses and analytics are marked available (expenses and analytics free during the beta). Only exports, team members and white-label still say "coming".
+- **Audit fixes:**
+  - the Invoices page and the Plan page's billing history no longer share a data cache;
+  - the client page now loads billing address and GSTIN, so saving a client no longer wipes them.
+- **Database:** `supabase/migrations/20261107000000_payments.sql` is re-runnable. It adds a `payments` table (RLS, owner read-only) and `milestones.paid_cents`; existing paid milestones are carried over as one payment each; `set_milestone_paid` keeps working. Rollback is `supabase/rollback/20261107000000_payments_down.sql`, tested twice; paid status survives the rollback.
+- **Tests:**
+  - 250 unit and database tests;
+  - 8 real-PostgreSQL race checks;
+  - a **32-step** browser walkthrough (new: part payments).
+
+## Progress, project timeline and monthly analytics — ready for review (not released)
+
+- **Deliverable progress:**
+  - after approval, each deliverable is *Not started / In progress / Delivered*, with a progress bar on the project;
+  - the client page shows each deliverable's status and "1 of 2 delivered";
+  - every change is logged.
+- **Project timeline:** the old activity list is now a timeline grouped by day. Filters: All / Client / Scope & changes / Progress / Payments. The dates card is renamed "Key dates".
+- **Analytics** (new page in the nav):
+  - month and currency pickers;
+  - Received / Invoiced / Expenses / Profit for the month, with the change vs last month;
+  - a 12-month chart of received vs expenses, with hover tooltips and a table view (palette checked for colour-blind safety);
+  - money owed to you, and overdue items;
+  - top clients;
+  - projects in progress (with progress bars), approved this month and completed this month.
+- **Expense log** (on the Analytics page): date, category, amount, note and an optional project; only you can see it; delete anytime. Profit = received − expenses.
+- **Database:** `supabase/migrations/20261106000000_progress_and_expenses.sql` is re-runnable. It adds `deliverables.progress`, an `expenses` table (RLS, owner read-only, written through functions) and `portal_view` with progress. Rollback is `supabase/rollback/20261106000000_progress_and_expenses_down.sql`, tested twice in a row.
+- **Tests:**
+  - 5 database tests;
+  - 8 unit tests;
+  - the browser walkthrough is now **31 steps**, adding progress & timeline and analytics & expenses.
+
+## Invoices — ready for review (not released)
+
+- **Create invoice** next to any payment of an approved project, including change-order payments. You choose the tax (defaults to the project's, e.g. GST 18%), optional CGST + SGST split, the due date (default 7 days) and a note.
+- **The invoice** is printable / Save as PDF. It shows:
+  - "Tax invoice" when you have a GSTIN and charge tax;
+  - From / Bill to with addresses and GSTINs;
+  - taxable value and tax lines (the total is the agreed payment amount, tax-inclusive);
+  - the amount in words, Indian style;
+  - a UPI QR code until it's paid;
+  - a Paid / Overdue / Void stamp.
+- **Numbering:** `PREFIX-YYYY-001`, per account. It's taken under a row lock, so numbers are never duplicated. A voided number is never reused.
+- **Locked once issued:** an invoice can't be edited or deleted, even directly in the database. You void it and create a new one. Profile or client changes never alter an issued invoice.
+- **Invoices page:** all invoices with Invoiced this month / Unpaid / Overdue / Paid totals and filters. Also in the nav.
+- **Settings → Invoice details:** business address, GSTIN, invoice prefix. **Client page:** billing address and client GSTIN.
+- **Client page (portal):** an Invoices card with View and Print / Save as PDF. Void invoices are hidden, and the UPI payment note uses the invoice number.
+- **Database:** `supabase/migrations/20261105000000_client_invoices.sql` is re-runnable: a new `client_invoices` table with RLS (owner read-only), new functions for authenticated users only, and `portal_view` with invoices. Rollback is `supabase/rollback/20261105000000_client_invoices_down.sql`, tested twice in a row.
+- **Tests:**
+  - 11 database tests;
+  - 7 unit tests;
+  - 2 new real-PostgreSQL race checks: 8 simultaneous invoices get 8 consecutive numbers, and 6 at once for one payment create exactly 1;
+  - the browser walkthrough is now **29 steps**.
+
 ## Sign in with Google — live 1 Nov 2026 (button appears once the Google Client ID is added)
 
 - **"Continue with Google"** on the sign-in and sign-up pages:

@@ -1,4 +1,5 @@
 import { Link } from "react-router";
+import { received } from "@/lib/pricing";
 import { Alert, Card, CardHeader, EmptyState, LinkButton, PageHeader, StatusBadge, Tag } from "@/components/ui";
 import { PageSpinner } from "@/components/app-shell";
 import { useProfile } from "@/lib/auth";
@@ -28,8 +29,7 @@ export default function Dashboard() {
   const awaitingScope = projects.filter((p) => p.status === "awaiting_approval");
   const needsYou = projects.filter((p) => p.status === "changes_requested");
   const live = projects.filter((p) => p.status === "active" || p.status === "completed");
-  const paidOf = (p: (typeof projects)[number]) =>
-    p.milestones.filter((m) => m.status === "paid").reduce((s, m) => s + Number(m.amount_cents), 0);
+  const paidOf = (p: (typeof projects)[number]) => p.milestones.reduce((s, m) => s + received(m), 0);
   const outstanding = sumByCurrency(
     live.map((p) => ({ currency: p.currency, amount: Number(p.budget_cents) + Number(p.approved_extras_cents) - paidOf(p) })),
   );

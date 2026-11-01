@@ -1,4 +1,5 @@
 import { useState, type FormEvent } from "react";
+import { received } from "@/lib/pricing";
 import { Link, useParams } from "react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Alert, Card, CardHeader, EmptyState, Field, Input, PageHeader, StatusBadge, Tag, Textarea } from "@/components/ui";
@@ -31,6 +32,8 @@ type ClientRow = {
   company: string | null;
   phone: string | null;
   notes: string | null;
+  billing_address?: string | null;
+  gstin?: string | null;
   created_at: string;
   projects: ClientProject[];
 };
@@ -44,7 +47,7 @@ function money(projects: ClientProject[]) {
     if (p.status !== "active" && p.status !== "completed") continue;
     const t = by.get(p.currency) ?? { contracted: 0, paid: 0 };
     t.contracted += Number(p.budget_cents) + Number(p.approved_extras_cents);
-    t.paid += p.milestones.filter((m) => m.status === "paid").reduce((s, m) => s + Number(m.amount_cents), 0);
+    t.paid += p.milestones.reduce((s, m) => s + received(m), 0);
     by.set(p.currency, t);
   }
   return [...by.entries()].map(([currency, t]) => ({ currency, ...t, outstanding: t.contracted - t.paid }));
@@ -56,7 +59,7 @@ export function ClientsPage() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("clients")
-        .select("id, name, email, company, phone, notes, created_at, projects(id, title, status, currency, budget_cents, approved_extras_cents, created_at, milestones(title, amount_cents, status, paid_at, payment_note))")
+        .select("id, name, email, company, phone, notes, billing_address, gstin, created_at, projects(id, title, status, currency, budget_cents, approved_extras_cents, created_at, milestones(title, amount_cents, status, paid_at, payment_note, paid_cents))")
         .order("name");
       if (error) throw error;
       return data as unknown as ClientRow[];
@@ -114,7 +117,7 @@ export function ClientPage() {
       const { data, error } = await supabase
         .from("clients")
         .select(
-          "id, name, email, company, phone, notes, created_at, projects(id, title, status, currency, budget_cents, approved_extras_cents, created_at, milestones(title, amount_cents, status, paid_at, payment_note), scope_decisions(decision, client_name, created_at), change_orders(number, title, status, amount_cents, decided_at))",
+          "id, name, email, company, phone, notes, billing_address, gstin, created_at, projects(id, title, status, currency, budget_cents, approved_extras_cents, created_at, milestones(title, amount_cents, status, paid_at, payment_note, paid_cents), scope_decisions(decision, client_name, created_at), change_orders(number, title, status, amount_cents, decided_at))",
         )
         .eq("id", id!)
         .maybeSingle();
@@ -143,7 +146,11 @@ export function ClientPage() {
   async function save(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const ok = await action.run(clientSchema, Object.fromEntries(new FormData(e.currentTarget)), (v) =>
-      supabase.rpc("update_client", { p_client_id: c!.id, p: v }),
+      supabase
+        .rpc("update_client", { p_client_id: c!.id, p: v })
+        .then((r) =>
+          r.error ? r : supabase.rpc("update_client_billing", { p_client_id: c!.id, p: { billing_address: v.billing_address, gstin: v.gstin } }),
+        ),
     );
     if (ok === undefined) return;
     await Promise.all([qc.invalidateQueries({ queryKey: ["client", id] }), qc.invalidateQueries({ queryKey: ["clients"] })]);
@@ -264,6 +271,12 @@ export function ClientPage() {
                 <Field label="Phone" htmlFor="c-phone" error={action.fieldErrors.phone}>
                   <Input id="c-phone" name="phone" type="tel" defaultValue={c.phone ?? ""} />
                 </Field>
+                <Field label="Billing address (for invoices)" htmlFor="c-billing" error={action.fieldErrors.billing_address}>
+                  <Textarea id="c-billing" name="billing_address" rows={3} defaultValue={c.billing_address ?? ""} maxLength={500} />
+                </Field>
+                <Field label="Client GSTIN (optional)" htmlFor="c-gstin" error={action.fieldErrors.gstin} hint="For business clients registered for GST.">
+                  <Input id="c-gstin" name="gstin" defaultValue={c.gstin ?? ""} autoCapitalize="characters" spellCheck={false} />
+                </Field>
                 <Field label="Private notes" htmlFor="c-notes" error={action.fieldErrors.notes}>
                   <Textarea id="c-notes" name="notes" rows={5} defaultValue={c.notes ?? ""} maxLength={4000} />
                 </Field>
@@ -278,6 +291,8 @@ export function ClientPage() {
               <dl className="space-y-2 px-5 py-4 text-[13px]">
                 <div className="flex justify-between gap-3"><dt className="text-muted">Email</dt><dd className="break-all">{c.email}</dd></div>
                 <div className="flex justify-between gap-3"><dt className="text-muted">Phone</dt><dd>{c.phone || "—"}</dd></div>
+                {c.billing_address ? <div className="flex justify-between gap-3"><dt className="text-muted">Billing address</dt><dd className="whitespace-pre-line text-right">{c.billing_address}</dd></div> : null}
+                {c.gstin ? <div className="flex justify-between gap-3"><dt className="text-muted">GSTIN</dt><dd className="num">{c.gstin}</dd></div> : null}
                 <div className="flex justify-between gap-3"><dt className="text-muted">Client since</dt><dd>{formatDate(c.created_at)}</dd></div>
                 <div className="pt-2">
                   <dt className="text-muted">Private notes</dt>

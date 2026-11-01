@@ -25,7 +25,7 @@ function world(opts: { subdomain?: string | null; leak?: boolean; badCsp?: boole
         const q = String(body.query);
         if (q.startsWith("select name from scopeflow_admin")) return json(201, [{ name: "20261031000000_scopeflow_schema.sql" }]);
         if (q.startsWith("select\n (select count(*)::int from pg_tables"))
-          return json(201, [{ tables: 20, without_rls: 0, public_functions: 5, signup_trigger: 1 }]);
+          return json(201, [{ tables: 23, without_rls: 0, public_functions: 5, signup_trigger: 1 }]);
         return json(201, []);
       }
       if (u.pathname.endsWith("/config/auth")) return opts.authForbidden ? json(403, { message: "Missing required permission(s): auth_config_write" }) : json(200, {});

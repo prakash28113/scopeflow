@@ -24,8 +24,8 @@ export function IntervalToggle({ value, onChange }: { value: Interval; onChange:
 
 /** What each plan offers, honestly: features that aren't built yet say "Coming". */
 const HIGHLIGHTS: Record<PlanId, string[]> = {
-  free: ["Scope agreements, approvals, revision tracking", "Change orders and payment tracking", "Client links — no client account needed"],
-  solo: ["Everything in Free", "Quotations and full template library — coming", "Analytics, profitability, exports — coming"],
+  free: ["Scope agreements, approvals, revision tracking", "Change orders, quotes and GST invoices", "Payments, expenses and analytics (free during the beta)"],
+  solo: ["Everything in Free", "Unlimited projects and clients", "Full template library · exports — coming"],
   studio: ["Everything in Solo", "Up to 3 team members — coming", "White-label client portal — coming"],
 };
 
@@ -115,13 +115,14 @@ const ROWS: { label: string; cells: [Cell, Cell, Cell]; soon?: boolean }[] = [
   { label: "Client approval links (no client account)", cells: ["✓", "✓", "✓"] },
   { label: "Revision tracker and extra-round pricing", cells: ["✓", "✓", "✓"] },
   { label: "Change orders", cells: ["✓", "✓", "✓"] },
-  { label: "Payment milestones (recorded manually)", cells: ["✓", "✓", "✓"] },
+  { label: "Itemised quotes with discount and GST, save as PDF", cells: ["✓", "✓", "✓"] },
+  { label: "Invoices with GST, UPI QR and PDF", cells: ["✓", "✓", "✓"] },
+  { label: "Payments: part payments, dates and methods (recorded manually)", cells: ["✓", "✓", "✓"] },
+  { label: "Deliverable progress and project timeline", cells: ["✓", "✓", "✓"] },
   { label: "Upcoming deadlines and payments", cells: ["✓", "✓", "✓"] },
-  { label: "Full project history", cells: ["✓", "✓", "✓"] },
-  { label: "Agreement templates", cells: ["3 starter", "Full library", "Full + shared"], soon: true },
-  { label: "Quotation generator", cells: ["1 active quote", "Unlimited", "Unlimited + shared"], soon: true },
+  { label: "Expense log and monthly analytics (profit, trends, top clients)", cells: ["✓ in beta", "✓", "✓"] },
+  { label: "Agreement templates", cells: ["Starter set", "Full library", "Full library"] },
   { label: "Export project records", cells: ["—", "✓", "✓"], soon: true },
-  { label: "Revenue analytics and profitability", cells: ["—", "✓", "✓ + team-level"], soon: true },
   { label: "Team members and roles", cells: ["—", "—", "Up to 3"], soon: true },
   { label: "White-label client portal", cells: ["—", "—", "✓"], soon: true },
 ];

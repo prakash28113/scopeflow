@@ -8,7 +8,7 @@ import { usePlans, type Interval } from "@/lib/plans";
 import { useAuth } from "@/lib/auth";
 
 const FAQ: [string, string][] = [
-  ["Can I use ScopeFlow for free?", "Yes. The Free plan includes 2 active projects and 5 clients with every core feature: scope agreements, client approvals, revision tracking, change orders and payment tracking. Completed and cancelled projects don't count toward the limit."],
+  ["Can I use ScopeFlow for free?", "Yes. The Free plan includes 2 active projects and 5 clients with every core feature: scope agreements, client approvals, revision tracking, change orders, quotes, invoices and payment tracking. Expenses and analytics are free for everyone during the beta. Completed and cancelled projects don't count toward the limit."],
   ["Can I change plans later?", "Yes. When paid plans launch you can upgrade, downgrade or cancel at any time from Plan & usage."],
   ["What happens to my projects if I downgrade?", "Nothing is deleted or locked. Every project, approval and client link keeps working. You just can't start new projects beyond the lower plan's limit."],
   ["Can clients approve projects without an account?", "Yes, on every plan. Clients open a private link, review the scope and approve — no sign-up."],

@@ -2,7 +2,7 @@ import { useState, type FormEvent } from "react";
 import { useNavigate } from "react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import { z } from "zod";
-import { Alert, Card, CardHeader, Field, Input, Logo, PageHeader, Select } from "@/components/ui";
+import { Alert, Card, CardHeader, Field, Input, Logo, PageHeader, Select, Textarea } from "@/components/ui";
 import { SubmitButton } from "@/components/form-bits";
 import { PageSpinner } from "@/components/app-shell";
 import { useToast } from "@/components/toast";
@@ -11,6 +11,7 @@ import { supabase } from "@/lib/supabase";
 import { useAction } from "@/lib/use-action";
 import { CURRENCIES } from "@/lib/money";
 import { UPI_ID } from "@/lib/upi";
+import { GSTIN } from "@/lib/invoice";
 import { PASSWORD_RESET_EMAIL } from "@/lib/site";
 import { issuesToFieldErrors, onboardingSchema, type FieldErrors } from "@/lib/validation";
 
@@ -150,6 +151,56 @@ function UpiForm({ current }: { current: string }) {
   );
 }
 
+const invoiceSchema = z.object({
+  businessAddress: z.string().trim().max(500, "Keep the address under 500 characters"),
+  gstin: z
+    .string()
+    .trim()
+    .transform((v) => v.replace(/\s/g, "").toUpperCase())
+    .refine((v) => v === "" || GSTIN.test(v), "Enter a valid 15-character GSTIN, like 36ABCDE1234F1Z5"),
+  invoicePrefix: z
+    .string()
+    .trim()
+    .transform((v) => v.toUpperCase())
+    .refine((v) => v === "" || /^[A-Z0-9]{1,8}$/.test(v), "Use up to 8 letters or numbers"),
+});
+
+function InvoiceDetailsForm({ address, gstin, prefix }: { address: string; gstin: string; prefix: string }) {
+  const qc = useQueryClient();
+  const toast = useToast();
+  const action = useAction();
+  async function onSubmit(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const ok = await action.run(invoiceSchema, Object.fromEntries(new FormData(e.currentTarget)), (d) =>
+      supabase
+        .rpc("set_invoice_details", { p: { business_address: d.businessAddress, gstin: d.gstin, invoice_prefix: d.invoicePrefix } })
+        .then((r) => ({ data: true, error: r.error })),
+    );
+    if (!ok) return;
+    await qc.invalidateQueries({ queryKey: ["profile"] });
+    toast("positive", "Invoice details saved.");
+  }
+  return (
+    <form onSubmit={onSubmit} className="space-y-4" noValidate>
+      {action.error ? <Alert>{action.error}</Alert> : null}
+      <Field label="Business address" htmlFor="businessAddress" error={action.fieldErrors.businessAddress} hint="Street, city, PIN code. Leave empty if you don't want it on invoices.">
+        <Textarea id="businessAddress" name="businessAddress" rows={3} defaultValue={address} maxLength={500} />
+      </Field>
+      <div className="grid gap-4 sm:grid-cols-2">
+        <Field label="GSTIN (optional)" htmlFor="gstin" error={action.fieldErrors.gstin} hint="Add it if you're GST-registered. Invoices with GST then say “Tax invoice”.">
+          <Input id="gstin" name="gstin" defaultValue={gstin} autoCapitalize="characters" spellCheck={false} placeholder="36ABCDE1234F1Z5" />
+        </Field>
+        <Field label="Invoice number prefix" htmlFor="invoicePrefix" error={action.fieldErrors.invoicePrefix} hint={`Invoices are numbered ${prefix || "INV"}-${new Date().getFullYear()}-001, -002…`}>
+          <Input id="invoicePrefix" name="invoicePrefix" defaultValue={prefix} autoCapitalize="characters" maxLength={8} />
+        </Field>
+      </div>
+      <SubmitButton variant="secondary" pending={action.pending}>
+        Save invoice details
+      </SubmitButton>
+    </form>
+  );
+}
+
 const upiSchema = z.object({
   upiId: z.string().trim().refine((v) => v === "" || UPI_ID.test(v), "Enter a UPI ID like yourname@okicici"),
 });
@@ -172,6 +223,16 @@ export function SettingsPage() {
           <CardHeader title="Getting paid" description="For projects in Indian rupees, clients see a “Pay via UPI” button and QR code on each unpaid milestone." />
           <div className="p-5">
             <UpiForm current={profile.data.upi_id ?? ""} />
+          </div>
+        </Card>
+        <Card>
+          <CardHeader title="Invoice details" description="Shown on every invoice you create. Changing them later never alters invoices you've already issued." />
+          <div className="p-5">
+            <InvoiceDetailsForm
+              address={profile.data.business_address ?? ""}
+              gstin={profile.data.gstin ?? ""}
+              prefix={profile.data.invoice_prefix ?? "INV"}
+            />
           </div>
         </Card>
         <Card>
