@@ -407,6 +407,64 @@ try {
   // One UPI button per unpaid milestone (rupee projects only; USD is covered in tests/db/upi.test.ts).
   assert.equal(await c.getByTestId("upi-pay").count(), 1);
 
+  step("invoices: details in Settings, create a GST invoice from a payment, client sees it, list and void");
+  await f.goto(`${BASE}/settings`);
+  await f.getByLabel("GSTIN (optional)").fill("36ABCDE1234");
+  await f.getByRole("button", { name: "Save invoice details" }).click();
+  await f.getByText("Enter a valid 15-character GSTIN").waitFor();
+  await f.getByLabel("Business address").fill("12 MG Road\nHyderabad 500001");
+  await f.getByLabel("GSTIN (optional)").fill("36abcde1234f1z5");
+  await f.getByLabel("Invoice number prefix").fill("rs");
+  await f.getByRole("button", { name: "Save invoice details" }).click();
+  await f.getByText("Invoice details saved.").waitFor();
+  await f.goto(menuUrl);
+  await f.getByRole("button", { name: "Create invoice" }).first().click();
+  const form = f.getByTestId("create-invoice");
+  assert.equal(await form.getByLabel("Rate %").inputValue(), "18");
+  assert.equal(await form.getByLabel("Tax name").inputValue(), "GST");
+  assert.equal(await form.getByLabel("Show as CGST + SGST").isChecked(), true);
+  await form.getByLabel("Note on the invoice (optional)").fill("Thank you, Dana!");
+  await shot(f, "28-create-invoice", false);
+  await form.getByRole("button", { name: "Create invoice" }).click();
+  await f.waitForURL(/\/invoices\/[0-9a-f-]{36}$/);
+  const invoiceUrl = f.url();
+  const doc = f.getByTestId("invoice-document");
+  const year = new Date().getFullYear();
+  await doc.getByRole("heading", { name: `RS-${year}-001` }).waitFor();
+  const text = await doc.innerText();
+  assert.match(text, /Tax invoice/i);
+  assert.match(text, /Taxable value\s+₹175\.00/);
+  assert.match(text, /CGST 9%\s+₹15\.75/);
+  assert.match(text, /SGST 9%\s+₹15\.75/);
+  assert.match(text, /Total\s+₹206\.50/);
+  assert.match(text, /Rupees Two Hundred Six and Fifty Paise Only/);
+  assert.match(text, /GSTIN: 36ABCDE1234F1Z5/);
+  assert.match(text, /Thank you, Dana!/);
+  await doc.getByRole("img", { name: /UPI QR code to pay RS-/ }).waitFor();
+  await f.getByRole("button", { name: "Print or save as PDF" }).waitFor();
+  await shot(f, "29-invoice");
+  // The payment now links to its invoice instead of offering a second one.
+  await f.goto(menuUrl);
+  await f.getByRole("link", { name: `Invoice RS-${year}-001 →` }).waitFor();
+  // The client sees it on their page.
+  await c.reload();
+  await c.getByTestId("portal-invoices").getByText(`RS-${year}-001`).waitFor();
+  await c.getByTestId("portal-invoices").getByRole("button", { name: "View" }).click();
+  await c.getByTestId("invoice-document").getByText(/Total\s*₹206\.50/).waitFor();
+  await shot(c, "30-portal-invoice-mobile");
+  // The invoices list, then void (the number is never reused).
+  await f.goto(`${BASE}/invoices`);
+  await f.getByTestId("invoice-list").getByText(`RS-${year}-001`).waitFor();
+  await f.goto(invoiceUrl);
+  accept(f);
+  await f.getByRole("button", { name: "Void invoice" }).click();
+  await f.getByText(/Voided .* Clients no longer see this invoice/).waitFor();
+  await f.goto(menuUrl);
+  await f.getByRole("button", { name: "Create invoice" }).first().waitFor();
+  await c.reload();
+  await c.getByText("Payment schedule").first().waitFor();
+  assert.equal(await c.getByTestId("portal-invoices").count(), 0);
+
   step("password reset by email: request, open the link, choose a new password, sign in with it");
   const resetCtx = await newCtx();
   const a = await resetCtx.newPage();

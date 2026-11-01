@@ -27,6 +27,10 @@ cascade;
 -- v1.2 (if installed).
 drop function if exists public.update_client, public._quote_totals cascade;
 drop function if exists public.set_payment_details cascade;
+-- Invoices (if installed).
+drop table if exists public.client_invoices cascade;
+drop function if exists public.create_invoice, public.void_invoice, public.set_invoice_details,
+  public.update_client_billing, public._invoice_guard cascade;
 
 drop table if exists
   public.activity_log,

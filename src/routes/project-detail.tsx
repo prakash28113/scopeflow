@@ -22,6 +22,8 @@ import { ShareLinkDialog } from "@/components/share-link-dialog";
 import { AgreementTerms, RevisionMeter } from "@/components/agreement";
 import { QuoteTable, pricingFrom } from "@/components/quote";
 import { useToast } from "@/components/toast";
+import { CreateInvoice } from "@/components/create-invoice";
+import { useProfile } from "@/lib/auth";
 import { useProject, type FullProject } from "@/lib/queries";
 import { supabase } from "@/lib/supabase";
 import { call } from "@/lib/use-action";
@@ -41,12 +43,14 @@ export default function ProjectPage() {
   const toast = useToast();
   const [newLink, setNewLink] = useState<NewLink>(null);
   const [linkDays, setLinkDays] = useState<number>(30);
+  const profile = useProfile();
 
   if (q.isLoading) return <PageSpinner />;
   if (q.isError) return <Alert>Couldn't load this project. Please refresh.</Alert>;
   if (!q.data) return <NotFound />;
 
-  const { project: p, snapshots, decisions, revisions, changeOrders, activity, link } = q.data;
+  const { project: p, snapshots, decisions, revisions, changeOrders, activity, link, invoices } = q.data;
+  const liveInvoice = (milestoneId: string) => invoices.find((i) => i.milestone_id === milestoneId && !i.voided_at);
   const pid = p.id;
   const latest = snapshots[0];
   const latestDecision = latest ? decisions.find((d) => d.snapshot_id === latest.id) : undefined;
@@ -400,6 +404,21 @@ export default function ProjectPage() {
                       </div>
                       <p className="num text-[13px] font-medium">{fmt(Number(m.amount_cents))}</p>
                     </div>
+                    {liveInvoice(m.id) ? (
+                      <Link to={`/invoices/${liveInvoice(m.id)!.id}`} className="mt-2 inline-flex text-[12px] font-medium text-accent hover:underline">
+                        Invoice {liveInvoice(m.id)!.number} →
+                      </Link>
+                    ) : approved && p.status !== "cancelled" ? (
+                      <div className="mt-2">
+                        <CreateInvoice
+                          milestoneId={m.id}
+                          taxBps={p.tax_bps ?? null}
+                          taxLabel={p.tax_label ?? null}
+                          sellerGstin={profile.data?.gstin}
+                          buyerGstin={p.clients.gstin}
+                        />
+                      </div>
+                    ) : null}
                     {approved && p.status !== "cancelled" ? (
                       m.status === "paid" ? (
                         <ActionButton

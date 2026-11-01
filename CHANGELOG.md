@@ -1,5 +1,27 @@
 # Changelog
 
+## Invoices — ready for review (not released)
+
+- **Create invoice** next to any payment of an approved project, including change-order payments. You choose the tax (defaults to the project's, e.g. GST 18%), optional CGST + SGST split, the due date (default 7 days) and a note.
+- **The invoice** is printable / Save as PDF. It shows:
+  - "Tax invoice" when you have a GSTIN and charge tax;
+  - From / Bill to with addresses and GSTINs;
+  - taxable value and tax lines (the total is the agreed payment amount, tax-inclusive);
+  - the amount in words, Indian style;
+  - a UPI QR code until it's paid;
+  - a Paid / Overdue / Void stamp.
+- **Numbering:** `PREFIX-YYYY-001`, per account. It's taken under a row lock, so numbers are never duplicated. A voided number is never reused.
+- **Locked once issued:** an invoice can't be edited or deleted, even directly in the database. You void it and create a new one. Profile or client changes never alter an issued invoice.
+- **Invoices page:** all invoices with Invoiced this month / Unpaid / Overdue / Paid totals and filters. Also in the nav.
+- **Settings → Invoice details:** business address, GSTIN, invoice prefix. **Client page:** billing address and client GSTIN.
+- **Client page (portal):** an Invoices card with View and Print / Save as PDF. Void invoices are hidden, and the UPI payment note uses the invoice number.
+- **Database:** `supabase/migrations/20261105000000_client_invoices.sql` is re-runnable: a new `client_invoices` table with RLS (owner read-only), new functions for authenticated users only, and `portal_view` with invoices. Rollback is `supabase/rollback/20261105000000_client_invoices_down.sql`, tested twice in a row.
+- **Tests:**
+  - 11 database tests;
+  - 7 unit tests;
+  - 2 new real-PostgreSQL race checks: 8 simultaneous invoices get 8 consecutive numbers, and 6 at once for one payment create exactly 1;
+  - the browser walkthrough is now **29 steps**.
+
 ## Sign in with Google — live 1 Nov 2026 (button appears once the Google Client ID is added)
 
 - **"Continue with Google"** on the sign-in and sign-up pages:

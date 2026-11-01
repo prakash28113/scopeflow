@@ -121,6 +121,45 @@ try {
     assert.equal(ms, 1);
   });
 
+  const hasInvoices = (await admin.query("select to_regproc('public.create_invoice') is not null as ok")).rows[0].ok;
+  if (hasInvoices) {
+    check("8 simultaneous invoices for different payments: 8 distinct, consecutive numbers", async () => {
+      const ms = [];
+      for (let k = 0; k < 4; k++) {
+        const id = (await call("owner", "save_project", [null, JSON.stringify({
+          title: `Inv race ${k}`, currency: "INR", budget_cents: 2000,
+          client: { name: "C", email: `inv${k}@example.com` },
+          deliverables: [{ title: "X", revisions_included: 1 }],
+          milestones: [{ title: "A", amount_cents: 1000 }, { title: "B", amount_cents: 1000 }],
+        })])).value;
+        const token = (await call("owner", "send_scope", [id, 30])).value.link.token;
+        const snap = (await call("anon", "portal_view", [token])).value.snapshot.id;
+        await call("anon", "portal_decide_scope", [token, snap, "approved", "C", null]);
+        ms.push(...(await admin.query("select id from milestones where project_id = $1", [id])).rows.map((r) => r.id));
+      }
+      const before = (await admin.query("select invoice_seq from profiles where id = $1", [ownerId])).rows[0].invoice_seq;
+      const out = await Promise.all(ms.map((m) => call("owner", "create_invoice", [m, "{}"])));
+      assert.ok(out.every((o) => o.ok), JSON.stringify(out.filter((o) => !o.ok)));
+      const nums = (await admin.query("select number from client_invoices where milestone_id = any($1::uuid[]) order by number", [ms])).rows.map((r) => Number(r.number.split("-").pop()));
+      assert.deepEqual(nums, Array.from({ length: 8 }, (_, i) => before + i + 1));
+    });
+
+    check("6 simultaneous invoices for the same payment: exactly 1 is created", async () => {
+      const id = (await call("owner", "save_project", [null, JSON.stringify({
+        title: "Same payment", currency: "INR", budget_cents: 1000, client: { name: "C", email: "same-inv@example.com" },
+        deliverables: [{ title: "X", revisions_included: 1 }], milestones: [{ title: "All", amount_cents: 1000 }],
+      })])).value;
+      const token = (await call("owner", "send_scope", [id, 30])).value.link.token;
+      const snap = (await call("anon", "portal_view", [token])).value.snapshot.id;
+      await call("anon", "portal_decide_scope", [token, snap, "approved", "C", null]);
+      const [{ id: m }] = (await admin.query("select id from milestones where project_id = $1", [id])).rows;
+      const out = await Promise.all(Array.from({ length: 6 }, () => call("owner", "create_invoice", [m, "{}"])));
+      assert.equal(out.filter((o) => o.ok).length, 1, JSON.stringify(out));
+      const n = (await admin.query("select count(*)::int n from client_invoices where milestone_id = $1", [m])).rows[0].n;
+      assert.equal(n, 1);
+    });
+  }
+
   if (hasPlans) {
     check("6 simultaneous project creations on the Free plan: exactly 2 succeed, the rest get the plan-limit error", async () => {
       const out = await Promise.all(Array.from({ length: 6 }, (_, i) =>

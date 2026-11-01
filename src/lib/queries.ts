@@ -76,7 +76,7 @@ export function useProject(id: string | undefined) {
         await supabase.from("projects").select("*, clients(*), deliverables(*), milestones(*)").eq("id", id!).maybeSingle(),
       ) as FullProject | null;
       if (!project) return null;
-      const [snapshots, decisions, revisions, changeOrders, activity, links] = await Promise.all([
+      const [snapshots, decisions, revisions, changeOrders, activity, links, invoices] = await Promise.all([
         supabase.from("scope_snapshots").select("*").eq("project_id", id!).order("version", { ascending: false }),
         supabase.from("scope_decisions").select("*").eq("project_id", id!),
         supabase.from("revision_requests").select("*").eq("project_id", id!).order("created_at", { ascending: false }),
@@ -89,6 +89,7 @@ export function useProject(id: string | undefined) {
           .is("revoked_at", null)
           .order("created_at", { ascending: false })
           .limit(1),
+        supabase.from("client_invoices").select("id, number, milestone_id, voided_at, amount_cents, currency").eq("project_id", id!),
       ]);
       project.deliverables.sort((a, b) => a.position - b.position);
       project.milestones.sort((a, b) => a.position - b.position);
@@ -100,6 +101,7 @@ export function useProject(id: string | undefined) {
         changeOrders: unwrap(changeOrders) as ChangeOrder[],
         activity: unwrap(activity) as ActivityEntry[],
         link: ((unwrap(links) as ShareLinkStatus[])[0] ?? null) as ShareLinkStatus | null,
+        invoices: unwrap(invoices) as { id: string; number: string; milestone_id: string | null; voided_at: string | null }[],
       };
     },
   });

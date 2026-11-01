@@ -295,4 +295,10 @@ export const clientSchema = z.object({
   company: optionalText(120),
   phone: optionalText(40).refine((v) => v === "" || /^[+()\d\s.-]{5,40}$/.test(v), "Use digits, spaces and + ( ) - only"),
   notes: optionalText(4000),
+  billing_address: optionalText(500).default(""),
+  gstin: z
+    .string()
+    .default("")
+    .transform((v) => v.replace(/\s/g, "").toUpperCase())
+    .refine((v) => v === "" || /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/.test(v), "Enter a valid 15-character GSTIN, or leave it empty"),
 });

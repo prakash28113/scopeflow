@@ -3,6 +3,9 @@ import { Alert, Card, Logo, Tag } from "@/components/ui";
 import { AgreementTerms, RevisionMeter } from "@/components/agreement";
 import { PrintButton, QuoteTable } from "@/components/quote";
 import { UpiPay } from "@/components/upi-pay";
+import { InvoiceDocument } from "@/components/invoice-document";
+import { invoiceStatus } from "@/lib/invoice";
+import { localToday } from "@/lib/upcoming";
 import { PageSpinner } from "@/components/app-shell";
 import { usePortal } from "@/lib/queries";
 import { tokenFromHash } from "@/lib/portal-link";
@@ -235,13 +238,15 @@ export default function PortalPage() {
                       </div>
                     </div>
                     {m.status !== "paid" && v.payment ? (
-                      <UpiPay upiId={v.payment.upi_id} payee={v.payment.payee_name || v.freelancer.name} amountPaise={Number(m.amount_cents)} note={`${p.title} ${m.title}`} />
+                      <UpiPay upiId={v.payment.upi_id} payee={v.payment.payee_name || v.freelancer.name} amountPaise={Number(m.amount_cents)} note={m.invoice_number || `${p.title} ${m.title}`} />
                     ) : null}
                   </li>
                 ))}
               </ul>
             </Card>
           ) : null}
+
+          {v.invoices?.length ? <PortalInvoices invoices={v.invoices} /> : null}
 
           {decidedCos.length ? (
             <Card>
@@ -405,5 +410,50 @@ function ScopeDocument({
         <PrintButton />
       </div>
     </article>
+  );
+}
+
+/** Invoices the freelancer issued: open one to read, print or save as PDF. */
+function PortalInvoices({ invoices }: { invoices: NonNullable<import("@/lib/types").PortalView["invoices"]> }) {
+  const [open, setOpen] = useState<string | null>(null);
+  const today = localToday();
+  const shown = invoices.find((i) => i.id === open);
+  return (
+    <Card>
+      <div className="border-b border-line px-5 py-4 sm:px-6">
+        <h2 className="text-[15px] font-semibold">Invoices</h2>
+      </div>
+      <ul className="divide-y divide-line" data-testid="portal-invoices">
+        {invoices.map((inv) => {
+          const s = invoiceStatus(inv, inv.paid, today);
+          return (
+            <li key={inv.id} className="flex items-center justify-between gap-3 px-5 py-3.5 sm:px-6">
+              <div className="min-w-0">
+                <p className="num text-[13px] font-medium">{inv.number}</p>
+                <p className="text-[12px] text-muted">
+                  {formatDate(inv.issue_date)}
+                  {s === "paid" ? " · Paid" : inv.due_date ? ` · Due ${formatDate(inv.due_date)}` : ""}
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="num text-[13px] font-medium">{formatMoney(Number(inv.amount_cents), inv.currency)}</span>
+                {s === "overdue" ? <Tag tone="warning">Overdue</Tag> : s === "paid" ? <Tag tone="positive">Paid</Tag> : null}
+                <button type="button" className="text-[13px] font-medium text-accent hover:underline" onClick={() => setOpen(open === inv.id ? null : inv.id)}>
+                  {open === inv.id ? "Close" : "View"}
+                </button>
+              </div>
+            </li>
+          );
+        })}
+      </ul>
+      {shown ? (
+        <div className="border-t border-line p-3 sm:p-5">
+          <div className="mb-3 flex justify-end print:hidden">
+            <PrintButton label="Print or save as PDF" />
+          </div>
+          <InvoiceDocument inv={shown} status={invoiceStatus(shown, shown.paid, today)} paidAt={shown.paid_at} className="border-0 p-0 sm:p-2" />
+        </div>
+      ) : null}
+    </Card>
   );
 }
