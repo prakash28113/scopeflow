@@ -728,6 +728,23 @@ try {
   await shot(fm, "15-project-mobile");
   const overflow = await fm.evaluate(() => document.documentElement.scrollWidth > window.innerWidth);
   assert.equal(overflow, false, "mobile project page must not scroll horizontally");
+  // Every main screen on a phone: no sideways scrolling.
+  for (const [path, name, ready] of [
+    ["/dashboard", "36-dashboard-mobile", /^Reminders/],
+    ["/analytics", "37-analytics-mobile", "Analytics"],
+    ["/invoices", "38-invoices-mobile", "Invoices"],
+    ["/clients", "39-clients-mobile", "Clients"],
+    ["/settings", "40-settings-mobile", "Settings"],
+    [menuUrl.replace(BASE, ""), "41-menu-project-mobile", "Menu card for Northwind"],
+    [projectUrl.replace(BASE, "") + "/record", "42-record-mobile", "Brand identity for Northwind Coffee"],
+  ]) {
+    await fm.goto(`${BASE}${path}`);
+    await fm.getByRole("heading", { name: ready }).first().waitFor();
+    await shot(fm, name);
+    const wide = await fm.evaluate(() => [...document.querySelectorAll("body *")].filter((el) => el.getBoundingClientRect().right > window.innerWidth + 1 && getComputedStyle(el).position !== "fixed").map((el) => `${el.tagName.toLowerCase()}.${String(el.className).slice(0, 60)}`).slice(0, 5));
+    const sideways = await fm.evaluate(() => document.documentElement.scrollWidth > window.innerWidth);
+    assert.equal(sideways, false, `${path} scrolls sideways on a phone: ${wide.join(" | ")}`);
+  }
 
   // Last on purpose: this locks the test IP out of the portal for the rest of the hour.
   step("rate limit: 20 failed link lookups lock out the IP, even for a valid link");
