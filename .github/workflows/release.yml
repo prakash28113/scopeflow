@@ -105,9 +105,11 @@ jobs:
         working-directory: tests/e2e
         run: npx playwright install --with-deps chromium
       - name: Download PostgREST 12.2.12 (open source, local stand-in for Supabase's API)
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          curl -fsSL -o "$RUNNER_TEMP/postgrest.tar.xz" https://github.com/PostgREST/postgrest/releases/download/v12.2.12/postgrest-v12.2.12-linux-static-x64.tar.xz
-          tar -xJf "$RUNNER_TEMP/postgrest.tar.xz" -C "$RUNNER_TEMP"
+          gh release download v12.2.12 -R PostgREST/postgrest -p "postgrest-v12.2.12-linux-static-x*.tar.xz" -D "$RUNNER_TEMP/pgrst"
+          tar -xJf "$RUNNER_TEMP"/pgrst/*.tar.xz -C "$RUNNER_TEMP"
           "$RUNNER_TEMP/postgrest" --version
       - name: Run the walkthrough
         run: POSTGREST_BIN="$RUNNER_TEMP/postgrest" bash tests/e2e/run.sh
