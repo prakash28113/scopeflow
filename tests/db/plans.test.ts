@@ -40,8 +40,8 @@ describe("plan catalogue", () => {
     const rows = await as<Json>(db, anon, "select id, monthly_price_cents, annual_price_cents, max_active_projects, max_clients, max_team_members, purchasable from plans order by position");
     expect(rows).toEqual([
       { id: "free", monthly_price_cents: 0, annual_price_cents: 0, max_active_projects: 2, max_clients: 5, max_team_members: 1, purchasable: false },
-      { id: "solo", monthly_price_cents: 900, annual_price_cents: 9000, max_active_projects: null, max_clients: null, max_team_members: 1, purchasable: false },
-      { id: "studio", monthly_price_cents: 1900, annual_price_cents: 19000, max_active_projects: null, max_clients: null, max_team_members: 3, purchasable: false },
+      { id: "solo", monthly_price_cents: 49900, annual_price_cents: 499900, max_active_projects: null, max_clients: null, max_team_members: 1, purchasable: false },
+      { id: "studio", monthly_price_cents: 99900, annual_price_cents: 999900, max_active_projects: null, max_clients: null, max_team_members: 3, purchasable: false },
     ]);
     const u = await createUser(db, "cat@example.com", "Cat", { plan: "free" });
     await expect(as(db, u, "update plans set max_active_projects = 99")).rejects.toThrow(/permission denied/);

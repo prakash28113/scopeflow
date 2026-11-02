@@ -35,7 +35,7 @@ else {
   if (readdirSync(dist).some((f) => f.startsWith(".env") || f.endsWith(".map"))) fail("dist/ contains a .env or source map");
   // Search engines: the shell stays empty (it's served for every app address) and each public page is prerendered.
   if (!readFileSync(join(dist, "index.html"), "utf8").includes('<div id="root"></div>')) fail("dist/index.html must be the empty app shell");
-  for (const [file, path] of [["home.html", "/"], ["pricing.html", "/pricing"], ["privacy.html", "/privacy"], ["terms.html", "/terms"]]) {
+  for (const [file, path] of [["home.html", "/"], ["pricing.html", "/pricing"], ["privacy.html", "/privacy"], ["terms.html", "/terms"], ["refunds.html", "/refunds"], ["contact.html", "/contact"]]) {
     const html = existsSync(join(dist, file)) ? readFileSync(join(dist, file), "utf8") : "";
     if (!html.includes(`data-page="${path}"`) || !html.includes('rel="canonical"')) fail(`dist/${file} is missing or not prerendered — run npm run build`);
   }

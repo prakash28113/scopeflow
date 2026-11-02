@@ -25,7 +25,7 @@ function securityHeaders(env: Record<string, string>): Plugin {
     apply: "build",
     generateBundle() {
       if (!env.VITE_SUPABASE_URL) throw new Error("VITE_SUPABASE_URL must be set when building");
-      const source = buildHeadersFile({ supabaseUrl: env.VITE_SUPABASE_URL, turnstile: Boolean(env.VITE_TURNSTILE_SITE_KEY), google: Boolean(googleClientId(env)) });
+      const source = buildHeadersFile({ supabaseUrl: env.VITE_SUPABASE_URL, turnstile: Boolean(env.VITE_TURNSTILE_SITE_KEY), google: Boolean(googleClientId(env)), razorpay: env.VITE_BILLING_PROVIDER === "razorpay" });
       this.emitFile({ type: "asset", fileName: "_headers", source });
     },
   };

@@ -14,6 +14,12 @@ begin;
 
 drop trigger if exists on_auth_user_created on auth.users;
 
+-- Razorpay billing (if installed).
+drop table if exists public.billing_checkouts, public.provider_plans cascade;
+drop function if exists
+  public.process_razorpay_event, public.billing_mark_cancelling, public.billing_current_subscription,
+  public.billing_record_checkout, public.billing_save_provider_plan, public.billing_prepare_checkout
+cascade;
 -- Subscription plans (if installed).
 drop table if exists
   public.early_access_requests, public.invoices, public.billing_events,

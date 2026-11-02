@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 // @ts-expect-error — plain ESM script
-import { run, publicSupabaseConfig, signupsOpen, parseEmails, parseDomains } from "../../scripts/ci/release.mjs";
+import { run, publicSupabaseConfig, signupsOpen, parseEmails, parseDomains, billingConfig, purchasableSql } from "../../scripts/ci/release.mjs";
 
 const REF = "abcdefghijklmnopqrst";
 const SUPA = `https://${REF}.supabase.co`;
@@ -8,14 +8,14 @@ const APP = "https://scopeflow.prakash-studio.workers.dev";
 
 type Call = { method: string; url: string; body?: unknown; headers?: Record<string, string> };
 
-function world(opts: { subdomain?: string | null; leak?: boolean; badCsp?: boolean; shellHome?: boolean; status?: string[]; accounts?: number; authForbidden?: boolean } = {}) {
+function world(opts: { subdomain?: string | null; leak?: boolean; badCsp?: boolean; shellHome?: boolean; fnForbidden?: boolean; fnVerifyJwt?: boolean; status?: string[]; accounts?: number; authForbidden?: boolean } = {}) {
   const calls: Call[] = [];
   const statuses = [...(opts.status ?? ["ACTIVE_HEALTHY"])];
   const json = (status: number, data: unknown, headers: Record<string, string> = {}) =>
     new Response(JSON.stringify(data), { status, headers: { "content-type": "application/json", ...headers } });
-  const fetch = async (url: string, init: { method?: string; body?: string; headers?: Record<string, string> } = {}) => {
+  const fetch = async (url: string, init: { method?: string; body?: string | FormData; headers?: Record<string, string> } = {}) => {
     const method = init.method ?? "GET";
-    const body = init.body ? JSON.parse(init.body) : undefined;
+    const body = typeof init.body === "string" ? JSON.parse(init.body) : init.body;
     calls.push({ method, url, body, headers: init.headers });
     const u = new URL(url);
     // Supabase Management API
@@ -25,10 +25,13 @@ function world(opts: { subdomain?: string | null; leak?: boolean; badCsp?: boole
         const q = String(body.query);
         if (q.startsWith("select name from scopeflow_admin")) return json(201, [{ name: "20261031000000_scopeflow_schema.sql" }]);
         if (q.startsWith("select\n (select count(*)::int from pg_tables"))
-          return json(201, [{ tables: 25, without_rls: 0, public_functions: 5, signup_trigger: 1 }]);
+          return json(201, [{ tables: 27, without_rls: 0, public_functions: 5, signup_trigger: 1 }]);
         return json(201, []);
       }
       if (u.pathname.endsWith("/config/auth")) return opts.authForbidden ? json(403, { message: "Missing required permission(s): auth_config_write" }) : json(200, {});
+      if (u.pathname.endsWith("/secrets")) return opts.fnForbidden ? json(403, { message: "forbidden" }) : json(201, {});
+      if (u.pathname.endsWith("/functions/deploy")) return json(201, { slug: "billing", verify_jwt: opts.fnVerifyJwt ?? false });
+      if (u.pathname.endsWith("/functions/billing") && method === "PATCH") return json(200, { slug: "billing", verify_jwt: false });
       if (u.pathname.endsWith("/api-keys")) return json(200, [{ type: "publishable", api_key: "sb_publishable_live123" }]);
     }
     // Cloudflare API
@@ -99,8 +102,12 @@ describe("release automation — deploy and live checks", () => {
     expect(build.env.VITE_SUPABASE_PUBLISHABLE_KEY).toBe("sb_publishable_live123");
     expect(w.execs.map((e) => e.args[0])).toEqual(["run", "scripts/predeploy-check.mjs", "wrangler"]);
     const deploy = w.execs.find((e) => e.args[0] === "wrangler")!;
-    expect(deploy.args).toEqual(["wrangler", "deploy", "--var", `SUPABASE_URL:${SUPA}`, "--var", "SUPABASE_ANON_KEY:sb_publishable_live123", "--var", "TURNSTILE_ENABLED:false", "--var", "GOOGLE_SIGNIN_ENABLED:false"]);
+    expect(deploy.args).toEqual(["wrangler", "deploy", "--var", `SUPABASE_URL:${SUPA}`, "--var", "SUPABASE_ANON_KEY:sb_publishable_live123", "--var", "TURNSTILE_ENABLED:false", "--var", "GOOGLE_SIGNIN_ENABLED:false", "--var", "BILLING_ENABLED:false"]);
     expect(deploy.env.CLOUDFLARE_ACCOUNT_ID).toBe("acc0");
+    // No Razorpay keys: nothing on sale, no function deployed, checkout hidden.
+    expect(build.env.VITE_BILLING_PROVIDER).toBe("");
+    expect(w.calls.some((c) => c.url.includes("/functions/"))).toBe(false);
+    expect(w.calls.some((c) => String((c.body as { query?: string })?.query ?? "").includes("purchasable"))).toBe(true);
     // The Supabase token is never handed to the build or to Cloudflare tooling.
     for (const e of w.execs) expect(JSON.stringify(e.env)).not.toContain("sbp_secret_value");
 
@@ -108,6 +115,42 @@ describe("release automation — deploy and live checks", () => {
     expect((siteUrl!.body as { site_url: string }).site_url).toBe(APP);
     expect(w.summary()).toContain(`**Live:** ${APP}`);
     expect(w.summary()).not.toMatch(/sbp_secret_value|cf_secret_value/);
+  });
+
+  const RZP = { RAZORPAY_KEY_ID: "rzp_test_Abc123xyz", RAZORPAY_KEY_SECRET: "rzp_secret_value_1", RAZORPAY_WEBHOOK_SECRET: "webhook_secret_1", BILLING_TESTERS: "Owner@Example.com" };
+
+  it("with Razorpay keys: sets function secrets, deploys the billing function, and switches checkout on", async () => {
+    const w = world({ fnVerifyJwt: true });
+    expect(await run(w.deps({ ...BOTH, ...RZP }))).toBe("deployed");
+    const secrets = w.calls.find((c) => c.url.endsWith(`/projects/${REF}/secrets`))!;
+    expect(secrets.body).toEqual([
+      { name: "RAZORPAY_KEY_ID", value: "rzp_test_Abc123xyz" },
+      { name: "RAZORPAY_KEY_SECRET", value: "rzp_secret_value_1" },
+      { name: "RAZORPAY_WEBHOOK_SECRET", value: "webhook_secret_1" },
+      { name: "BILLING_TESTERS", value: "owner@example.com" },
+      { name: "APP_ORIGINS", value: "https://scopeflow.prakash-studio.workers.dev" },
+    ]);
+    const deployFn = w.calls.find((c) => c.url.includes("/functions/deploy?slug=billing"))!;
+    const form = deployFn.body as FormData;
+    expect(JSON.parse(String(form.get("metadata")))).toEqual({ entrypoint_path: "index.ts", name: "billing", verify_jwt: false });
+    expect(form.getAll("file").map((f) => (f as File).name)).toEqual(["index.ts", "handler.ts"]);
+    // The platform kept JWT verification on → turned off explicitly (the webhook has no session).
+    expect(w.calls.find((c) => c.method === "PATCH" && c.url.endsWith("/functions/billing"))!.body).toEqual({ verify_jwt: false });
+    const build = w.execs.find((e) => e.args.join(" ") === "run build")!;
+    expect(build.env.VITE_BILLING_PROVIDER).toBe("razorpay");
+    expect(w.execs.find((e) => e.args[0] === "wrangler")!.args).toContain("BILLING_ENABLED:true");
+    // Secrets never reach the build, Cloudflare tooling or the run summary.
+    for (const e of w.execs) expect(JSON.stringify(e.args)).not.toMatch(/rzp_secret_value_1|webhook_secret_1/);
+    expect(w.summary()).not.toMatch(/rzp_secret_value_1|webhook_secret_1/);
+    expect(w.summary()).toMatch(/test mode/);
+    expect(w.summary()).toContain(`${SUPA}/functions/v1/billing/webhook`);
+  });
+
+  it("keeps paid plans off (and the release going) when the token can't manage functions", async () => {
+    const w = world({ fnForbidden: true });
+    expect(await run(w.deps({ ...BOTH, ...RZP }))).toBe("deployed");
+    expect(w.execs.find((e) => e.args.join(" ") === "run build")!.env.VITE_BILLING_PROVIDER).toBe("");
+    expect(w.summary()).toMatch(/Edge Functions/);
   });
 
   it("registers a free workers.dev subdomain on a brand-new Cloudflare account", async () => {
@@ -224,5 +267,22 @@ describe("release automation — deploy and live checks", () => {
     expect(parseDomains("ScopeFlow.in,www.scopeflow.in scopeflow.in")).toEqual(["scopeflow.in", "www.scopeflow.in"]);
     expect(() => parseDomains("scopeflow.in/evil")).toThrow(/Not a valid custom domain/);
     expect(() => parseDomains("x.workers.dev")).toThrow(/Not a valid/);
+  });
+});
+
+describe("billing settings", () => {
+  const site = JSON.stringify({ billingPlans: ["solo"] });
+  it("is off without keys, and reports (not fails) a partial setup", () => {
+    expect(billingConfig({}, site)).toBeNull();
+    expect(billingConfig({ RAZORPAY_KEY_ID: "rzp_test_abcdef12" }, site)).toEqual({ error: expect.stringMatching(/RAZORPAY_KEY_SECRET.*RAZORPAY_WEBHOOK_SECRET/) });
+    expect(billingConfig({ RAZORPAY_KEY_ID: "pk_live_x", RAZORPAY_KEY_SECRET: "12345678", RAZORPAY_WEBHOOK_SECRET: "12345678" }, site)).toEqual({ error: expect.stringMatching(/RAZORPAY_KEY_ID/) });
+  });
+  it("derives the mode, testers and plans on sale", () => {
+    const live = billingConfig({ RAZORPAY_KEY_ID: "rzp_live_abcdef12", RAZORPAY_KEY_SECRET: "12345678", RAZORPAY_WEBHOOK_SECRET: "12345678", BILLING_TESTERS: "a@x.com" }, JSON.stringify({ billingPlans: ["solo", "studio", "free"] }));
+    expect(live).toMatchObject({ mode: "live", testers: ["a@x.com"], plans: ["solo", "studio"] });
+    expect(purchasableSql(live)).toContain("id = any(array['solo', 'studio']::text[])");
+    const test = billingConfig({ RAZORPAY_KEY_ID: "rzp_test_abcdef12", RAZORPAY_KEY_SECRET: "12345678", RAZORPAY_WEBHOOK_SECRET: "12345678" }, site);
+    expect(purchasableSql(test)).toContain("id = any(array[]::text[])");
+    expect(purchasableSql(null)).toBe(purchasableSql(test));
   });
 });

@@ -10,6 +10,7 @@ import { createHmac, randomUUID } from "node:crypto";
 import { readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { spawn } from "node:child_process";
 import http from "node:http";
+import { handleBilling } from "../../supabase/functions/billing/handler.ts";
 
 const PROJECT = new URL("../../", import.meta.url).pathname.replace(/\/$/, "");
 const SECRET = "e2e-jwt-secret-that-is-at-least-32-characters-long";
@@ -185,11 +186,66 @@ async function auth(req, res, url) {
   return json(res, 404, { msg: `auth shim: ${req.method} ${path} not implemented` });
 }
 
+// ---------------------------------------------------------------- billing function + Razorpay stand-in
+// The real Edge Function code, in Razorpay test mode, talking to a fake Razorpay API in this process.
+export const E2E_RAZORPAY = { keyId: "rzp_test_e2estandin01", keySecret: "e2e-razorpay-key-secret", webhookSecret: "e2e-razorpay-webhook-secret" };
+const BILLING = {
+  ...E2E_RAZORPAY,
+  testers: ["buyer@studio.test"],
+  origins: ["http://localhost:3000", "http://127.0.0.1:3000"],
+  supabaseUrl: "http://127.0.0.1:54321",
+  anonKey: ANON,
+  serviceKey: SERVICE,
+  razorpayApi: "https://razorpay.e2e/v1",
+};
+let rzpSeq = 0;
+const rzpSubs = new Map();
+async function fakeRazorpay(url, init = {}) {
+  const u = new URL(url);
+  const body = init.body ? JSON.parse(init.body) : {};
+  const ok = (data) => new Response(JSON.stringify(data), { status: 200, headers: { "content-type": "application/json" } });
+  if (init.headers?.authorization !== `Basic ${Buffer.from(`${BILLING.keyId}:${BILLING.keySecret}`).toString("base64")}`) {
+    return new Response(JSON.stringify({ error: { code: "BAD_REQUEST_ERROR", description: "Authentication failed" } }), { status: 401 });
+  }
+  if (u.pathname === "/v1/plans") return ok({ id: `plan_e2e${++rzpSeq}`, period: body.period, item: body.item });
+  if (u.pathname === "/v1/subscriptions") {
+    const id = `sub_e2e${++rzpSeq}`;
+    rzpSubs.set(id, { id, plan_id: body.plan_id, status: "created", customer_id: "cust_e2e", notes: body.notes });
+    return ok(rzpSubs.get(id));
+  }
+  const m = /^\/v1\/subscriptions\/([\w]+)(\/cancel)?$/.exec(u.pathname);
+  if (m && rzpSubs.has(m[1])) {
+    const sub = rzpSubs.get(m[1]);
+    if (m[2]) return ok({ ...sub, status: body.cancel_at_cycle_end ? sub.status : "cancelled" });
+    // After the checkout payment the subscription is active for one period.
+    const start = now();
+    const year = sub.notes?.billing_interval === "year";
+    return ok({ ...sub, status: "active", current_start: start, current_end: start + (year ? 365 : 30) * 86400 });
+  }
+  return new Response(JSON.stringify({ error: { description: `fake razorpay: ${init.method} ${u.pathname}` } }), { status: 404 });
+}
+const billingFetch = (url, init) => (String(url).startsWith(BILLING.razorpayApi) ? fakeRazorpay(url, init) : fetch(url, init));
+
+async function billing(req, res, url) {
+  const chunks = [];
+  for await (const c of req) chunks.push(c);
+  const request = new Request(`http://127.0.0.1:54321${url.pathname}${url.search}`, {
+    method: req.method,
+    headers: Object.entries(req.headers).filter(([, v]) => typeof v === "string"),
+    body: ["GET", "HEAD", "OPTIONS"].includes(req.method) ? undefined : Buffer.concat(chunks),
+  });
+  const r = await handleBilling(request, BILLING, billingFetch);
+  res.writeHead(r.status, Object.fromEntries(r.headers));
+  res.end(Buffer.from(await r.arrayBuffer()));
+}
+
 // ---------------------------------------------------------------- gateway
 http
   .createServer(async (req, res) => {
     const url = new URL(req.url, "http://localhost");
     try {
+      // Edge Functions answer their own CORS preflight (only for the app's addresses).
+      if (url.pathname.startsWith("/functions/v1/billing")) return await billing(req, res, url);
       if (req.method === "OPTIONS") {
         // Like Supabase: allow whatever headers the client asks for.
         res.writeHead(204, { ...CORS, "access-control-allow-headers": req.headers["access-control-request-headers"] ?? CORS["access-control-allow-headers"] });

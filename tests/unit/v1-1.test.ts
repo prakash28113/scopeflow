@@ -158,10 +158,11 @@ describe("upcoming due dates", () => {
 import { planLimitFrom, priceLabel, type Plan } from "@/lib/plans";
 
 describe("plan display helpers", () => {
-  const solo: Plan = { id: "solo", name: "Solo", position: 2, currency: "USD", monthly_price_cents: 900, annual_price_cents: 9000, max_active_projects: null, max_clients: null, max_team_members: 1, purchasable: false };
+  const solo: Plan = { id: "solo", name: "Solo", position: 2, currency: "INR", monthly_price_cents: 49900, annual_price_cents: 499900, max_active_projects: null, max_clients: null, max_team_members: 1, purchasable: false };
   it("shows monthly and yearly prices with the yearly saving", () => {
-    expect(priceLabel(solo, "month")).toEqual({ main: "$9.00", per: "/month", note: null });
-    expect(priceLabel(solo, "year")).toEqual({ main: "$90.00", per: "/year", note: "$7.50/month · save $18.00 a year" });
+    expect(priceLabel(solo, "month")).toEqual({ main: "₹499", per: "/month", note: null });
+    expect(priceLabel(solo, "year")).toEqual({ main: "₹4,999", per: "/year", note: "about ₹417/month · save ₹989 a year" });
+    expect(priceLabel({ ...solo, monthly_price_cents: 99950 }, "month").main).toBe("₹999.50");
     expect(priceLabel({ ...solo, id: "free", monthly_price_cents: 0, annual_price_cents: 0 }, "year").per).toBe("forever");
   });
   it("recognises the database's plan-limit error and nothing else", () => {
