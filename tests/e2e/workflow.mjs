@@ -75,6 +75,15 @@ try {
     await lp.getByRole("heading", { name: "Every client job, on the record." }).waitFor();
     assert.equal(await lp.evaluate(() => document.documentElement.scrollWidth > window.innerWidth || window.innerWidth > 390), false, "home page scrolls sideways on a phone");
     await lp.waitForTimeout(3500); // let the record finish writing in
+    // Sections appear as they scroll into view: scroll through once, like a visitor would.
+    const height = await lp.evaluate(() => document.documentElement.scrollHeight);
+    for (let y = 0; y < height; y += 500) {
+      await lp.evaluate((yy) => window.scrollTo(0, yy), y);
+      await lp.waitForTimeout(80);
+    }
+    await lp.waitForTimeout(1200);
+    assert.equal(await lp.locator("[data-reveal]:not([data-in])").count(), 0, "every section has been revealed");
+    await lp.evaluate(() => window.scrollTo(0, 0));
     await shot(lp, "00-landing-mobile");
     await lp.close();
   }
