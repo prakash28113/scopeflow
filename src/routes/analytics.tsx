@@ -51,8 +51,7 @@ export type ProjectRow = {
 };
 export type ExpenseRow = { id: string; spent_on: string; category: string; description: string | null; amount_cents: number; currency: string; project_id: string | null; projects: { title: string } | null };
 
-export function useAnalyticsData() {
-  return useQuery({
+export const analyticsQuery = {
     queryKey: ["analytics"],
     queryFn: async () => {
       const [projects, invoices, expenses, payments] = await Promise.all([
@@ -71,7 +70,10 @@ export function useAnalyticsData() {
         payments: payments.data as { amount_cents: number; paid_on: string; project_id: string }[],
       };
     },
-  });
+};
+
+export function useAnalyticsData() {
+  return useQuery(analyticsQuery);
 }
 
 export default function AnalyticsPage() {

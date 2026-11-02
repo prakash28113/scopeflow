@@ -1,5 +1,7 @@
 import { useState } from "react";
 import { Link } from "react-router";
+import { useQueryClient } from "@tanstack/react-query";
+import { intentProps } from "@/lib/prefetch";
 import { Alert, Card, EmptyState, Input, LinkButton, Meter, PageHeader, Segmented, StatusBadge, cx } from "@/components/ui";
 import { PageSpinner } from "@/components/app-shell";
 import { useDashboard } from "@/lib/queries";
@@ -21,6 +23,7 @@ const FILTERS: Record<Filter, (s: ProjectStatus) => boolean> = {
 
 /** Every project, filterable by status and searchable by project or client. */
 export default function ProjectsPage() {
+  const qc = useQueryClient();
   const q = useDashboard();
   const [filter, setFilter] = useState<Filter>("open");
   const [search, setSearch] = useState("");
@@ -87,7 +90,7 @@ export default function ProjectsPage() {
                   return (
                     <li key={p.id}>
                       <Link
-                        to={`/projects/${p.id}`}
+                        to={`/projects/${p.id}`} {...intentProps(qc, `/projects/${p.id}`)}
                         className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-1.5 px-5 py-3.5 transition-colors hover:bg-canvas md:grid-cols-[minmax(0,1fr)_130px_110px_120px_140px]"
                       >
                         <span className="min-w-0">

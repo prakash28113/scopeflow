@@ -10,9 +10,10 @@ import { ToastProvider } from "./components/toast";
 import { AppShell, PageSpinner, RequireAuth } from "./components/app-shell";
 import NotFound, { RouteError } from "./routes/not-found";
 import { configured } from "./lib/supabase";
+import { pages } from "./routes/loaders";
 
 const queryClient = new QueryClient({
-  defaultOptions: { queries: { retry: 1, staleTime: 10_000, refetchOnWindowFocus: true } },
+  defaultOptions: { queries: { retry: 1, staleTime: 60_000, gcTime: 30 * 60_000, refetchOnWindowFocus: true } },
 });
 
 const lazy = (load: () => Promise<{ default: React.ComponentType }>) => async () => ({ Component: (await load()).default });
@@ -42,25 +43,25 @@ const router = createBrowserRouter([
           {
             element: <AppShell />,
             children: [
-              { path: "/dashboard", lazy: lazy(() => import("./routes/dashboard")) },
-              { path: "/projects", lazy: lazy(() => import("./routes/projects")) },
-              { path: "/quotations", lazy: lazy(() => import("./routes/quotations")) },
-              { path: "/approvals", lazy: lazy(() => import("./routes/approvals")) },
-              { path: "/expenses", lazy: lazy(() => import("./routes/expenses")) },
-              { path: "/notifications", lazy: lazy(() => import("./routes/notifications")) },
-              { path: "/plan", lazy: lazy(() => import("./routes/plan")) },
-              { path: "/settings", lazy: lazy(() => import("./routes/settings").then((m) => ({ default: m.SettingsPage }))) },
-              { path: "/projects/new", lazy: lazy(() => import("./routes/project-new")) },
-              { path: "/projects/:id", lazy: lazy(() => import("./routes/project-detail")) },
-              { path: "/projects/:id/edit", lazy: lazy(() => import("./routes/project-edit")) },
-              { path: "/projects/:id/record", lazy: lazy(() => import("./routes/project-record")) },
-              { path: "/projects/:id/quote", lazy: lazy(() => import("./routes/project-quote")) },
-              { path: "/analytics", lazy: lazy(() => import("./routes/analytics")) },
-              { path: "/invoices", lazy: lazy(() => import("./routes/invoices").then((m) => ({ default: m.InvoicesPage }))) },
-              { path: "/invoices/:id", lazy: lazy(() => import("./routes/invoices").then((m) => ({ default: m.InvoicePage }))) },
-              { path: "/clients", lazy: lazy(() => import("./routes/clients").then((m) => ({ default: m.ClientsPage }))) },
-              { path: "/clients/:id", lazy: lazy(() => import("./routes/clients").then((m) => ({ default: m.ClientPage }))) },
-              { path: "/projects/:id/change-orders/new", lazy: lazy(() => import("./routes/change-order-new")) },
+              { path: "/dashboard", lazy: lazy(pages.dashboard) },
+              { path: "/projects", lazy: lazy(pages.projects) },
+              { path: "/quotations", lazy: lazy(pages.quotations) },
+              { path: "/approvals", lazy: lazy(pages.approvals) },
+              { path: "/expenses", lazy: lazy(pages.expenses) },
+              { path: "/notifications", lazy: lazy(pages.notifications) },
+              { path: "/plan", lazy: lazy(pages.plan) },
+              { path: "/settings", lazy: lazy(() => pages.settings().then((m) => ({ default: m.SettingsPage }))) },
+              { path: "/projects/new", lazy: lazy(pages.projectNew) },
+              { path: "/projects/:id", lazy: lazy(pages.projectDetail) },
+              { path: "/projects/:id/edit", lazy: lazy(pages.projectEdit) },
+              { path: "/projects/:id/record", lazy: lazy(pages.projectRecord) },
+              { path: "/projects/:id/quote", lazy: lazy(pages.projectQuote) },
+              { path: "/analytics", lazy: lazy(pages.analytics) },
+              { path: "/invoices", lazy: lazy(() => pages.invoices().then((m) => ({ default: m.InvoicesPage }))) },
+              { path: "/invoices/:id", lazy: lazy(() => pages.invoices().then((m) => ({ default: m.InvoicePage }))) },
+              { path: "/clients", lazy: lazy(() => pages.clients().then((m) => ({ default: m.ClientsPage }))) },
+              { path: "/clients/:id", lazy: lazy(() => pages.clients().then((m) => ({ default: m.ClientPage }))) },
+              { path: "/projects/:id/change-orders/new", lazy: lazy(pages.changeOrderNew) },
             ],
           },
         ],

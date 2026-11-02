@@ -1,5 +1,7 @@
 import { useState } from "react";
 import { Link } from "react-router";
+import { useQueryClient } from "@tanstack/react-query";
+import { intentProps } from "@/lib/prefetch";
 import { Alert, Badge, Card, EmptyState, LinkButton, PageHeader, Segmented } from "@/components/ui";
 import { PageSpinner } from "@/components/app-shell";
 import { useDashboard } from "@/lib/queries";
@@ -31,6 +33,7 @@ const BADGE: Record<QuoteState, { tone: "neutral" | "accent" | "positive" | "war
  * so it's created and edited with the project; this page lists them and opens the printable quote.
  */
 export default function QuotationsPage() {
+  const qc = useQueryClient();
   const q = useDashboard();
   const [view, setView] = useState<"open" | "approved" | "all">("open");
   if (q.isLoading) return <PageSpinner />;
@@ -81,7 +84,7 @@ export default function QuotationsPage() {
               <ul className="divide-y divide-line" data-testid="quotations">
                 {shown.map(({ p, state }) => (
                   <li key={p.id} className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-1.5 px-5 py-3.5 md:grid-cols-[minmax(0,1fr)_130px_120px_130px_110px]">
-                    <Link to={`/projects/${p.id}`} className="min-w-0 hover:underline">
+                    <Link to={`/projects/${p.id}`} {...intentProps(qc, `/projects/${p.id}`)} className="min-w-0 hover:underline">
                       <span className="block truncate text-[14px] font-medium text-ink">{p.title}</span>
                       <span className="block truncate text-[13px] text-muted">{p.clients.company || p.clients.name}</span>
                     </Link>

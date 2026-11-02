@@ -198,7 +198,6 @@ dialog.sf-dialog::backdrop {
 .lp-aurora span {
   position: absolute;
   border-radius: 999px;
-  filter: blur(90px);
   opacity: 0.55;
 }
 .lp-aurora span:nth-child(1) {
@@ -237,11 +236,18 @@ dialog.sf-dialog::backdrop {
   height: 55%;
   z-index: -1;
   pointer-events: none;
-  background-image: linear-gradient(rgb(77 141 255 / 0.16) 1px, transparent 1px), linear-gradient(90deg, rgb(77 141 255 / 0.16) 1px, transparent 1px);
-  background-size: 56px 56px;
+  overflow: hidden;
   transform: perspective(520px) rotateX(62deg);
   transform-origin: bottom center;
   mask-image: linear-gradient(to top, #000 0%, rgb(0 0 0 / 0.5) 45%, transparent 85%);
+}
+.lp-floor::before {
+  content: "";
+  position: absolute;
+  inset: -56px 0 0 0;
+  background-image: linear-gradient(rgb(77 141 255 / 0.16) 1px, transparent 1px), linear-gradient(90deg, rgb(77 141 255 / 0.16) 1px, transparent 1px);
+  background-size: 56px 56px;
+  will-change: transform;
 }
 .lp-floor-cta {
   height: 70%;
@@ -513,16 +519,21 @@ dialog.sf-dialog::backdrop {
   .lp-hero-copy > *:nth-child(3) { animation-delay: 0.16s; }
   .lp-hero-copy > *:nth-child(4) { animation-delay: 0.24s; }
   .lp-hero-copy > *:nth-child(5) { animation-delay: 0.32s; }
-  .lp-sheen {
-    animation: lp-sheen 7s ease-in-out 1.2s infinite;
+  @media (min-width: 1024px) {
+    .lp-sheen {
+      animation: lp-sheen 7s ease-in-out 1.2s infinite;
+    }
+    .lp-aurora span:nth-child(1) {
+      animation: lp-drift 16s ease-in-out infinite alternate;
+    }
+    .lp-aurora span:nth-child(2) {
+      animation: lp-drift 20s ease-in-out -6s infinite alternate-reverse;
+    }
+    .lp-cta {
+      animation: lp-turn 8s linear infinite;
+    }
   }
-  .lp-aurora span:nth-child(1) {
-    animation: lp-drift 16s ease-in-out infinite alternate;
-  }
-  .lp-aurora span:nth-child(2) {
-    animation: lp-drift 20s ease-in-out -6s infinite alternate-reverse;
-  }
-  .lp-floor {
+  .lp-floor::before {
     animation: lp-floor 6s linear infinite;
   }
   .lp-live {
@@ -539,9 +550,6 @@ dialog.sf-dialog::backdrop {
   }
   .lp-float-b {
     animation-delay: 2.7s, 3.3s;
-  }
-  .lp-cta {
-    animation: lp-turn 8s linear infinite;
   }
   .lp-ring {
     animation: lp-pulse 3s ease-out infinite;
@@ -633,7 +641,7 @@ dialog.sf-dialog::backdrop {
 }
 @keyframes lp-floor {
   to {
-    background-position: 0 56px;
+    transform: translateY(56px);
   }
 }
 @keyframes lp-ping {
@@ -686,4 +694,10 @@ dialog.sf-drawer {
   from {
     transform: translateX(-100%);
   }
+}
+
+/* Below-the-fold home page sections: the browser skips drawing them (and their loops) until they're near. */
+.lp-cv {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 1200px;
 }
