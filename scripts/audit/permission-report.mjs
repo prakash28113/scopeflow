@@ -58,6 +58,7 @@ const fns = await q(`
 const guard = (f) =>
   /_portal_gate\(/.test(f.src) ? "client link (hashed token, expiry, revocation, rate limits)"
   : /_owned_project\(/.test(f.src) ? "project owner (owner_id = signed-in user, row locked)"
+  : /_require_blog_author\(/.test(f.src) ? "blog authors only (signed-in account listed in blog_authors)"
   : /_uid\(\)|auth\.uid\(\)/.test(f.src) ? "signed-in user's own rows"
   : f.name === "health" ? "none needed — returns 'ok'"
   : f.name === "process_billing_event" ? "service role only — future signature-verified payment webhook"
