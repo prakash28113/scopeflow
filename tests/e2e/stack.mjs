@@ -43,6 +43,17 @@ for (const f of readdirSync(`${PROJECT}/supabase/migrations`).sort()) {
 }
 await db.exec(`
   insert into public.blog_authors (email) values ('writer@studio.test');
+  -- Stand-in only: lets the auth shim run its queries through PostgREST's single connection, so they never
+  -- interleave with (or inherit the role of) a PostgREST transaction on the shared PGlite session.
+  create or replace function public.e2e_auth_query(p_sql text) returns jsonb
+  language plpgsql security definer set search_path = '' as $fn$
+  declare r jsonb;
+  begin
+    execute format('with t as (%s) select coalesce(jsonb_agg(t), ''[]''::jsonb) from t', p_sql) into r;
+    return r;
+  end $fn$;
+  revoke all on function public.e2e_auth_query(text) from public, anon, authenticated;
+  grant execute on function public.e2e_auth_query(text) to service_role;
   alter table auth.users add column if not exists encrypted_password text;
   create role authenticator login noinherit;
   grant anon, authenticated, service_role to authenticator;
@@ -71,9 +82,20 @@ const pgrst = spawn(process.env.POSTGREST_BIN || "postgrest", [new URL("./postgr
 process.on("exit", () => pgrst.kill());
 
 // ---------------------------------------------------------------- auth shim
-// Auth queries go through PostgREST-independent direct access; serialize them.
-let chain = Promise.resolve();
-const q = (sql, params) => (chain = chain.then(() => db.query(sql, params)));
+// Auth queries go through PostgREST (as service role), so they are serialized with the app's own
+// requests on the single database session. Parameters are inlined as quoted literals (test stand-in only).
+const lit = (v) => (v === null || v === undefined ? "null" : `'${String(v).replace(/'/g, "''")}'`);
+async function q(sql, params = []) {
+  const text = sql.replace(/\$(\d+)/g, (_, i) => lit(params[Number(i) - 1]));
+  const res = await fetch("http://127.0.0.1:3001/rpc/e2e_auth_query", {
+    method: "POST",
+    headers: { authorization: `Bearer ${SERVICE}`, "content-type": "application/json" },
+    body: JSON.stringify({ p_sql: text }),
+  });
+  const body = await res.json();
+  if (!res.ok) throw new Error(`auth shim query failed: ${JSON.stringify(body)}`);
+  return { rows: body };
+}
 
 function userObj(u) {
   return {
