@@ -11,6 +11,7 @@ import { readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { spawn } from "node:child_process";
 import http from "node:http";
 import { handleBilling } from "../../supabase/functions/billing/handler.ts";
+import { handleBlogApi } from "../../supabase/functions/blog/handler.ts";
 
 const PROJECT = new URL("../../", import.meta.url).pathname.replace(/\/$/, "");
 const SECRET = "e2e-jwt-secret-that-is-at-least-32-characters-long";
@@ -41,6 +42,7 @@ for (const f of readdirSync(`${PROJECT}/supabase/migrations`).sort()) {
   await db.exec(readFileSync(`${PROJECT}/supabase/migrations/${f}`, "utf8"));
 }
 await db.exec(`
+  insert into public.blog_authors (email) values ('writer@studio.test');
   alter table auth.users add column if not exists encrypted_password text;
   create role authenticator login noinherit;
   grant anon, authenticated, service_role to authenticator;
@@ -226,6 +228,19 @@ async function fakeRazorpay(url, init = {}) {
 }
 const billingFetch = (url, init) => (String(url).startsWith(BILLING.razorpayApi) ? fakeRazorpay(url, init) : fetch(url, init));
 
+async function blogApi(req, res, url) {
+  const chunks = [];
+  for await (const c of req) chunks.push(c);
+  const request = new Request(`http://127.0.0.1:54321${url.pathname}`, {
+    method: req.method,
+    headers: Object.entries(req.headers).filter(([, v]) => typeof v === "string"),
+    body: ["GET", "HEAD"].includes(req.method) ? undefined : Buffer.concat(chunks),
+  });
+  const r = await handleBlogApi(request, { supabaseUrl: "http://127.0.0.1:54321", serviceKey: SERVICE, siteUrl: "http://localhost:3000" });
+  res.writeHead(r.status, Object.fromEntries(r.headers));
+  res.end(Buffer.from(await r.arrayBuffer()));
+}
+
 async function billing(req, res, url) {
   const chunks = [];
   for await (const c of req) chunks.push(c);
@@ -246,6 +261,7 @@ http
     try {
       // Edge Functions answer their own CORS preflight (only for the app's addresses).
       if (url.pathname.startsWith("/functions/v1/billing")) return await billing(req, res, url);
+      if (url.pathname.startsWith("/functions/v1/blog")) return await blogApi(req, res, url);
       if (req.method === "OPTIONS") {
         // Like Supabase: allow whatever headers the client asks for.
         res.writeHead(204, { ...CORS, "access-control-allow-headers": req.headers["access-control-request-headers"] ?? CORS["access-control-allow-headers"] });

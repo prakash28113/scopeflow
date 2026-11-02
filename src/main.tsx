@@ -20,9 +20,12 @@ const queryClient = new QueryClient({
  * (hydration), so there's no flash and the intro animations don't restart. Everywhere else
  * (the app, and any other path that received a prerendered file) it renders from scratch.
  */
-async function prepareHydration(el: HTMLElement): Promise<boolean> {
+async function prepareHydration(el: HTMLElement): Promise<"hydrate" | "seeded" | "fresh"> {
   const here = location.pathname.replace(/\/+$/, "") || "/";
-  if (!el.dataset.page || el.dataset.page !== here || !el.firstElementChild) return false;
+  // Prerendered by the build (data-page, same React tree → hydrate) or rendered by the Worker
+  // (data-ssr, blog pages: plain markup + data → render with the data, no loading state).
+  const kind = el.dataset.page === here ? "hydrate" : el.dataset.ssr === here ? "seeded" : null;
+  if (!kind || !el.firstElementChild && kind === "hydrate") return "fresh";
   // The page's code must be loaded before the first render, so the router starts on the page, not a spinner.
   const matches = matchRoutes(routes, location) ?? [];
   await Promise.all(
@@ -32,16 +35,16 @@ async function prepareHydration(el: HTMLElement): Promise<boolean> {
       Object.assign(route, loaded, { lazy: undefined });
     }),
   );
-  // Data the page was prerendered with (e.g. the plan catalogue on /pricing), so the first render matches.
+  // Data the page was rendered with (e.g. the plan catalogue on /pricing, the post on a blog page).
   const state = document.getElementById("sf-state");
   if (state?.textContent) {
     try {
       hydrate(queryClient, JSON.parse(state.textContent));
     } catch {
-      return false;
+      return "fresh";
     }
   }
-  return true;
+  return kind;
 }
 
 const rootEl = document.getElementById("root")!;
@@ -52,7 +55,7 @@ if (!configured) {
     </p>,
   );
 } else {
-  const adopt = await prepareHydration(rootEl).catch(() => false);
+  const mode = await prepareHydration(rootEl).catch(() => "fresh" as const);
   const app = (
     <StrictMode>
       <QueryClientProvider client={queryClient}>
@@ -64,11 +67,12 @@ if (!configured) {
       </QueryClientProvider>
     </StrictMode>
   );
-  if (adopt) {
+  if (mode === "hydrate") {
     hydrateRoot(rootEl, app);
   } else {
     rootEl.replaceChildren();
     delete rootEl.dataset.page;
+    delete rootEl.dataset.ssr;
     createRoot(rootEl).render(app);
   }
 }

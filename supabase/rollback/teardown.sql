@@ -14,6 +14,11 @@ begin;
 
 drop trigger if exists on_auth_user_created on auth.users;
 
+-- Blog (if installed).
+drop table if exists public.blog_api_keys, public.blog_posts, public.blog_authors cascade;
+drop function if exists public.blog_publish_with_key, public.revoke_blog_key, public.blog_my_keys, public.create_blog_key,
+  public._save_blog_post, public.delete_blog_post, public.save_blog_post, public.blog_my_posts,
+  public._slugify, public._require_blog_author, public.is_blog_author cascade;
 -- Razorpay billing (if installed).
 drop table if exists public.billing_checkouts, public.provider_plans cascade;
 drop function if exists

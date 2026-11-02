@@ -21,6 +21,8 @@ export const routes: RouteObject[] = [
       { path: "/pricing", lazy: lazy(() => import("./pricing")) },
       { path: "/privacy", lazy: lazy(() => import("./legal").then((m) => ({ default: m.PrivacyPage }))) },
       { path: "/terms", lazy: lazy(() => import("./legal").then((m) => ({ default: m.TermsPage }))) },
+      { path: "/blog", lazy: lazy(() => import("./blog").then((m) => ({ default: m.BlogIndexPage }))) },
+      { path: "/blog/:slug", lazy: lazy(() => import("./blog").then((m) => ({ default: m.BlogPostPage }))) },
       { path: "/refunds", lazy: lazy(() => import("./legal").then((m) => ({ default: m.RefundsPage }))) },
       { path: "/contact", lazy: lazy(() => import("./legal").then((m) => ({ default: m.ContactPage }))) },
       {
@@ -47,6 +49,7 @@ export const routes: RouteObject[] = [
               { path: "/projects/:id/record", lazy: lazy(pages.projectRecord) },
               { path: "/projects/:id/quote", lazy: lazy(pages.projectQuote) },
               { path: "/analytics", lazy: lazy(pages.analytics) },
+              { path: "/blog/write", lazy: lazy(() => import("./blog-write")) },
               { path: "/invoices", lazy: lazy(() => pages.invoices().then((m) => ({ default: m.InvoicesPage }))) },
               { path: "/invoices/:id", lazy: lazy(() => pages.invoices().then((m) => ({ default: m.InvoicePage }))) },
               { path: "/clients", lazy: lazy(() => pages.clients().then((m) => ({ default: m.ClientsPage }))) },

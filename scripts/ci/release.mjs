@@ -28,7 +28,7 @@ const SUPABASE_API = "https://api.supabase.com/v1";
 const CF_API = "https://api.cloudflare.com/client/v4";
 
 /** Expected results of the post-migration security check (see DEPLOYMENT.md §2). */
-export const EXPECTED = { tables: 27, without_rls: 0, public_functions: 5, signup_trigger: 1 };
+export const EXPECTED = { tables: 30, without_rls: 0, public_functions: 5, signup_trigger: 1 };
 /** Keeps sign-ups closed when no invited emails are configured. */
 export const CLOSED_SENTINEL = "invites-closed@scopeflow.invalid";
 const EMAIL = /^[a-z0-9._%+-]+@[a-z0-9-]+(\.[a-z0-9-]+)*\.[a-z]{2,}$/;
@@ -158,7 +158,27 @@ export function purchasableSql(billing) {
   return `update public.plans set purchasable = ${on} where purchasable is distinct from ${on};`;
 }
 
-export const BILLING_FUNCTION_FILES = ["index.ts", "handler.ts"];
+export const FUNCTION_FILES = ["index.ts", "handler.ts"];
+
+/** Blog authors from config/public-site.json (blogAuthors): the only accounts that can write posts. */
+export function blogAuthors(siteText) {
+  try {
+    const site = JSON.parse(siteText ?? readFileSync(join(ROOT, "config/public-site.json"), "utf8"));
+    return parseEmails((site.blogAuthors ?? []).join("\n"));
+  } catch (e) {
+    if (/Not a valid email/.test(String(e?.message))) throw e;
+    return [];
+  }
+}
+
+export function blogAuthorsSql(emails) {
+  for (const e of emails) if (!EMAIL.test(e)) throw new Error(`Invalid email: ${e}`);
+  const list = emails.map(quote).join(", ");
+  return `begin;
+delete from public.blog_authors${emails.length ? ` where email not in (${list})` : ""};
+${emails.length ? `insert into public.blog_authors (email) values ${emails.map((e) => `(${quote(e)})`).join(", ")} on conflict (email) do nothing;` : ""}
+commit;`;
+}
 
 const short = (s) => String(s).replace(/\s+/g, " ").slice(0, 300);
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -179,9 +199,9 @@ export async function run(deps) {
 
   // ------------------------------------------------------------------ Supabase
   const sbToken = env.SUPABASE_ACCESS_TOKEN;
-  let supabaseUrl, publishable, setSiteUrl, setUpBilling;
+  let supabaseUrl, publishable, setSiteUrl, setUpBilling, setUpBlog;
   if (sbToken) {
-    ({ supabaseUrl, publishable, setSiteUrl, setUpBilling } = await setUpSupabase());
+    ({ supabaseUrl, publishable, setSiteUrl, setUpBilling, setUpBlog } = await setUpSupabase());
   } else if (env.SUPABASE_URL || env.SUPABASE_PUBLISHABLE_KEY) {
     // App-only release: the database was already set up by an earlier run; use its public values.
     ({ supabaseUrl, publishable } = publicSupabaseConfig(env));
@@ -301,6 +321,38 @@ revoke all on all tables in schema scopeflow_admin from public, anon, authentica
   }
   ok("Public Supabase URL and publishable key ready");
 
+  /** Deploys supabase/functions/<slug> (index.ts + handler.ts) with JWT verification off (the function checks callers itself). */
+  async function deployFunction(slug) {
+    const form = new FormData();
+    form.append("metadata", JSON.stringify({ entrypoint_path: "index.ts", name: slug, verify_jwt: false }));
+    for (const f of FUNCTION_FILES) {
+      form.append("file", new Blob([readFileSync(join(ROOT, "supabase/functions", slug, f), "utf8")], { type: "application/typescript" }), f);
+    }
+    const res = await fetch(`${SUPABASE_API}/projects/${ref}/functions/deploy?slug=${slug}`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${sbToken}` },
+      body: form,
+    });
+    const deployed = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(`Supabase API POST /functions/deploy failed (${res.status}): ${short(JSON.stringify(deployed))}`);
+    if (deployed.verify_jwt !== false) await sb(`/projects/${ref}/functions/${slug}`, { method: "PATCH", body: { verify_jwt: false } });
+  }
+
+  /** Blog: authors from config/public-site.json, and the publishing API for tools. */
+  async function setUpBlog(authors) {
+    await sql(blogAuthorsSql(authors));
+    ok(`Blog authors synced (${authors.length})`);
+    try {
+      await deployFunction("blog");
+      ok("Blog publishing API deployed");
+      report.push(`- ℹ️ Blog publishing API: \`${supabaseUrl}/functions/v1/blog/posts\``);
+    } catch (e) {
+      if (!/\((401|403)\)/.test(String(e.message))) throw e;
+      log("::warning::Blog publishing API not deployed: the Supabase token needs Edge Functions access.");
+      report.push("- ⏭️ Blog publishing API not deployed — the `SUPABASE_ACCESS_TOKEN` needs **Edge Functions** write access. Writing in the app still works.");
+    }
+  }
+
   /**
    * Paid plans: function secrets, the "billing" Edge Function, and which plans are on sale.
    * Returns true when checkout is available. Needs a token with Edge Functions + Secrets access;
@@ -326,20 +378,7 @@ revoke all on all tables in schema scopeflow_admin from public, anon, authentica
           { name: "APP_ORIGINS", value: origins.join(",") },
         ],
       });
-      const form = new FormData();
-      // JWT verification off: Razorpay's webhook has no Supabase session; the function checks sessions itself.
-      form.append("metadata", JSON.stringify({ entrypoint_path: "index.ts", name: "billing", verify_jwt: false }));
-      for (const f of BILLING_FUNCTION_FILES) {
-        form.append("file", new Blob([readFileSync(join(ROOT, "supabase/functions/billing", f), "utf8")], { type: "application/typescript" }), f);
-      }
-      const res = await fetch(`${SUPABASE_API}/projects/${ref}/functions/deploy?slug=billing`, {
-        method: "POST",
-        headers: { Authorization: `Bearer ${sbToken}` },
-        body: form,
-      });
-      const deployed = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(`Supabase API POST /functions/deploy failed (${res.status}): ${short(JSON.stringify(deployed))}`);
-      if (deployed.verify_jwt !== false) await sb(`/projects/${ref}/functions/billing`, { method: "PATCH", body: { verify_jwt: false } });
+      await deployFunction("billing");
     } catch (e) {
       if (!/\((401|403)\)/.test(String(e.message))) throw e;
       await sql(purchasableSql(null));
@@ -361,6 +400,7 @@ revoke all on all tables in schema scopeflow_admin from public, anon, authentica
     supabaseUrl,
     publishable,
     setUpBilling,
+    setUpBlog,
     // Password-reset links may only return to ScopeFlow's own addresses.
     setSiteUrl: (appUrl, allUrls = [appUrl]) =>
       optional("Supabase Site URL and sign-in return addresses set to the live addresses", `/projects/${ref}/config/auth`, {
@@ -407,6 +447,7 @@ revoke all on all tables in schema scopeflow_admin from public, anon, authentica
   const origins = [...domains.map((d) => `https://${d}`), `https://scopeflow.${subdomain}.workers.dev`];
   // Paid plans need the Supabase token (function + secrets); an app-only release leaves them as they are.
   const billingOn = setUpBilling ? await setUpBilling(billingConfig(env), origins) : false;
+  if (setUpBlog) await setUpBlog(blogAuthors());
 
   const buildEnv = {
     ...process.env,

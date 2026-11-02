@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 // @ts-expect-error — plain ESM script
-import { run, publicSupabaseConfig, signupsOpen, parseEmails, parseDomains, billingConfig, purchasableSql } from "../../scripts/ci/release.mjs";
+import { run, publicSupabaseConfig, signupsOpen, parseEmails, parseDomains, billingConfig, purchasableSql, blogAuthors, blogAuthorsSql } from "../../scripts/ci/release.mjs";
 
 const REF = "abcdefghijklmnopqrst";
 const SUPA = `https://${REF}.supabase.co`;
@@ -25,13 +25,13 @@ function world(opts: { subdomain?: string | null; leak?: boolean; badCsp?: boole
         const q = String(body.query);
         if (q.startsWith("select name from scopeflow_admin")) return json(201, [{ name: "20261031000000_scopeflow_schema.sql" }]);
         if (q.startsWith("select\n (select count(*)::int from pg_tables"))
-          return json(201, [{ tables: 27, without_rls: 0, public_functions: 5, signup_trigger: 1 }]);
+          return json(201, [{ tables: 30, without_rls: 0, public_functions: 5, signup_trigger: 1 }]);
         return json(201, []);
       }
       if (u.pathname.endsWith("/config/auth")) return opts.authForbidden ? json(403, { message: "Missing required permission(s): auth_config_write" }) : json(200, {});
       if (u.pathname.endsWith("/secrets")) return opts.fnForbidden ? json(403, { message: "forbidden" }) : json(201, {});
-      if (u.pathname.endsWith("/functions/deploy")) return json(201, { slug: "billing", verify_jwt: opts.fnVerifyJwt ?? false });
-      if (u.pathname.endsWith("/functions/billing") && method === "PATCH") return json(200, { slug: "billing", verify_jwt: false });
+      if (u.pathname.endsWith("/functions/deploy")) return opts.fnForbidden ? json(403, { message: "forbidden" }) : json(201, { slug: u.searchParams.get("slug"), verify_jwt: opts.fnVerifyJwt ?? false });
+      if (/\/functions\/(billing|blog)$/.test(u.pathname) && method === "PATCH") return json(200, { verify_jwt: false });
       if (u.pathname.endsWith("/api-keys")) return json(200, [{ type: "publishable", api_key: "sb_publishable_live123" }]);
     }
     // Cloudflare API
@@ -104,9 +104,11 @@ describe("release automation — deploy and live checks", () => {
     const deploy = w.execs.find((e) => e.args[0] === "wrangler")!;
     expect(deploy.args).toEqual(["wrangler", "deploy", "--var", `SUPABASE_URL:${SUPA}`, "--var", "SUPABASE_ANON_KEY:sb_publishable_live123", "--var", "TURNSTILE_ENABLED:false", "--var", "GOOGLE_SIGNIN_ENABLED:false", "--var", "BILLING_ENABLED:false"]);
     expect(deploy.env.CLOUDFLARE_ACCOUNT_ID).toBe("acc0");
-    // No Razorpay keys: nothing on sale, no function deployed, checkout hidden.
+    // No Razorpay keys: nothing on sale, no billing function, checkout hidden. The blog API is always deployed.
     expect(build.env.VITE_BILLING_PROVIDER).toBe("");
-    expect(w.calls.some((c) => c.url.includes("/functions/"))).toBe(false);
+    expect(w.calls.filter((c) => c.url.includes("/functions/deploy")).map((c) => new URL(c.url).searchParams.get("slug"))).toEqual(["blog"]);
+    expect(w.calls.some((c) => String((c.body as { query?: string })?.query ?? "").includes("blog_authors"))).toBe(true);
+    expect(w.summary()).toContain(`${SUPA}/functions/v1/blog/posts`);
     expect(w.calls.some((c) => String((c.body as { query?: string })?.query ?? "").includes("purchasable"))).toBe(true);
     // The Supabase token is never handed to the build or to Cloudflare tooling.
     for (const e of w.execs) expect(JSON.stringify(e.env)).not.toContain("sbp_secret_value");
@@ -131,6 +133,7 @@ describe("release automation — deploy and live checks", () => {
       { name: "APP_ORIGINS", value: "https://scopeflow.prakash-studio.workers.dev" },
     ]);
     const deployFn = w.calls.find((c) => c.url.includes("/functions/deploy?slug=billing"))!;
+    expect(w.calls.some((c) => c.url.includes("/functions/deploy?slug=blog"))).toBe(true);
     const form = deployFn.body as FormData;
     expect(JSON.parse(String(form.get("metadata")))).toEqual({ entrypoint_path: "index.ts", name: "billing", verify_jwt: false });
     expect(form.getAll("file").map((f) => (f as File).name)).toEqual(["index.ts", "handler.ts"]);
@@ -284,5 +287,15 @@ describe("billing settings", () => {
     const test = billingConfig({ RAZORPAY_KEY_ID: "rzp_test_abcdef12", RAZORPAY_KEY_SECRET: "12345678", RAZORPAY_WEBHOOK_SECRET: "12345678" }, site);
     expect(purchasableSql(test)).toContain("id = any(array[]::text[])");
     expect(purchasableSql(null)).toBe(purchasableSql(test));
+  });
+});
+
+describe("blog authors", () => {
+  it("come from config, validated; an empty list removes every author", () => {
+    expect(blogAuthors(JSON.stringify({ blogAuthors: ["Me@Example.com"] }))).toEqual(["me@example.com"]);
+    expect(blogAuthors("{}")).toEqual([]);
+    expect(() => blogAuthors(JSON.stringify({ blogAuthors: ["x'); drop table blog_posts; --"] }))).toThrow(/Not a valid email/);
+    expect(blogAuthorsSql([])).toContain("delete from public.blog_authors;");
+    expect(blogAuthorsSql(["a@b.co"])).toContain("insert into public.blog_authors (email) values ('a@b.co')");
   });
 });

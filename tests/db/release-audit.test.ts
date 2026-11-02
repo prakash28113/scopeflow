@@ -222,7 +222,7 @@ describe("5 · every privileged operation checks the caller", () => {
     };
     const unguarded = rows
       .filter((r) => !(String(r.proname) in exempt))
-      .filter((r) => !/_owned_project\(|_portal_gate\(|_uid\(\)|auth\.uid\(\)/.test(String(r.prosrc)))
+      .filter((r) => !/_owned_project\(|_portal_gate\(|_uid\(\)|auth\.uid\(\)|_require_blog_author\(/.test(String(r.prosrc)))
       .map((r) => r.proname);
     expect(unguarded).toEqual([]);
     expect(rows.length).toBeGreaterThan(15);

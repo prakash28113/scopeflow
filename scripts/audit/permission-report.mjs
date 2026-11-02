@@ -61,6 +61,7 @@ const guard = (f) =>
   : /_uid\(\)|auth\.uid\(\)/.test(f.src) ? "signed-in user's own rows"
   : f.name === "health" ? "none needed — returns 'ok'"
   : f.name === "process_billing_event" ? "service role only — future signature-verified payment webhook"
+  : f.name === "blog_publish_with_key" ? "service role only — blog Edge Function, after hashing the publishing key"
   : f.name === "process_razorpay_event" ? "service role only — billing Edge Function, after verifying Razorpay's signature"
   : /^billing_/.test(f.name) && !f.anon_x && !f.auth_x ? "service role only — billing Edge Function, after verifying the user's session"
   : f.name === "admin_set_plan" ? "no API role — Supabase SQL editor only"

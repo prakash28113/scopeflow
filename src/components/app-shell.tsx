@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useTitle } from "@/lib/title";
+import { useIsBlogAuthor } from "@/lib/blog";
 import { Link, NavLink, Navigate, Outlet, useLocation } from "react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { intentProps, prefetchPath } from "@/lib/prefetch";
@@ -88,13 +89,14 @@ const ICONS = {
   expenses: I(<path d="M3.5 7.5h17v11a1.5 1.5 0 0 1-1.5 1.5H5a1.5 1.5 0 0 1-1.5-1.5zM3.5 7.5 6 4h12l2.5 3.5M15.5 13.5h2" />),
   settings: I(<path d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6ZM19.4 13.5a7.5 7.5 0 0 0 0-3l2-1.5-2-3.5-2.4.9a7.6 7.6 0 0 0-2.6-1.5L14 2.5h-4l-.4 2.4a7.6 7.6 0 0 0-2.6 1.5l-2.4-.9-2 3.5 2 1.5a7.5 7.5 0 0 0 0 3l-2 1.5 2 3.5 2.4-.9a7.6 7.6 0 0 0 2.6 1.5l.4 2.4h4l.4-2.4a7.6 7.6 0 0 0 2.6-1.5l2.4.9 2-3.5z" />),
   plan: I(<path d="M4 7.5 12 3.5l8 4-8 4zM4 12l8 4 8-4M4 16.5l8 4 8-4" />),
+  blog: I(<path d="M5 4.5h10.5L19 8v11.5H5zM8.5 9.5h7M8.5 13h7M8.5 16.5h4" />),
   bell: I(<><path d="M6 8.5a6 6 0 1 1 12 0c0 6.5 2.5 8.5 2.5 8.5h-17S6 15 6 8.5" /><path d="M10.3 20.5a1.9 1.9 0 0 0 3.4 0" /></>),
   plus: I(<path d="M12 5v14M5 12h14" />),
   menu: I(<path d="M4 7h16M4 12h16M4 17h16" />),
   close: I(<path d="M6 6l12 12M18 6 6 18" />),
 };
 
-function useNavGroups(approvalsWaiting: number): { label: string; items: NavItem[] }[] {
+function useNavGroups(approvalsWaiting: number, blogAuthor: boolean): { label: string; items: NavItem[] }[] {
   return [
     {
       label: "Workspace",
@@ -117,6 +119,7 @@ function useNavGroups(approvalsWaiting: number): { label: string; items: NavItem
       items: [
         { to: "/analytics", label: "Analytics", icon: ICONS.analytics },
         { to: "/expenses", label: "Expenses", icon: ICONS.expenses },
+        ...(blogAuthor ? [{ to: "/blog/write", label: "Blog", icon: ICONS.blog }] : []),
       ],
     },
     {
@@ -134,7 +137,8 @@ function NavContent({ onNavigate }: { onNavigate?: () => void }) {
   const { session } = useAuth();
   const dash = useDashboard(Boolean(session));
   const waiting = dash.data ? dash.data.projects.filter((p) => p.status === "awaiting_approval").length + dash.data.changeOrders.length : 0;
-  const groups = useNavGroups(waiting);
+  const author = useIsBlogAuthor(Boolean(session));
+  const groups = useNavGroups(waiting, author.data === true);
   return (
     <nav aria-label="Main" className="flex-1 space-y-5 overflow-y-auto px-3 py-4">
       {groups.map((g) => (
@@ -316,6 +320,7 @@ function sectionOf(path: string): string {
     [/^\/approvals/, "Work / Approvals"],
     [/^\/analytics/, "Business / Analytics"],
     [/^\/expenses/, "Business / Expenses"],
+    [/^\/blog/, "Business / Blog"],
     [/^\/settings/, "Preferences / Settings"],
     [/^\/plan/, "Preferences / Plan & usage"],
     [/^\/notifications/, "Notifications"],
