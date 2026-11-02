@@ -11,7 +11,9 @@
   "assets": {
     "directory": "./dist",
     "binding": "ASSETS",
-    "not_found_handling": "single-page-application"
+    "not_found_handling": "single-page-application",
+    // Blog pages are rendered by the Worker with the posts from the database (worker/blog.ts).
+    "run_worker_first": ["/blog", "/blog/*", "/sitemap.xml"]
   },
   // Twice-daily keep-alive so the free Supabase project isn't paused for inactivity.
   "triggers": { "crons": ["17 3,15 * * *"] },

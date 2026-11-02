@@ -15,5 +15,6 @@ Disallow: /settings
 Disallow: /plan
 Disallow: /notifications
 Disallow: /onboarding
+Disallow: /blog/write
 
 Sitemap: https://scopeflow.in/sitemap.xml

@@ -7,6 +7,7 @@ export function SiteFooter() {
       <p>ScopeFlow records payments between you and your clients; it doesn&apos;t handle that money.</p>
       <nav className="flex flex-wrap gap-x-5 gap-y-2">
         <Link to="/pricing" className="hover:text-ink">Pricing</Link>
+        <Link to="/blog" className="hover:text-ink">Blog</Link>
         <Link to="/privacy" className="hover:text-ink">Privacy</Link>
         <Link to="/terms" className="hover:text-ink">Terms &amp; Conditions</Link>
         <Link to="/refunds" className="hover:text-ink">Refunds &amp; cancellation</Link>

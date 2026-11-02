@@ -974,6 +974,94 @@ document.body.appendChild(d)}`,
     await b.close();
   }
 
+  step("blog: an author writes and publishes from the app; a publishing key posts for a tool; pages are rendered for search engines");
+  {
+    // Before any posts: the blog says so, and the home page has no blog section.
+    const v = await desk.newPage();
+    const vErrors = [];
+    v.on("pageerror", (e) => vErrors.push(e.message));
+    v.on("console", (m) => m.type() === "error" && !/Failed to load resource/.test(m.text()) && vErrors.push(m.text()));
+    await v.goto(`${BASE}/blog`);
+    await v.getByText("The first posts are on their way.").waitFor();
+
+    const w = await newCtx({ viewport: { width: 1360, height: 900 } });
+    const wp = await w.newPage();
+    wp.on("pageerror", (e) => vErrors.push(`writer: ${e.message}`));
+    await wp.goto(`${BASE}/signup`);
+    await wp.getByLabel("Your name").fill("Prakash Writer");
+    await wp.getByLabel("Email").fill("writer@studio.test");
+    await wp.getByLabel("Password").fill("correct-horse-9");
+    await wp.getByRole("button", { name: "Create account" }).click();
+    await wp.waitForURL("**/onboarding");
+    await wp.getByLabel("Business or studio name").fill("Writer Studio");
+    await wp.getByRole("button", { name: "Continue" }).click();
+    await wp.waitForURL("**/projects/new?welcome=1");
+    // Authors get a Blog item in the sidebar.
+    await wp.getByRole("link", { name: "Blog", exact: true }).click();
+    await wp.waitForURL("**/blog/write");
+    await wp.getByRole("button", { name: "Write a post" }).first().click();
+    await wp.getByRole("button", { name: "Publish" }).click();
+    await wp.getByText("Give the post a title of 5 to 120 characters.").waitFor();
+    await wp.getByLabel("Title").fill("How much should a logo cost in India?");
+    await wp.getByLabel("Category").selectOption("market-prices");
+    await wp.getByLabel("Summary").fill("Typical logo prices for Indian freelancers, and how to set yours with confidence.");
+    await wp.getByLabel("Post").fill("## Typical ranges\n\nMost freelancers charge **per project**.\n\n| Level | Price |\n|---|---|\n| Starting out | ₹5,000 |\n| Experienced | ₹25,000 |\n\n- Count your hours\n- Add revisions\n\n<script>window.__xss = 1</script>");
+    await wp.getByRole("tab", { name: "Preview" }).click();
+    await wp.getByTestId("post-preview").getByRole("heading", { name: "Typical ranges" }).waitFor();
+    await shot(wp, "64-blog-editor", false);
+    await wp.getByRole("button", { name: "Publish" }).click();
+    await wp.getByText("Published. It's live on the blog now.").waitFor();
+    await wp.getByTestId("my-posts").getByText("How much should a logo cost in India?").waitFor();
+
+    // A publishing key for a tool (shown once), then the tool posts with it.
+    await wp.getByLabel("Key name").fill("Grok");
+    await wp.getByRole("button", { name: "Create key" }).click();
+    const key = (await wp.getByTestId("new-key").locator("code").innerText()).trim();
+    assert.match(key, /^sfblog_[A-Za-z0-9_-]{40,}$/);
+    await wp.getByRole("button", { name: "Done" }).click();
+    assert.equal(await wp.getByText(key).count(), 0, "the key is never shown again");
+    const api = (body, auth = `Bearer ${key}`) => fetch("http://127.0.0.1:54321/functions/v1/blog/posts", { method: "POST", headers: { authorization: auth, "content-type": "application/json" }, body: JSON.stringify(body) });
+    const toolPost = { title: "Five ways to win repeat clients", description: "Simple habits that turn one-off freelance projects into steady repeat work.", category: "Strategies", body: "## 1. Deliver early\n\nClients remember it." };
+    assert.equal((await api(toolPost, "Bearer sfblog_wrongwrongwrongwrongwrong")).status, 401);
+    const made = await api(toolPost);
+    assert.equal(made.status, 201);
+    const madeBody = await made.json();
+    assert.equal(madeBody.url, "http://localhost:3000/blog/five-ways-to-win-repeat-clients");
+
+    // Search engines get full pages: title, canonical, structured data, the post itself, and no script from the post.
+    const raw = await (await fetch(`${BASE}/blog/how-much-should-a-logo-cost-in-india`, { headers: { accept: "text/html" } })).text();
+    assert.ok(raw.includes("<title>How much should a logo cost in India? | ScopeFlow blog</title>"));
+    assert.ok(raw.includes('<link rel="canonical" href="https://scopeflow.in/blog/how-much-should-a-logo-cost-in-india" />'));
+    assert.ok(raw.includes("<td>₹25,000</td>"));
+    assert.ok(!raw.includes("<script>window.__xss"), "post HTML is escaped");
+    assert.ok(raw.includes('"@type":"BlogPosting"'));
+    const sm = await (await fetch(`${BASE}/sitemap.xml`)).text();
+    assert.ok(sm.includes("<loc>https://scopeflow.in/blog/five-ways-to-win-repeat-clients</loc>"));
+    assert.ok(sm.includes("<loc>https://scopeflow.in/pricing</loc>"));
+    assert.ok((await (await fetch(`${BASE}/blog/rss.xml`)).text()).includes("<title>Five ways to win repeat clients</title>"));
+    assert.equal((await fetch(`${BASE}/blog/not-a-post`, { headers: { accept: "text/html" } })).status, 404);
+
+    // Readers: the post page (the app takes over the rendered page), the list, and the home page section.
+    await v.goto(`${BASE}/blog/how-much-should-a-logo-cost-in-india`);
+    await v.getByRole("heading", { level: 1, name: "How much should a logo cost in India?" }).waitFor();
+    await v.getByTestId("blog-body").getByRole("cell", { name: "₹25,000" }).waitFor();
+    assert.equal(await v.evaluate(() => window.__xss), undefined, "a script in a post never runs");
+    await v.getByRole("heading", { name: "More from the blog" }).waitFor();
+    await shot(v, "65-blog-post");
+    await v.getByRole("link", { name: "Blog", exact: true }).first().click();
+    await v.getByTestId("blog-featured").getByRole("link", { name: "Five ways to win repeat clients", exact: true }).waitFor();
+    await v.getByRole("link", { name: "Market prices" }).first().click();
+    await v.waitForURL("**/blog?category=market-prices");
+    await v.getByTestId("blog-featured").getByRole("link", { name: "How much should a logo cost in India?", exact: true }).waitFor();
+    assert.equal(await v.getByText("Five ways to win repeat clients").count(), 0);
+    await shot(v, "66-blog-list", false);
+    await v.goto(BASE);
+    await v.getByTestId("home-blog").getByText("Five ways to win repeat clients").waitFor();
+    assert.deepEqual(vErrors, [], "no browser errors on the blog");
+    await v.close();
+    await w.close();
+  }
+
   step("clients: profile, history and private notes");
   await f.goto(`${BASE}/clients`);
   await f.getByRole("link", { name: /Dana Whitfield/ }).click();
@@ -1003,6 +1091,8 @@ document.body.appendChild(d)}`,
   await f.waitForURL("**/plan");
   await f.getByRole("heading", { name: "Plan & usage" }).waitFor();
   await f.getByText("2 of 2").first().waitFor();
+  // Not a blog author: no Blog item, and the writing page says so.
+  assert.equal(await f.getByRole("link", { name: "Blog", exact: true }).count(), 0);
   // Payments are in test mode and this isn't a tester account: nothing can be bought.
   assert.equal(await f.getByRole("button", { name: /Upgrade to/ }).count(), 0);
   assert.equal(await f.getByText("Test mode: use Razorpay's test card").count(), 0);

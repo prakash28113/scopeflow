@@ -21,6 +21,7 @@ const FREELANCER_FUNCTIONS = [
   "send_scope", "recall_scope", "resolve_revision", "create_change_order", "withdraw_change_order",
   "complete_change_order_work", "set_milestone_paid", "complete_project", "cancel_project",
   "unread_notification_count", "mark_notifications_seen", "my_plan", "join_early_access", "update_client", "set_payment_details", "set_invoice_details", "update_client_billing", "create_invoice", "void_invoice", "set_deliverable_progress", "add_expense", "delete_expense", "record_payment", "delete_payment", "add_follow_up", "set_follow_up_done", "delete_follow_up", "log_client_request", "create_client", "save_template", "delete_template",
+  "is_blog_author", "blog_my_posts", "save_blog_post", "delete_blog_post", "create_blog_key", "blog_my_keys", "revoke_blog_key",
 ];
 // Plan changes: never callable from the app. admin_set_plan = SQL editor; process_billing_event = service role (future webhook).
 // Razorpay billing: the "billing" Edge Function calls these as service role, after verifying the
@@ -28,6 +29,8 @@ const FREELANCER_FUNCTIONS = [
 const BILLING_SERVICE = [
   "billing_prepare_checkout", "billing_save_provider_plan", "billing_record_checkout",
   "billing_current_subscription", "billing_mark_cancelling", "process_razorpay_event",
+  // The "blog" Edge Function, after hashing the publishing key it received.
+  "blog_publish_with_key",
 ];
 const BACK_OFFICE = ["admin_set_plan", "process_billing_event", ...BILLING_SERVICE];
 const AUTHENTICATED_FUNCTIONS = [...FREELANCER_FUNCTIONS, ...ANON_FUNCTIONS].sort();
@@ -39,8 +42,8 @@ const OWNER_READABLE = [
   "subscription_changes", "invoices", "early_access_requests", "client_invoices", "expenses", "payments", "follow_ups", "scope_templates",
 ].sort();
 // share_links, subscriptions: column grants only (never the token hash / provider ids).
-const NOT_READABLE = ["beta_allowlist", "portal_rate_limits", "share_links", "subscriptions", "billing_events", "provider_plans", "billing_checkouts"].sort();
-const PUBLIC_CATALOGUE = ["plans"]; // prices and limits for the pricing page; no personal data
+const NOT_READABLE = ["blog_authors", "blog_api_keys", "beta_allowlist", "portal_rate_limits", "share_links", "subscriptions", "billing_events", "provider_plans", "billing_checkouts"].sort();
+const PUBLIC_CATALOGUE = ["plans", "blog_posts"]; // pricing page; published blog posts (RLS hides drafts). No personal data
 const ALL_TABLES = [...OWNER_READABLE, ...NOT_READABLE, ...PUBLIC_CATALOGUE].sort();
 const PRIVS = ["SELECT", "INSERT", "UPDATE", "DELETE", "TRUNCATE", "REFERENCES", "TRIGGER"];
 
@@ -173,7 +176,7 @@ describe("functions", () => {
   it("each freelancer function checks the caller's identity", () => {
     for (const name of FREELANCER_FUNCTIONS) {
       const f = fns.find((x) => x.name === name)!;
-      expect(f.src, name).toMatch(/_owned_project\(|_uid\(\)|auth\.uid\(\)/);
+      expect(f.src, name).toMatch(/_owned_project\(|_uid\(\)|auth\.uid\(\)|_require_blog_author\(/); // _require_blog_author calls _uid()
     }
   });
 

@@ -11,6 +11,7 @@ import { readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { spawn } from "node:child_process";
 import http from "node:http";
 import { handleBilling } from "../../supabase/functions/billing/handler.ts";
+import { handleBlogApi } from "../../supabase/functions/blog/handler.ts";
 
 const PROJECT = new URL("../../", import.meta.url).pathname.replace(/\/$/, "");
 const SECRET = "e2e-jwt-secret-that-is-at-least-32-characters-long";
@@ -41,6 +42,18 @@ for (const f of readdirSync(`${PROJECT}/supabase/migrations`).sort()) {
   await db.exec(readFileSync(`${PROJECT}/supabase/migrations/${f}`, "utf8"));
 }
 await db.exec(`
+  insert into public.blog_authors (email) values ('writer@studio.test');
+  -- Stand-in only: lets the auth shim run its queries through PostgREST's single connection, so they never
+  -- interleave with (or inherit the role of) a PostgREST transaction on the shared PGlite session.
+  create or replace function public.e2e_auth_query(p_sql text) returns jsonb
+  language plpgsql security definer set search_path = '' as $fn$
+  declare r jsonb;
+  begin
+    execute format('with t as (%s) select coalesce(jsonb_agg(t), ''[]''::jsonb) from t', p_sql) into r;
+    return r;
+  end $fn$;
+  revoke all on function public.e2e_auth_query(text) from public, anon, authenticated;
+  grant execute on function public.e2e_auth_query(text) to service_role;
   alter table auth.users add column if not exists encrypted_password text;
   create role authenticator login noinherit;
   grant anon, authenticated, service_role to authenticator;
@@ -69,9 +82,20 @@ const pgrst = spawn(process.env.POSTGREST_BIN || "postgrest", [new URL("./postgr
 process.on("exit", () => pgrst.kill());
 
 // ---------------------------------------------------------------- auth shim
-// Auth queries go through PostgREST-independent direct access; serialize them.
-let chain = Promise.resolve();
-const q = (sql, params) => (chain = chain.then(() => db.query(sql, params)));
+// Auth queries go through PostgREST (as service role), so they are serialized with the app's own
+// requests on the single database session. Parameters are inlined as quoted literals (test stand-in only).
+const lit = (v) => (v === null || v === undefined ? "null" : `'${String(v).replace(/'/g, "''")}'`);
+async function q(sql, params = []) {
+  const text = sql.replace(/\$(\d+)/g, (_, i) => lit(params[Number(i) - 1]));
+  const res = await fetch("http://127.0.0.1:3001/rpc/e2e_auth_query", {
+    method: "POST",
+    headers: { authorization: `Bearer ${SERVICE}`, "content-type": "application/json" },
+    body: JSON.stringify({ p_sql: text }),
+  });
+  const body = await res.json();
+  if (!res.ok) throw new Error(`auth shim query failed: ${JSON.stringify(body)}`);
+  return { rows: body };
+}
 
 function userObj(u) {
   return {
@@ -226,6 +250,19 @@ async function fakeRazorpay(url, init = {}) {
 }
 const billingFetch = (url, init) => (String(url).startsWith(BILLING.razorpayApi) ? fakeRazorpay(url, init) : fetch(url, init));
 
+async function blogApi(req, res, url) {
+  const chunks = [];
+  for await (const c of req) chunks.push(c);
+  const request = new Request(`http://127.0.0.1:54321${url.pathname}`, {
+    method: req.method,
+    headers: Object.entries(req.headers).filter(([, v]) => typeof v === "string"),
+    body: ["GET", "HEAD"].includes(req.method) ? undefined : Buffer.concat(chunks),
+  });
+  const r = await handleBlogApi(request, { supabaseUrl: "http://127.0.0.1:54321", serviceKey: SERVICE, siteUrl: "http://localhost:3000" });
+  res.writeHead(r.status, Object.fromEntries(r.headers));
+  res.end(Buffer.from(await r.arrayBuffer()));
+}
+
 async function billing(req, res, url) {
   const chunks = [];
   for await (const c of req) chunks.push(c);
@@ -246,6 +283,7 @@ http
     try {
       // Edge Functions answer their own CORS preflight (only for the app's addresses).
       if (url.pathname.startsWith("/functions/v1/billing")) return await billing(req, res, url);
+      if (url.pathname.startsWith("/functions/v1/blog")) return await blogApi(req, res, url);
       if (req.method === "OPTIONS") {
         // Like Supabase: allow whatever headers the client asks for.
         res.writeHead(204, { ...CORS, "access-control-allow-headers": req.headers["access-control-request-headers"] ?? CORS["access-control-allow-headers"] });

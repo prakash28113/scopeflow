@@ -6,6 +6,8 @@ import { LogoFull } from "@/components/brand";
 import { SiteFooter } from "@/components/site-footer";
 import { HOME_FAQ as QA } from "@/lib/faq";
 import { useSeo } from "@/lib/seo";
+import { useBlogList } from "@/lib/blog";
+import { categoryOf, formatPostDate } from "@/lib/blog-content";
 import { AppPreview, FauxQr, LedgerSheet } from "./landing-parts";
 
 /**
@@ -26,6 +28,7 @@ export default function Landing() {
         <Steps />
         <Bento />
         <Workspace />
+        <FromTheBlog />
         <Questions />
         <Closing />
       </main>
@@ -117,6 +120,9 @@ function Nav() {
           </a>
           <Link to="/pricing" className="hidden rounded-lg px-3 py-2 text-[14px] font-medium text-[var(--lp-muted)] hover:text-white sm:block">
             Pricing
+          </Link>
+          <Link to="/blog" className="hidden rounded-lg px-3 py-2 text-[14px] font-medium text-[var(--lp-muted)] hover:text-white sm:block">
+            Blog
           </Link>
           <Link to="/login" className="whitespace-nowrap rounded-lg px-3 py-2 text-[14px] font-medium text-[var(--lp-muted)] hover:text-white">
             Sign in
@@ -447,6 +453,40 @@ function Workspace() {
 }
 
 // ---------------------------------------------------------------- questions
+
+// ---------------------------------------------------------------- blog
+
+/** The 3 newest blog posts. Loaded in the browser; hidden until there are posts. */
+function FromTheBlog() {
+  const list = useBlogList();
+  const posts = (list.data ?? []).slice(0, 3);
+  if (!posts.length) return null;
+  return (
+    <section className="relative mx-auto max-w-6xl px-4 py-20 sm:px-6" aria-labelledby="from-the-blog" data-testid="home-blog">
+      <div className="flex flex-wrap items-end justify-between gap-4">
+        <div className="max-w-2xl">
+          <p className="text-[13px] font-semibold uppercase tracking-[0.1em] text-[var(--lp-glow)]">From the blog</p>
+          <h2 id="from-the-blog" className="lp-display mt-3 text-[34px] leading-[1.05] text-white sm:text-[46px]">
+            Pricing, clients and growth.
+          </h2>
+        </div>
+        <Link to="/blog" className={btnGhost}>
+          All posts
+        </Link>
+      </div>
+      <div className="mt-10 grid grid-cols-1 gap-5 md:grid-cols-3">
+        {posts.map((p) => (
+          <Link key={p.slug} to={`/blog/${p.slug}`} onPointerMove={spotlight} className="lp-tile group flex flex-col rounded-3xl border border-white/[0.08] bg-[var(--lp-surface)] p-6 transition-colors hover:border-white/20">
+            <span className="text-[12px] font-semibold uppercase tracking-[0.08em] text-[var(--lp-glow)]">{categoryOf(p.category).label}</span>
+            <span className="mt-3 text-[19px] font-semibold leading-snug text-white group-hover:underline">{p.title}</span>
+            <span className="mt-2 line-clamp-3 text-[14px] leading-relaxed text-[var(--lp-muted)]">{p.description}</span>
+            <span className="mt-auto pt-5 text-[12px] text-[var(--lp-muted)]">{formatPostDate(p.published_at)}</span>
+          </Link>
+        ))}
+      </div>
+    </section>
+  );
+}
 
 function Questions() {
   return (
