@@ -1,4 +1,6 @@
 import { Link } from "react-router";
+import { useQueryClient } from "@tanstack/react-query";
+import { intentProps } from "@/lib/prefetch";
 import { useQuery } from "@tanstack/react-query";
 import { Alert, Badge, Card, CardHeader, EmptyState, PageHeader } from "@/components/ui";
 import { PageSpinner } from "@/components/app-shell";
@@ -11,6 +13,7 @@ import { localToday } from "@/lib/upcoming";
 
 /** Client decisions: what's with your clients, what's waiting on you, and what was decided recently. */
 export default function ApprovalsPage() {
+  const qc = useQueryClient();
   const q = useDashboard();
   const decisions = useQuery({
     queryKey: ["approvals", "recent"],
@@ -52,7 +55,7 @@ export default function ApprovalsPage() {
                 const days = waited(lastSent.get(p.id));
                 return (
                   <li key={p.id}>
-                    <Link to={`/projects/${p.id}`} className="flex items-start gap-3 px-5 py-3.5 transition-colors hover:bg-canvas">
+                    <Link to={`/projects/${p.id}`} {...intentProps(qc, `/projects/${p.id}`)} className="flex items-start gap-3 px-5 py-3.5 transition-colors hover:bg-canvas">
                       <span className="min-w-0 flex-1">
                         <span className="block truncate text-[14px] font-medium text-ink">Scope for {p.title}</span>
                         <span className="block text-[13px] text-muted">
@@ -94,7 +97,7 @@ export default function ApprovalsPage() {
             <ul className="divide-y divide-line" data-testid="approvals-on-you">
               {changesAsked.map((p) => (
                 <li key={p.id}>
-                  <Link to={`/projects/${p.id}`} className="flex items-start gap-3 px-5 py-3.5 transition-colors hover:bg-canvas">
+                  <Link to={`/projects/${p.id}`} {...intentProps(qc, `/projects/${p.id}`)} className="flex items-start gap-3 px-5 py-3.5 transition-colors hover:bg-canvas">
                     <span className="min-w-0 flex-1">
                       <span className="block truncate text-[14px] font-medium text-ink">{p.title}</span>
                       <span className="block text-[13px] text-muted">Your client asked for changes to the scope. Edit it and send it again.</span>

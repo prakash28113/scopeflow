@@ -1,3 +1,4 @@
+import { intentProps } from "@/lib/prefetch";
 import { useState, type FormEvent } from "react";
 import { methodLabel } from "@/lib/payments";
 import { invoiceStatus } from "@/lib/invoice";
@@ -61,19 +62,22 @@ function money(projects: ClientProject[]) {
   return [...by.entries()].map(([currency, t]) => ({ currency, ...t, outstanding: t.contracted - t.paid }));
 }
 
+/** The client list (shared with prefetching, so opening Clients is instant). */
+export const clientsQuery = {
+  queryKey: ["clients"],
+  queryFn: async () => {
+    const { data, error } = await supabase
+      .from("clients")
+      .select("id, name, email, company, phone, notes, billing_address, gstin, created_at, projects(id, title, status, currency, budget_cents, approved_extras_cents, created_at, milestones(title, amount_cents, status, paid_at, payment_note, paid_cents))")
+      .order("name");
+    if (error) throw error;
+    return data as unknown as ClientRow[];
+  },
+};
+
 export function ClientsPage() {
   const [adding, setAdding] = useState(false);
-  const q = useQuery({
-    queryKey: ["clients"],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("clients")
-        .select("id, name, email, company, phone, notes, billing_address, gstin, created_at, projects(id, title, status, currency, budget_cents, approved_extras_cents, created_at, milestones(title, amount_cents, status, paid_at, payment_note, paid_cents))")
-        .order("name");
-      if (error) throw error;
-      return data as unknown as ClientRow[];
-    },
-  });
+  const q = useQuery(clientsQuery);
   if (q.isLoading) return <PageSpinner />;
   if (q.isError || !q.data) return <Alert>Couldn't load your clients. Please refresh.</Alert>;
 
@@ -225,7 +229,7 @@ export function ClientPage() {
                 .sort((a, b) => b.created_at.localeCompare(a.created_at))
                 .map((p) => (
                   <li key={p.id}>
-                    <Link to={`/projects/${p.id}`} className="flex items-center gap-4 px-5 py-3.5 hover:bg-sunken/60">
+                    <Link to={`/projects/${p.id}`} {...intentProps(qc, `/projects/${p.id}`)} className="flex items-center gap-4 px-5 py-3.5 hover:bg-sunken/60">
                       <span className="min-w-0 flex-1 truncate text-sm font-medium">{p.title}</span>
                       <span className="num hidden text-[13px] text-ink-2 sm:block">{formatMoney(Number(p.budget_cents) + Number(p.approved_extras_cents), p.currency)}</span>
                       <StatusBadge status={p.status} />

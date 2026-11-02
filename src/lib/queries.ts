@@ -84,33 +84,32 @@ export function useDashboard(enabled = true) {
 
 export type FullProject = Project & { clients: Client; deliverables: Deliverable[]; milestones: Milestone[] };
 
-export function useProject(id: string | undefined) {
-  return useQuery({
+/** Everything the project page shows, fetched in one round (all requests at once). */
+export function projectQuery(id: string) {
+  return {
     queryKey: ["project", id],
-    enabled: Boolean(id),
     queryFn: async () => {
-      const project = unwrap(
-        await supabase.from("projects").select("*, clients(*), deliverables(*), milestones(*)").eq("id", id!).maybeSingle(),
-      ) as FullProject | null;
-      if (!project) return null;
-      const [snapshots, decisions, revisions, changeOrders, activity, links, invoices, payments, followUps, expenses] = await Promise.all([
-        supabase.from("scope_snapshots").select("*").eq("project_id", id!).order("version", { ascending: false }),
-        supabase.from("scope_decisions").select("*").eq("project_id", id!),
-        supabase.from("revision_requests").select("*").eq("project_id", id!).order("created_at", { ascending: false }),
-        supabase.from("change_orders").select("*").eq("project_id", id!).order("number", { ascending: false }),
-        supabase.from("activity_log").select("*").eq("project_id", id!).order("created_at", { ascending: false }).limit(60),
+      const [projectRes, snapshots, decisions, revisions, changeOrders, activity, links, invoices, payments, followUps, expenses] = await Promise.all([
+        supabase.from("projects").select("*, clients(*), deliverables(*), milestones(*)").eq("id", id).maybeSingle(),
+        supabase.from("scope_snapshots").select("*").eq("project_id", id).order("version", { ascending: false }),
+        supabase.from("scope_decisions").select("*").eq("project_id", id),
+        supabase.from("revision_requests").select("*").eq("project_id", id).order("created_at", { ascending: false }),
+        supabase.from("change_orders").select("*").eq("project_id", id).order("number", { ascending: false }),
+        supabase.from("activity_log").select("*").eq("project_id", id).order("created_at", { ascending: false }).limit(60),
         supabase
           .from("share_links")
           .select("id, project_id, created_at, expires_at, revoked_at")
-          .eq("project_id", id!)
+          .eq("project_id", id)
           .is("revoked_at", null)
           .order("created_at", { ascending: false })
           .limit(1),
-        supabase.from("client_invoices").select("id, number, milestone_id, voided_at, amount_cents, currency").eq("project_id", id!),
-        supabase.from("payments").select("*").eq("project_id", id!).order("paid_on", { ascending: true }),
-        supabase.from("follow_ups").select("id, due_on, note, done_at").eq("project_id", id!).is("done_at", null).order("due_on"),
-        supabase.from("expenses").select("amount_cents, currency").eq("project_id", id!),
+        supabase.from("client_invoices").select("id, number, milestone_id, voided_at, amount_cents, currency").eq("project_id", id),
+        supabase.from("payments").select("*").eq("project_id", id).order("paid_on", { ascending: true }),
+        supabase.from("follow_ups").select("id, due_on, note, done_at").eq("project_id", id).is("done_at", null).order("due_on"),
+        supabase.from("expenses").select("amount_cents, currency").eq("project_id", id),
       ]);
+      const project = unwrap(projectRes) as FullProject | null;
+      if (!project) return null;
       project.deliverables.sort((a, b) => a.position - b.position);
       project.milestones.sort((a, b) => a.position - b.position);
       return {
@@ -127,7 +126,11 @@ export function useProject(id: string | undefined) {
         expenses: unwrap(expenses) as { amount_cents: number; currency: string }[],
       };
     },
-  });
+  };
+}
+
+export function useProject(id: string | undefined) {
+  return useQuery({ ...projectQuery(id ?? ""), enabled: Boolean(id) });
 }
 
 export function useNotifications() {

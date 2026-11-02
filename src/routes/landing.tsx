@@ -33,26 +33,40 @@ export default function Landing() {
   );
 }
 
-/** Adds data-in to [data-reveal] elements as they scroll into view (CSS does the rest). */
+/**
+ * Adds data-in to [data-reveal] elements once they reach the lower part of the screen, or have been
+ * scrolled past (so a fast flick never leaves a section blank). CSS does the animation.
+ */
 function useReveal() {
   useEffect(() => {
-    const els = [...document.querySelectorAll<HTMLElement>("[data-reveal]")];
-    if (!("IntersectionObserver" in window)) {
-      els.forEach((el) => (el.dataset.in = "1"));
-      return;
-    }
-    const io = new IntersectionObserver(
-      (entries) =>
-        entries.forEach((e) => {
-          if (e.isIntersecting) {
-            (e.target as HTMLElement).dataset.in = "1";
-            io.unobserve(e.target);
-          }
-        }),
-      { rootMargin: "0px 0px -10% 0px", threshold: 0.1 },
-    );
-    els.forEach((el) => io.observe(el));
-    return () => io.disconnect();
+    let pending = [...document.querySelectorAll<HTMLElement>("[data-reveal]")];
+    let frame = 0;
+    const check = () => {
+      frame = 0;
+      const limit = window.innerHeight * 0.9;
+      pending = pending.filter((el) => {
+        if (el.getBoundingClientRect().top < limit) {
+          el.dataset.in = "1";
+          return false;
+        }
+        return true;
+      });
+      if (!pending.length) stop();
+    };
+    const onScroll = () => {
+      if (!frame) frame = requestAnimationFrame(check);
+    };
+    const stop = () => {
+      window.removeEventListener("scroll", onScroll);
+      window.removeEventListener("resize", onScroll);
+    };
+    window.addEventListener("scroll", onScroll, { passive: true });
+    window.addEventListener("resize", onScroll);
+    check();
+    return () => {
+      stop();
+      cancelAnimationFrame(frame);
+    };
   }, []);
 }
 
@@ -125,7 +139,7 @@ function Hero() {
       <div className="lp-floor" aria-hidden />
       <div className="relative mx-auto grid max-w-6xl grid-cols-1 items-center gap-14 px-4 pb-20 pt-12 sm:px-6 sm:pt-20 lg:grid-cols-[1fr_1fr] lg:gap-12 lg:pb-32 lg:pt-24">
         <div className="lp-hero-copy">
-          <p className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 text-[13px] text-[var(--lp-muted)] backdrop-blur">
+          <p className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 text-[13px] text-[var(--lp-muted)]">
             <span className="lp-live size-1.5 rounded-full bg-[#32d583]" aria-hidden />
             New: GST invoices with UPI, and one-tap PDFs
           </p>
@@ -167,7 +181,7 @@ function Hero() {
 
 function Float({ className, tone, title, body }: { className: string; tone: "in" | "out"; title: string; body: string }) {
   return (
-    <div className={cx("lp-float absolute z-10 hidden items-center gap-3 rounded-2xl border border-white/10 bg-[#121620]/85 px-3.5 py-2.5 shadow-2xl backdrop-blur-xl sm:flex", className)} aria-hidden>
+    <div className={cx("lp-float absolute z-10 hidden items-center gap-3 rounded-2xl border border-white/10 bg-[#121620]/95 px-3.5 py-2.5 shadow-2xl sm:flex", className)} aria-hidden>
       <span className={cx("grid size-8 place-items-center rounded-lg", tone === "out" ? "bg-[#f04438]/20 text-[#fda29b]" : "bg-[#17b26a]/20 text-[#75e0a7]")}>
         {tone === "out" ? (
           <svg width="16" height="16" viewBox="0 0 16 16">
@@ -202,7 +216,7 @@ const OUTCOME: { title: string; body: string; tone: "in" | "warn" | "out" }[] = 
 
 function Triage() {
   return (
-    <section className="relative border-t border-white/[0.06]">
+    <section className="lp-cv relative border-t border-white/[0.06]">
       <div className="mx-auto max-w-6xl px-4 py-24 sm:px-6 lg:py-32">
         <div className="mx-auto max-w-2xl text-center" data-reveal>
           <h2 className="lp-display text-[36px] leading-[1.02] text-white sm:text-[54px]">Every request, sorted the moment it arrives.</h2>
@@ -218,7 +232,7 @@ function Triage() {
         >
           <div className="space-y-3" aria-hidden>
             {INCOMING.map((m, i) => (
-              <div key={m.text} className="lp-in rounded-2xl border border-white/10 bg-white/[0.04] p-4 backdrop-blur" style={{ "--i": i } as CSSProperties}>
+              <div key={m.text} className="lp-in rounded-2xl border border-white/10 bg-white/[0.04] p-4" style={{ "--i": i } as CSSProperties}>
                 <p className="flex items-center justify-between text-[12px] text-[var(--lp-muted)]">
                   <span>{m.from}</span>
                   <span className="rounded-full bg-white/[0.06] px-2 py-0.5">{m.via}</span>
@@ -271,7 +285,7 @@ const STEPS: [string, string][] = [
 
 function Steps() {
   return (
-    <section id="how" className="relative scroll-mt-16 border-t border-white/[0.06]">
+    <section id="how" className="lp-cv relative scroll-mt-16 border-t border-white/[0.06]">
       <div className="mx-auto max-w-6xl px-4 py-24 sm:px-6 lg:py-32">
         <div className="max-w-2xl" data-reveal>
           <h2 className="lp-display text-[36px] leading-[1.02] text-white sm:text-[54px]">From “yes” to “paid”, in five steps.</h2>
@@ -310,7 +324,7 @@ function Tile({ className, title, body, children }: { className?: string; title:
 
 function Bento() {
   return (
-    <section id="product" className="relative scroll-mt-16 border-t border-white/[0.06]">
+    <section id="product" className="lp-cv relative scroll-mt-16 border-t border-white/[0.06]">
       <div className="mx-auto max-w-6xl px-4 py-24 sm:px-6 lg:py-32">
         <div className="max-w-2xl" data-reveal>
           <h2 className="lp-display text-[36px] leading-[1.02] text-white sm:text-[54px]">Everything a client job needs.</h2>
@@ -409,7 +423,7 @@ function Bento() {
 
 function Workspace() {
   return (
-    <section className="relative border-t border-white/[0.06]">
+    <section className="lp-cv relative border-t border-white/[0.06]">
       <div className="lp-aurora lp-aurora-low" aria-hidden>
         <span />
         <span />
@@ -433,7 +447,7 @@ function Workspace() {
 
 function Questions() {
   return (
-    <section className="border-t border-white/[0.06]">
+    <section className="lp-cv border-t border-white/[0.06]">
       <div className="mx-auto grid max-w-6xl grid-cols-1 gap-10 px-4 py-24 sm:px-6 lg:grid-cols-[0.8fr_1.2fr] lg:gap-16 lg:py-28">
         <h2 className="lp-display text-[34px] leading-[1.05] text-white sm:text-[46px]" data-reveal>
           Questions freelancers ask.

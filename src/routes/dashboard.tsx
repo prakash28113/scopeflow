@@ -1,5 +1,7 @@
 import type { ReactNode } from "react";
 import { Link } from "react-router";
+import { useQueryClient } from "@tanstack/react-query";
+import { intentProps } from "@/lib/prefetch";
 import { currentDueDate, received } from "@/lib/pricing";
 import { Alert, Card, CardHeader, EmptyState, Figure, Figures, LinkButton, Meter, PageHeader, StatusBadge, cx } from "@/components/ui";
 import { PageSpinner } from "@/components/app-shell";
@@ -24,6 +26,7 @@ function sumByCurrency(items: { currency: string; amount: number }[]) {
 }
 
 export default function Dashboard() {
+  const qc = useQueryClient();
   const profile = useProfile();
   const q = useDashboard();
   if (q.isLoading) return <PageSpinner />;
@@ -127,7 +130,7 @@ export default function Dashboard() {
                     return (
                       <li key={p.id}>
                         <Link
-                          to={`/projects/${p.id}`}
+                          to={`/projects/${p.id}`} {...intentProps(qc, `/projects/${p.id}`)}
                           className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-1.5 px-5 py-3.5 transition-colors hover:bg-canvas md:grid-cols-[minmax(0,1fr)_112px_92px_104px_96px]"
                         >
                           <span className="min-w-0">

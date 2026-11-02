@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Link, NavLink, Navigate, Outlet, useLocation } from "react-router";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { intentProps, prefetchPath } from "@/lib/prefetch";
+import { preloadAppPages } from "@/routes/loaders";
 import { useDashboard } from "@/lib/queries";
 import { needsAttention, remindersFrom } from "@/lib/use-reminders";
 import { Button, LinkButton, Skeleton, cx } from "./ui";
@@ -127,6 +129,7 @@ function useNavGroups(approvalsWaiting: number): { label: string; items: NavItem
 }
 
 function NavContent({ onNavigate }: { onNavigate?: () => void }) {
+  const qc = useQueryClient();
   const { session } = useAuth();
   const dash = useDashboard(Boolean(session));
   const waiting = dash.data ? dash.data.projects.filter((p) => p.status === "awaiting_approval").length + dash.data.changeOrders.length : 0;
@@ -143,6 +146,7 @@ function NavContent({ onNavigate }: { onNavigate?: () => void }) {
                   to={it.to}
                   end={it.end}
                   onClick={onNavigate}
+                  {...intentProps(qc, it.to)}
                   className={({ isActive }) =>
                     cx(
                       "group relative flex h-9 items-center gap-2.5 rounded-lg px-2.5 text-[14px] font-medium transition-colors",
@@ -326,6 +330,18 @@ export function AppShell() {
   const attention = dash.data ? needsAttention(remindersFrom(dash.data)) : 0;
   const [menu, setMenu] = useState(false);
   useEffect(() => setMenu(false), [location.pathname]);
+  const qc = useQueryClient();
+  // Once the app has loaded: download every page's code, and the client, invoice and analytics data, in the background.
+  useEffect(() => {
+    if (!session) return;
+    preloadAppPages();
+    const t = setTimeout(() => {
+      prefetchPath(qc, "/clients");
+      prefetchPath(qc, "/invoices");
+      prefetchPath(qc, "/analytics");
+    }, 1500);
+    return () => clearTimeout(t);
+  }, [session, qc]);
 
   return (
     <div className="min-h-dvh lg:pl-[248px]">

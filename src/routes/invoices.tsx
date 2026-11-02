@@ -19,15 +19,18 @@ type ListedInvoice = InvoiceRow & { milestones: { status: string; paid_at: strin
 
 const SELECT = "*, milestones(status, paid_at, paid_cents), projects(id, title)";
 
+/** The invoice list (shared with prefetching, so opening Invoices is instant). */
+export const invoicesQuery = {
+  queryKey: ["client-invoices"],
+  queryFn: async () => {
+    const { data, error } = await supabase.from("client_invoices").select(SELECT).order("created_at", { ascending: false });
+    if (error) throw error;
+    return data as ListedInvoice[];
+  },
+};
+
 function useInvoices() {
-  return useQuery({
-    queryKey: ["client-invoices"],
-    queryFn: async () => {
-      const { data, error } = await supabase.from("client_invoices").select(SELECT).order("created_at", { ascending: false });
-      if (error) throw error;
-      return data as ListedInvoice[];
-    },
-  });
+  return useQuery(invoicesQuery);
 }
 
 const statusOf = (i: ListedInvoice, today: string) => invoiceStatus(i, i.milestones?.status === "paid", today, Number(i.milestones?.paid_cents ?? 0));

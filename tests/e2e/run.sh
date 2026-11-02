@@ -33,4 +33,4 @@ NO_PROXY=127.0.0.1,localhost WRANGLER_SEND_METRICS=false npx wrangler dev --port
   --var SUPABASE_URL:http://127.0.0.1:54321 --var "SUPABASE_ANON_KEY:$ANON" --var GOOGLE_SIGNIN_ENABLED:true > "$LOGS/wrangler.log" 2>&1 & WRANGLER_PID=$!
 for _ in $(seq 1 60); do curl -sf -o /dev/null http://127.0.0.1:3000/ && break; sleep 0.5; done
 
-BASE=http://localhost:3000 node "$HERE/workflow.mjs"
+BASE=http://localhost:3000 node "$HERE/${E2E_SCRIPT:-workflow.mjs}"
