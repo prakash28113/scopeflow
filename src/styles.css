@@ -132,16 +132,17 @@ dialog.sf-dialog::backdrop {
 
 /* ------------------------------------------------------------------ home page */
 .landing {
-  --lp-paper: #f7f9fc;
-  --lp-rule: #dce5f2;
-  --lp-rule-strong: #b9c7dc;
-  --lp-blue: #005dd4;
-  --lp-blue-soft: #e3eefd;
-  --lp-ink: #101828;
+  /* The home page uses the app's design tokens, so both read as one product. */
+  --lp-paper: var(--color-canvas);
+  --lp-rule: var(--color-line);
+  --lp-rule-strong: var(--color-line-strong);
+  --lp-blue: var(--color-accent);
+  --lp-blue-soft: var(--color-accent-soft);
+  --lp-ink: var(--color-ink);
   --lp-body: #475467;
-  --lp-red: #d92d20;
-  --lp-green: #067647;
-  --lp-green-soft: #dcfae6;
+  --lp-red: #d92d20; /* the ledger's margin red */
+  --lp-green: var(--color-positive);
+  --lp-green-soft: var(--color-positive-soft);
 }
 .lp-display {
   font-family: "Bricolage Grotesque Variable", "Inter Variable", ui-sans-serif, system-ui, sans-serif;
@@ -296,7 +297,11 @@ dialog.sf-dialog::backdrop {
   box-shadow: 0 30px 60px -34px rgb(16 24 40 / 0.55);
 }
 .lp-closing {
-  background-image: repeating-linear-gradient(to bottom, transparent 0 39px, rgb(255 255 255 / 0.08) 39px 40px);
+  background-image: repeating-linear-gradient(to bottom, transparent 0 39px, rgb(255 255 255 / 0.05) 39px 40px);
+}
+/* The app preview: a quiet frame, like a browser window, with a soft drop. */
+.lp-app {
+  box-shadow: 0 1px 0 var(--color-line), 0 40px 80px -48px rgb(16 24 40 / 0.45);
 }
 .lp-qa summary::-webkit-details-marker {
   display: none;

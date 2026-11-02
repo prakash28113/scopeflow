@@ -64,6 +64,8 @@ try {
   await f.getByRole("heading", { name: "Every client job, on the record." }).waitFor();
   await f.getByRole("link", { name: "Start free" }).first().waitFor();
   assert.equal(await f.locator(".lp-row").count(), 7); // the example job record
+  // The app preview is a picture of the product: built from the app's components, not focusable.
+  assert.equal(await f.locator(".lp-app[inert]").count(), 1);
   await f.getByText("Does ScopeFlow take payments?").click();
   await f.getByText("It records the payments you receive.").waitFor();
   {

@@ -1,7 +1,7 @@
 import "@fontsource-variable/bricolage-grotesque/opsz.css";
 import { useMemo, type ReactNode } from "react";
 import { Link } from "react-router";
-import { cx } from "@/components/ui";
+import { Figure, Figures, Meter, StatusBadge, buttonClass, cx } from "@/components/ui";
 import { LogoFull } from "@/components/brand";
 import { SiteFooter } from "@/components/site-footer";
 
@@ -18,7 +18,7 @@ export default function Landing() {
       <main>
         <Hero />
         <Steps />
-        <Money />
+        <Workspace />
         <ClientSide />
         <Safe />
         <Questions />
@@ -29,10 +29,9 @@ export default function Landing() {
   );
 }
 
-const btnPrimary =
-  "inline-flex items-center justify-center whitespace-nowrap rounded-full bg-[var(--lp-blue)] px-6 py-3 text-[15px] font-semibold text-white transition hover:bg-[#004cb0] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--lp-blue)]";
-const btnQuiet =
-  "inline-flex items-center justify-center whitespace-nowrap rounded-full px-5 py-3 text-[15px] font-semibold text-[var(--lp-ink)] ring-1 ring-[var(--lp-rule-strong)] transition hover:bg-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--lp-blue)]";
+/** The app's own buttons (design system), one size up for the home page. */
+const btnPrimary = cx(buttonClass("primary"), "h-11 px-5 text-[15px] font-semibold");
+const btnQuiet = cx(buttonClass("secondary"), "h-11 px-5 text-[15px] font-semibold");
 
 function Nav() {
   return (
@@ -42,16 +41,25 @@ function Nav() {
           <LogoFull className="h-7 w-auto sm:h-8" />
         </Link>
         <nav className="flex items-center gap-1 sm:gap-2" aria-label="Main">
-          <a href="#how" className="hidden rounded-full px-3 py-2 text-[14px] font-medium text-[var(--lp-body)] hover:text-[var(--lp-ink)] md:block">
+          <a
+            href="#how"
+            className="hidden rounded-lg px-3 py-2 text-[14px] font-medium text-[var(--lp-body)] hover:bg-white hover:text-[var(--lp-ink)] md:block"
+          >
             How it works
           </a>
-          <Link to="/pricing" className="hidden rounded-full px-3 py-2 text-[14px] font-medium text-[var(--lp-body)] hover:text-[var(--lp-ink)] sm:block">
+          <Link
+            to="/pricing"
+            className="hidden rounded-lg px-3 py-2 text-[14px] font-medium text-[var(--lp-body)] hover:bg-white hover:text-[var(--lp-ink)] sm:block"
+          >
             Pricing
           </Link>
-          <Link to="/login" className="whitespace-nowrap rounded-full px-3 py-2 text-[14px] font-medium text-[var(--lp-body)] hover:text-[var(--lp-ink)]">
+          <Link
+            to="/login"
+            className="whitespace-nowrap rounded-lg px-3 py-2 text-[14px] font-medium text-[var(--lp-body)] hover:bg-white hover:text-[var(--lp-ink)]"
+          >
             Sign in
           </Link>
-          <Link to="/signup" className="whitespace-nowrap rounded-full bg-[var(--lp-ink)] px-4 py-2 text-[14px] font-semibold text-white hover:bg-[#1d2939]">
+          <Link to="/signup" className={buttonClass("primary", "sm")}>
             Start free
           </Link>
         </nav>
@@ -80,8 +88,8 @@ function Hero() {
         <div>
           <h1 className="lp-display text-[46px] leading-[0.98] sm:text-[68px] lg:text-[76px]">Every client job, on the record.</h1>
           <p className="mt-6 max-w-[34rem] text-[17px] leading-relaxed text-[var(--lp-body)] sm:text-[19px]">
-            Quote it, get it approved, check every “small change” against it, invoice with GST and see what you actually earned. One
-            record per job, from the first quote to the last payment.
+            Quote it, get it approved, check every “small change” against it, invoice with GST and see what you actually earned. One record
+            per job, from the first quote to the last payment.
           </p>
           <div className="mt-8 flex flex-wrap gap-3">
             <Link to="/signup" className={btnPrimary}>
@@ -92,8 +100,8 @@ function Hero() {
             </a>
           </div>
           <p className="mt-4 max-w-[34rem] text-[13px] leading-relaxed text-[var(--lp-body)]">
-            Free for 2 active projects, no card. Your clients never need an account. Made for designers, developers, editors and
-            other independent creatives.
+            Free for 2 active projects, no card. Your clients never need an account. Made for designers, developers, editors and other
+            independent creatives.
           </p>
         </div>
         <LedgerSheet />
@@ -112,7 +120,14 @@ function Mark({ kind }: { kind: Entry["mark"] }) {
         {kind === "out" ? (
           <path d="M8 3.5v5.2M8 11.6v.6" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" />
         ) : (
-          <path d="M3.8 8.4 6.7 11.2 12.3 5" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
+          <path
+            d="M3.8 8.4 6.7 11.2 12.3 5"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2.2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
         )}
       </svg>
     </span>
@@ -122,13 +137,18 @@ function Mark({ kind }: { kind: Entry["mark"] }) {
 /** The record of one job, written in line by line (once; instantly with reduced motion). */
 function LedgerSheet() {
   return (
-    <figure className="lp-sheet relative" aria-label="Example record of one job: quote, approval, a request by WhatsApp, a request outside the scope, a change order, a GST invoice and a UPI payment, with profit so far">
+    <figure
+      className="lp-sheet relative"
+      aria-label="Example record of one job: quote, approval, a request by WhatsApp, a request outside the scope, a change order, a GST invoice and a UPI payment, with profit so far"
+    >
       <figcaption className="flex items-baseline justify-between gap-3 px-5 pb-3 pt-5 sm:px-6">
         <span>
           <span className="lp-display block text-[22px] leading-tight sm:text-[24px]">Brand kit</span>
           <span className="text-[13px] text-[var(--lp-body)]">Chai &amp; Co., for Raman Studio</span>
         </span>
-        <span className="rounded-full bg-[var(--lp-blue-soft)] px-2.5 py-1 text-[12px] font-semibold text-[var(--lp-blue)]">In progress</span>
+        <span className="rounded-full bg-[var(--lp-blue-soft)] px-2.5 py-1 text-[12px] font-semibold text-[var(--lp-blue)]">
+          In progress
+        </span>
       </figcaption>
       <ol className="lp-rows">
         {LEDGER.map((e, i) => (
@@ -139,13 +159,25 @@ function LedgerSheet() {
             </span>
             <span className="min-w-0">
               <span className="block text-[14px] font-medium leading-snug">{e.what}</span>
-              {e.note ? <span className={cx("block text-[12px] leading-snug", e.mark === "out" ? "font-semibold text-[var(--lp-red)]" : "text-[var(--lp-body)]")}>{e.note}</span> : null}
+              {e.note ? (
+                <span
+                  className={cx(
+                    "block text-[12px] leading-snug",
+                    e.mark === "out" ? "font-semibold text-[var(--lp-red)]" : "text-[var(--lp-body)]",
+                  )}
+                >
+                  {e.note}
+                </span>
+              ) : null}
             </span>
             <span className={cx("lp-amt tabular-nums", e.mark === "paid" && "text-[var(--lp-green)]")}>{e.amount ?? ""}</span>
           </li>
         ))}
       </ol>
-      <dl className="lp-total grid grid-cols-2 gap-x-4 gap-y-1 px-5 py-4 text-[13px] tabular-nums sm:grid-cols-4 sm:px-6" style={{ ["--i" as string]: LEDGER.length }}>
+      <dl
+        className="lp-total grid grid-cols-2 gap-x-4 gap-y-1 px-5 py-4 text-[13px] tabular-nums sm:grid-cols-4 sm:px-6"
+        style={{ ["--i" as string]: LEDGER.length }}
+      >
         <div>
           <dt className="text-[var(--lp-body)]">Contract</dt>
           <dd className="font-semibold">₹51,000</dd>
@@ -184,7 +216,11 @@ function Steps() {
             n={1}
             title="Quote the work"
             body="List the deliverables, how many revision rounds each gets, and what's not included. Price each line as a fixed fee, by the hour or per unit, add a discount and GST, and set how long the quote stays open."
-            facts={["Start from a template, or save your own", "Scope check flags vague words like “etc.” before you send", "Download the quote as a PDF"]}
+            facts={[
+              "Start from a template, or save your own",
+              "Scope check flags vague words like “etc.” before you send",
+              "Download the quote as a PDF",
+            ]}
             visual={<QuoteVisual />}
           />
           <Step
@@ -198,7 +234,10 @@ function Steps() {
             n={3}
             title="Check every request against it"
             body="Requests from the client link are counted against the rounds they approved. When they ask on WhatsApp, on a call or by email, log it in a few taps and it's counted the same way."
-            facts={["Anything beyond the rounds, or outside the deliverables, is flagged", "Deliverable due dates, with reminders before they slip"]}
+            facts={[
+              "Anything beyond the rounds, or outside the deliverables, is flagged",
+              "Deliverable due dates, with reminders before they slip",
+            ]}
             visual={<RequestVisual />}
           />
           <Step
@@ -212,7 +251,11 @@ function Steps() {
             n={5}
             title="Invoice and get paid"
             body="Create a GST tax invoice from any payment in a tap, with a UPI QR code your client can scan. Record full or part payments with the date and method, and see what's still owed."
-            facts={["CGST and SGST or IGST worked out for you", "One-tap PDF for you and your client", "ScopeFlow tracks payments. It never holds your money"]}
+            facts={[
+              "CGST and SGST or IGST worked out for you",
+              "One-tap PDF for you and your client",
+              "ScopeFlow tracks payments. It never holds your money",
+            ]}
             visual={<InvoiceVisual />}
             last
           />
@@ -222,9 +265,28 @@ function Steps() {
   );
 }
 
-function Step({ n, title, body, facts, visual, last }: { n: number; title: string; body: string; facts: string[]; visual: ReactNode; last?: boolean }) {
+function Step({
+  n,
+  title,
+  body,
+  facts,
+  visual,
+  last,
+}: {
+  n: number;
+  title: string;
+  body: string;
+  facts: string[];
+  visual: ReactNode;
+  last?: boolean;
+}) {
   return (
-    <li className={cx("lp-step grid grid-cols-[32px_minmax(0,1fr)] gap-x-3 gap-y-8 py-12 lg:grid-cols-[64px_1fr_1fr] lg:gap-10 lg:py-16", !last && "border-b border-[var(--lp-rule)]")}>
+    <li
+      className={cx(
+        "lp-step grid grid-cols-[32px_minmax(0,1fr)] gap-x-3 gap-y-8 py-12 lg:grid-cols-[64px_1fr_1fr] lg:gap-10 lg:py-16",
+        !last && "border-b border-[var(--lp-rule)]",
+      )}
+    >
       <span className="lp-display pt-0.5 text-[30px] leading-none text-[var(--lp-blue)] lg:text-[48px]" aria-hidden>
         {n}
       </span>
@@ -235,7 +297,14 @@ function Step({ n, title, body, facts, visual, last }: { n: number; title: strin
           {facts.map((f) => (
             <li key={f} className="flex gap-3 text-[15px]">
               <svg width="18" height="18" viewBox="0 0 16 16" className="mt-[3px] shrink-0 text-[var(--lp-blue)]" aria-hidden>
-                <path d="M3.8 8.4 6.7 11.2 12.3 5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                <path
+                  d="M3.8 8.4 6.7 11.2 12.3 5"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
               </svg>
               {f}
             </li>
@@ -313,7 +382,9 @@ function ApproveVisual() {
           <span>₹45,000</span>
         </p>
         <div className="mt-3 rounded-full bg-[var(--lp-blue)] py-2 text-center text-[13px] font-semibold text-white">Approve scope</div>
-        <div className="mt-2 rounded-full py-2 text-center text-[13px] font-semibold ring-1 ring-[var(--lp-rule-strong)]">Request changes</div>
+        <div className="mt-2 rounded-full py-2 text-center text-[13px] font-semibold ring-1 ring-[var(--lp-rule-strong)]">
+          Request changes
+        </div>
       </div>
     </div>
   );
@@ -331,7 +402,12 @@ function RequestVisual() {
 
 function Req({ text, how, tag, tone }: { text: string; how: string; tag: string; tone: "ok" | "out" }) {
   return (
-    <div className={cx("rounded-xl border-l-[3px] bg-white py-2.5 pl-3 pr-3", tone === "out" ? "border-[var(--lp-red)]" : "border-[var(--lp-blue)]")}>
+    <div
+      className={cx(
+        "rounded-xl border-l-[3px] bg-white py-2.5 pl-3 pr-3",
+        tone === "out" ? "border-[var(--lp-red)]" : "border-[var(--lp-blue)]",
+      )}
+    >
       <p className="text-[14px]">“{text}”</p>
       <p className="mt-0.5 text-[12px] text-[var(--lp-body)]">{how}</p>
       <p className={cx("mt-1 text-[12px] font-semibold", tone === "out" ? "text-[var(--lp-red)]" : "text-[var(--lp-blue)]")}>{tag}</p>
@@ -363,7 +439,14 @@ function ChangeOrderVisual() {
       </dl>
       <p className="mt-3 flex items-center gap-2 text-[13px] font-semibold text-[var(--lp-green)]">
         <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden>
-          <path d="M3.8 8.4 6.7 11.2 12.3 5" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
+          <path
+            d="M3.8 8.4 6.7 11.2 12.3 5"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2.2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
         </svg>
         Approved by Meera on 12 Nov
       </p>
@@ -411,7 +494,9 @@ function InvoiceVisual() {
           <p className="text-[12px] font-semibold text-[var(--lp-blue)]">Tax invoice</p>
           <p className="lp-display text-[20px] tabular-nums">RS-2026-004</p>
         </div>
-        <span className="rounded-full bg-[var(--lp-green-soft)] px-2.5 py-1 text-[12px] font-semibold text-[var(--lp-green)]">Paid by UPI</span>
+        <span className="rounded-full bg-[var(--lp-green-soft)] px-2.5 py-1 text-[12px] font-semibold text-[var(--lp-green)]">
+          Paid by UPI
+        </span>
       </div>
       <dl className="mt-3 space-y-1.5 text-[13px] tabular-nums">
         <div className="flex justify-between">
@@ -442,91 +527,236 @@ function InvoiceVisual() {
   );
 }
 
-// ---------------------------------------------------------------- money
+// ---------------------------------------------------------------- the app itself
 
-function Money() {
-  const rows: [string, string, string, string][] = [
-    ["Brand kit", "₹25,500", "−₹2,400", "₹23,100"],
-    ["Menu card", "₹18,000", "−₹600", "₹17,400"],
-    ["Launch reel", "₹12,000", "−₹4,800", "₹7,200"],
-  ];
-  const reminders: [string, string, "out" | "warn" | "info"][] = [
-    ["Invoice RS-2026-003 is overdue", "₹9,000 due 4 days ago", "out"],
-    ["Follow up with Chai & Co.", "Scope sent 3 days ago, not approved yet", "warn"],
-    ["“Packaging label” is due tomorrow", "Brand kit", "info"],
-  ];
+function Workspace() {
   return (
     <section className="border-b border-[var(--lp-rule)] bg-white">
-      <div className="mx-auto grid max-w-6xl grid-cols-1 gap-12 px-4 py-20 sm:px-6 lg:grid-cols-[0.9fr_1.1fr] lg:items-start lg:gap-16 lg:py-28">
-        <div className="max-w-[32rem]">
-          <h2 className="lp-display text-[36px] leading-[1.02] sm:text-[52px]">Know what you actually earned.</h2>
-          <p className="mt-5 text-[17px] leading-relaxed text-[var(--lp-body)]">
-            Log what you spend for work and link it to a project. ScopeFlow shows money received, invoiced and spent, and the profit on
-            every project, by month, quarter or financial year.
-          </p>
-          <ul className="mt-6 space-y-2.5 text-[15px]">
-            {[
-              "April-to-March financial years and their quarters",
-              "Profit and margin for each project",
-              "Reminders for overdue invoices, late payments, waiting approvals and deadlines",
-              "Your own follow-ups, on the day you set",
-            ].map((f) => (
-              <li key={f} className="flex gap-3">
-                <svg width="18" height="18" viewBox="0 0 16 16" className="mt-[3px] shrink-0 text-[var(--lp-blue)]" aria-hidden>
-                  <path d="M3.8 8.4 6.7 11.2 12.3 5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                </svg>
-                {f}
-              </li>
-            ))}
-          </ul>
-        </div>
-        <div className="space-y-5">
-          <div className="lp-slip p-5 sm:p-6">
-            <div className="flex flex-wrap items-baseline justify-between gap-2">
-              <p className="lp-display text-[20px]">Profit by project</p>
-              <p className="text-[13px] text-[var(--lp-body)]">Q3 FY 2026–27</p>
-            </div>
-            <div className="mt-3">
-              <table className="w-full text-[12px] tabular-nums sm:text-[13px]">
-                <caption className="sr-only">Example: profit by project</caption>
-                <thead className="text-left text-[12px] text-[var(--lp-body)]">
-                  <tr>
-                    <th scope="col" className="pb-2 font-medium">Project</th>
-                    <th scope="col" className="pb-2 text-right font-medium">Received</th>
-                    <th scope="col" className="pb-2 text-right font-medium">Expenses</th>
-                    <th scope="col" className="pb-2 text-right font-medium">Profit</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {rows.map(([p, r, e, pr]) => (
-                    <tr key={p} className="border-t border-[var(--lp-rule)]">
-                      <td className="py-2 font-medium">{p}</td>
-                      <td className="py-2 text-right">{r}</td>
-                      <td className="py-2 text-right text-[var(--lp-body)]">{e}</td>
-                      <td className="py-2 text-right font-semibold">{pr}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+      <div className="mx-auto max-w-6xl px-4 py-20 sm:px-6 lg:py-28">
+        <div className="grid grid-cols-1 gap-8 lg:grid-cols-[1fr_1fr] lg:items-end lg:gap-16">
+          <h2 className="lp-display text-[36px] leading-[1.02] sm:text-[52px]">Your whole business, in one workspace.</h2>
+          <div className="max-w-[34rem]">
+            <p className="text-[17px] leading-relaxed text-[var(--lp-body)]">
+              Projects, clients, quotes, invoices, approvals and expenses, with what needs you today at the top. Profit for every project,
+              by month, quarter or April-to-March financial year.
+            </p>
           </div>
-          <div className="lp-slip p-5 sm:p-6">
-            <p className="lp-display text-[20px]">Needs you today</p>
-            <ul className="mt-3">
-              {reminders.map(([t, d, tone]) => (
-                <li key={t} className="flex gap-3 border-t border-[var(--lp-rule)] py-2.5 first:border-t-0">
-                  <span className={cx("mt-1.5 size-2 shrink-0 rounded-full", tone === "out" ? "bg-[var(--lp-red)]" : tone === "warn" ? "bg-[#dc6803]" : "bg-[var(--lp-blue)]")} aria-hidden />
-                  <span>
-                    <span className="block text-[14px] font-medium">{t}</span>
-                    <span className="block text-[12px] text-[var(--lp-body)]">{d}</span>
-                  </span>
-                </li>
+        </div>
+        <AppPreview />
+        <ul className="mt-10 grid grid-cols-1 gap-x-10 gap-y-4 text-[15px] sm:grid-cols-2 lg:grid-cols-4">
+          {[
+            "Reminders for overdue payments, waiting approvals and deadlines",
+            "Every project's status, deadline, value and what's paid",
+            "Money received month by month, and profit per project",
+            "The same app on your phone, with nothing hidden",
+          ].map((f) => (
+            <li key={f} className="flex gap-3 border-t border-[var(--lp-rule-strong)] pt-3">
+              <svg width="18" height="18" viewBox="0 0 16 16" className="mt-[3px] shrink-0 text-[var(--lp-blue)]" aria-hidden>
+                <path
+                  d="M3.8 8.4 6.7 11.2 12.3 5"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </svg>
+              {f}
+            </li>
+          ))}
+        </ul>
+      </div>
+    </section>
+  );
+}
+
+const PREVIEW_NAV: [string, string[]][] = [
+  ["Workspace", ["Overview", "Projects", "Clients"]],
+  ["Work", ["Quotations", "Invoices", "Approvals"]],
+  ["Business", ["Analytics", "Expenses"]],
+];
+
+/**
+ * The Overview screen, built from the app's own components with example data (fictional names and amounts).
+ * A picture of the product, not a working copy: it can't be focused or clicked.
+ */
+function AppPreview() {
+  const projects: {
+    title: string;
+    client: string;
+    status: "active" | "awaiting_approval" | "completed";
+    due: string;
+    value: string;
+    paid: number;
+  }[] = [
+    { title: "Brand kit", client: "Chai & Co.", status: "active", due: "30 Nov", value: "₹51,000", paid: 50 },
+    { title: "Menu card", client: "Tiffin Room", status: "awaiting_approval", due: "8 Dec", value: "₹18,000", paid: 0 },
+    { title: "Launch reel", client: "Kora Studio", status: "completed", due: "28 Oct", value: "₹12,000", paid: 100 },
+  ];
+  const months: [string, number][] = [
+    ["Jun", 38],
+    ["Jul", 52],
+    ["Aug", 30],
+    ["Sep", 64],
+    ["Oct", 48],
+    ["Nov", 72],
+  ];
+  return (
+    <div
+      className="lp-app mt-12 overflow-hidden rounded-2xl border border-[var(--lp-rule-strong)] bg-canvas text-left"
+      role="img"
+      aria-label="The ScopeFlow Overview screen: key figures, reminders by urgency, projects with status, deadline, value and payment progress, and money received each month"
+      inert
+    >
+      <div className="grid grid-cols-1 md:grid-cols-[200px_minmax(0,1fr)]" aria-hidden>
+        {/* Sidebar */}
+        <div className="hidden flex-col bg-chrome p-3 md:flex">
+          <div className="flex items-center gap-2 px-1.5 py-1.5">
+            <LogoFull tone="white" className="h-[20px] w-auto" />
+          </div>
+          <div className={cx(buttonClass("primary", "sm"), "mt-3 w-full")}>+ New project</div>
+          {PREVIEW_NAV.map(([group, items]) => (
+            <div key={group} className="mt-4">
+              <p className="px-2 pb-1 text-[11px] font-medium text-chrome-muted">{group}</p>
+              {items.map((it) => (
+                <p
+                  key={it}
+                  className={cx(
+                    "relative rounded-md px-2 py-1.5 text-[12.5px] font-medium",
+                    it === "Overview" ? "bg-chrome-2 text-white" : "text-chrome-text",
+                  )}
+                >
+                  {it === "Overview" ? <span className="absolute inset-y-1.5 left-0 w-[3px] rounded-r-full bg-accent" /> : null}
+                  {it}
+                  {it === "Approvals" ? (
+                    <span className="num float-right rounded-full bg-accent px-1.5 text-[10px] font-semibold leading-[16px] text-white">
+                      2
+                    </span>
+                  ) : null}
+                </p>
               ))}
-            </ul>
+            </div>
+          ))}
+        </div>
+        {/* Overview (on phones: the app's compact top bar, as in the real app) */}
+        <div className="min-w-0">
+          <div className="flex h-12 items-center gap-2 border-b border-line bg-canvas px-3 md:hidden">
+            <svg
+              width="18"
+              height="18"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.7"
+              strokeLinecap="round"
+              className="text-ink-2"
+            >
+              <path d="M4 7h16M4 12h16M4 17h16" />
+            </svg>
+            <LogoFull className="h-[18px] w-auto" />
+            <span className="flex-1" />
+            <svg
+              width="18"
+              height="18"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.7"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              className="text-ink-2"
+            >
+              <path d="M6 8.5a6 6 0 1 1 12 0c0 6.5 2.5 8.5 2.5 8.5h-17S6 15 6 8.5" />
+              <path d="M10.3 20.5a1.9 1.9 0 0 0 3.4 0" />
+            </svg>
+          </div>
+          <div className="min-w-0 p-4 sm:p-6">
+            <p className="text-[12px] text-muted">Monday, 16 November</p>
+            <div className="mt-1 flex flex-wrap items-end justify-between gap-3">
+              <p className="display text-[24px] font-semibold leading-tight text-ink sm:text-[28px]">Hello, Raman</p>
+              <span className={buttonClass("primary", "sm")}>New project</span>
+            </div>
+            <Figures label="Example figures" className="mb-4 mt-4">
+              <Figure label="Active projects" tone="accent" value="4" note="6 open in total" />
+              <Figure label="Waiting for approval" tone="warning" value="2" note="Scopes and change orders" />
+              <Figure label="Outstanding" tone="danger" value="₹63,500" note="1 payment overdue" noteTone="danger" />
+              <Figure label="Collected" tone="positive" value="₹1,24,000" note="Received on live projects" />
+            </Figures>
+            <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_230px]">
+              <div className="min-w-0 space-y-4">
+                <div className="rounded-xl border border-line bg-surface">
+                  <p className="border-b border-line px-4 py-2.5 text-[13px] font-semibold text-ink">Reminders · 3</p>
+                  {(
+                    [
+                      ["Invoice RS-2026-003 is overdue", "₹9,000 due 4 days ago", "bg-[#f04438]", "Overdue", "text-danger"],
+                      [
+                        "Follow up with Tiffin Room",
+                        "Scope sent 3 days ago, not approved yet",
+                        "bg-[#f79009]",
+                        "Follow up",
+                        "text-warning",
+                      ],
+                      ["“Packaging label” is due tomorrow", "Brand kit, for Chai & Co.", "bg-accent", "Coming up", "text-accent"],
+                    ] as const
+                  ).map(([t, d, rule, label, tone]) => (
+                    <div key={t} className="relative flex items-start gap-3 border-b border-line px-4 py-2.5 last:border-b-0">
+                      <span className={cx("absolute inset-y-2 left-0 w-[3px] rounded-r-full", rule)} />
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-[12.5px] font-medium text-ink">{t}</span>
+                        <span className="block truncate text-[11.5px] text-muted">{d}</span>
+                      </span>
+                      <span className={cx("hidden text-[11.5px] font-medium sm:block", tone)}>{label}</span>
+                    </div>
+                  ))}
+                </div>
+                <div className="rounded-xl border border-line bg-surface">
+                  <p className="border-b border-line px-4 py-2.5 text-[13px] font-semibold text-ink">Projects</p>
+                  {projects.map((p) => (
+                    <div
+                      key={p.title}
+                      className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1 border-b border-line px-4 py-2.5 last:border-b-0 sm:grid-cols-[minmax(0,1fr)_148px_52px_72px_60px]"
+                    >
+                      <span className="min-w-0">
+                        <span className="block truncate text-[12.5px] font-medium text-ink">{p.title}</span>
+                        <span className="block truncate text-[11.5px] text-muted">{p.client}</span>
+                      </span>
+                      <span className="justify-self-end sm:justify-self-start">
+                        <StatusBadge status={p.status} />
+                      </span>
+                      <span className="num hidden text-[12px] text-ink-2 sm:block">{p.due}</span>
+                      <span className="num hidden justify-self-end text-[12px] font-medium text-ink sm:block">{p.value}</span>
+                      <span className="hidden sm:block">
+                        {p.status === "awaiting_approval" ? (
+                          <span className="text-[11px] text-subtle">Not yet</span>
+                        ) : (
+                          <Meter value={p.paid} max={100} tone="positive" />
+                        )}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div className="hidden rounded-xl border border-line bg-surface p-4 lg:block">
+                <p className="text-[13px] font-semibold text-ink">Money in</p>
+                <p className="mt-2 text-[11.5px] text-muted">This month</p>
+                <p className="display num text-[20px] font-semibold text-ink">₹72,000</p>
+                <div className="mt-4 grid h-[96px] grid-cols-6 items-end gap-1.5">
+                  {months.map(([m, v], i) => (
+                    <div key={m} className="flex h-full flex-col items-center justify-end gap-1">
+                      <div
+                        className={cx("w-full max-w-[22px] rounded-t-[3px]", i === months.length - 1 ? "bg-accent" : "bg-accent/35")}
+                        style={{ height: `${v}px` }}
+                      />
+                      <span className="text-[10px] text-muted">{m}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </div>
-    </section>
+    </div>
   );
 }
 
@@ -539,8 +769,8 @@ function ClientSide() {
         <div className="lg:order-2">
           <h2 className="lp-display text-[36px] leading-[1.02] sm:text-[52px]">Your client needs only the link.</h2>
           <p className="mt-5 max-w-[32rem] text-[17px] leading-relaxed text-[var(--lp-body)]">
-            One private page per project, made for phones. It shows exactly what was agreed and where things stand, so there's less
-            to explain on calls.
+            One private page per project, made for phones. It shows exactly what was agreed and where things stand, so there's less to
+            explain on calls.
           </p>
           <dl className="mt-8 grid max-w-[34rem] gap-x-8 gap-y-5 sm:grid-cols-2">
             {[
@@ -561,7 +791,9 @@ function ClientSide() {
             <div className="rounded-[26px] bg-white p-4 pt-6 text-[12px]">
               <p className="text-[11px] text-[var(--lp-body)]">Raman Studio</p>
               <p className="lp-display mt-0.5 text-[19px] leading-tight">Brand kit</p>
-              <p className="mt-1 inline-block rounded-full bg-[var(--lp-blue-soft)] px-2 py-0.5 text-[11px] font-semibold text-[var(--lp-blue)]">In progress</p>
+              <p className="mt-1 inline-block rounded-full bg-[var(--lp-blue-soft)] px-2 py-0.5 text-[11px] font-semibold text-[var(--lp-blue)]">
+                In progress
+              </p>
               <div className="mt-4 space-y-3">
                 {[
                   ["Logo and colours", 2, 2, "Delivered"],
@@ -575,7 +807,10 @@ function ClientSide() {
                     </p>
                     <p className="mt-1 flex items-center gap-1" aria-hidden>
                       {Array.from({ length: of as number }, (_, i) => (
-                        <i key={i} className={cx("h-1.5 w-6 rounded-full", i < (used as number) ? "bg-[var(--lp-blue)]" : "bg-[var(--lp-rule)]")} />
+                        <i
+                          key={i}
+                          className={cx("h-1.5 w-6 rounded-full", i < (used as number) ? "bg-[var(--lp-blue)]" : "bg-[var(--lp-rule)]")}
+                        />
                       ))}
                       <span className="ml-1 text-[11px] text-[var(--lp-body)]">
                         {used} of {of} rounds used
@@ -590,7 +825,9 @@ function ClientSide() {
                   <span>₹25,500</span>
                 </p>
                 <p className="mt-0.5 text-[11px] text-[var(--lp-body)]">Due 30 Nov</p>
-                <div className="mt-2 rounded-full bg-[var(--lp-blue)] py-1.5 text-center text-[12px] font-semibold text-white">Pay with UPI</div>
+                <div className="mt-2 rounded-full bg-[var(--lp-blue)] py-1.5 text-center text-[12px] font-semibold text-white">
+                  Pay with UPI
+                </div>
               </div>
             </div>
           </div>
@@ -604,8 +841,14 @@ function ClientSide() {
 
 function Safe() {
   const items: [string, string][] = [
-    ["Agreements can't be changed afterwards", "Each approved version is stored with a fingerprint of its exact content, plus who approved it and when. The approval record downloads as a PDF."],
-    ["Only you see your business", "Your clients see only their own project page. Expenses, notes and your other clients stay private to you."],
+    [
+      "Agreements can't be changed afterwards",
+      "Each approved version is stored with a fingerprint of its exact content, plus who approved it and when. The approval record downloads as a PDF.",
+    ],
+    [
+      "Only you see your business",
+      "Your clients see only their own project page. Expenses, notes and your other clients stay private to you.",
+    ],
     ["Backed up every week", "The whole database is encrypted and backed up weekly, and every backup is checked by restoring it."],
     ["Your money never passes through us", "ScopeFlow records payments; clients pay you directly by UPI or however you agree."],
   ];
@@ -629,11 +872,26 @@ function Safe() {
 // ---------------------------------------------------------------- questions
 
 const QA: [string, string][] = [
-  ["Does my client need an account?", "No. They open a private link on any phone or computer, review the scope and approve it, or ask for changes."],
-  ["Is it free?", "Yes, for 2 active projects and 5 clients at a time, with every core feature: scopes, approvals, revision tracking, change orders, quotes, invoices and payment tracking. Expenses and analytics are free for everyone during the beta. No card needed."],
-  ["Can I make GST invoices?", "Yes. Add your GSTIN and address once, then create a tax invoice from any payment. CGST and SGST, or IGST, are worked out for you, and numbering stays in order."],
-  ["What if my client asks for changes on WhatsApp?", "Log the request on the project in a few taps. It's checked against the approved scope like any other request, and your client sees it on their page."],
-  ["Does ScopeFlow take payments?", "No. It records the payments you receive. Your client pays you directly, for example by scanning the UPI QR code on the invoice."],
+  [
+    "Does my client need an account?",
+    "No. They open a private link on any phone or computer, review the scope and approve it, or ask for changes.",
+  ],
+  [
+    "Is it free?",
+    "Yes, for 2 active projects and 5 clients at a time, with every core feature: scopes, approvals, revision tracking, change orders, quotes, invoices and payment tracking. Expenses and analytics are free for everyone during the beta. No card needed.",
+  ],
+  [
+    "Can I make GST invoices?",
+    "Yes. Add your GSTIN and address once, then create a tax invoice from any payment. CGST and SGST, or IGST, are worked out for you, and numbering stays in order.",
+  ],
+  [
+    "What if my client asks for changes on WhatsApp?",
+    "Log the request on the project in a few taps. It's checked against the approved scope like any other request, and your client sees it on their page.",
+  ],
+  [
+    "Does ScopeFlow take payments?",
+    "No. It records the payments you receive. Your client pays you directly, for example by scanning the UPI QR code on the invoice.",
+  ],
   ["Can I use it on my phone?", "Yes. Everything works on a phone, for you and for your clients."],
 ];
 
@@ -647,7 +905,13 @@ function Questions() {
             <details key={q} className="lp-qa group border-b border-[var(--lp-rule)]">
               <summary className="flex cursor-pointer list-none items-center justify-between gap-4 py-4 text-[16px] font-semibold">
                 {q}
-                <svg width="18" height="18" viewBox="0 0 16 16" className="shrink-0 text-[var(--lp-body)] transition-transform group-open:rotate-45" aria-hidden>
+                <svg
+                  width="18"
+                  height="18"
+                  viewBox="0 0 16 16"
+                  className="shrink-0 text-[var(--lp-body)] transition-transform group-open:rotate-45"
+                  aria-hidden
+                >
                   <path d="M8 3v10M3 8h10" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
                 </svg>
               </summary>
@@ -665,16 +929,22 @@ function Questions() {
 function Closing() {
   return (
     <section className="px-4 py-16 sm:px-6 sm:py-20">
-      <div className="lp-closing relative mx-auto max-w-6xl overflow-hidden rounded-[28px] bg-[var(--lp-blue)] px-6 py-14 text-white sm:px-12 sm:py-20">
+      <div className="lp-closing relative mx-auto max-w-6xl overflow-hidden rounded-[24px] bg-chrome px-6 py-14 text-white sm:px-12 sm:py-20">
         <h2 className="lp-display relative max-w-3xl text-[38px] leading-[1.02] sm:text-[60px]">Start your next job on the record.</h2>
-        <p className="relative mt-5 max-w-xl text-[17px] leading-relaxed text-white/85">
+        <p className="relative mt-5 max-w-xl text-[17px] leading-relaxed text-chrome-text">
           Set up your first scope in a few minutes. Free for 2 active projects, no card needed.
         </p>
         <div className="relative mt-8 flex flex-wrap gap-3">
-          <Link to="/signup" className="inline-flex items-center justify-center rounded-full bg-white px-6 py-3 text-[15px] font-semibold text-[var(--lp-blue)] hover:bg-white/90">
+          <Link to="/signup" className={btnPrimary}>
             Start free
           </Link>
-          <Link to="/pricing" className="inline-flex items-center justify-center rounded-full px-6 py-3 text-[15px] font-semibold text-white ring-1 ring-white/45 hover:ring-white">
+          <Link
+            to="/pricing"
+            className={cx(
+              buttonClass("ghost"),
+              "h-11 px-5 text-[15px] font-semibold text-white ring-1 ring-chrome-line hover:bg-chrome-2 hover:text-white",
+            )}
+          >
             See pricing
           </Link>
         </div>
