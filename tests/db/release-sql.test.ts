@@ -7,9 +7,9 @@ import { PGlite } from "@electric-sql/pglite";
 import { readFileSync, readdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { join } from "node:path";
-import { SUPABASE_STUB, createDb } from "./harness";
+import { SUPABASE_STUB, createDb, createUser } from "./harness";
 // @ts-expect-error — plain ESM script
-import { run, allowlistSql, parseEmails, CLOSED_SENTINEL, EXPECTED, billingConfig, purchasableSql } from "../../scripts/ci/release.mjs";
+import { run, allowlistSql, parseEmails, CLOSED_SENTINEL, EXPECTED, billingConfig, purchasableSql, complimentaryCheckSql, complimentaryGrantSql } from "../../scripts/ci/release.mjs";
 
 const dir = fileURLToPath(new URL("../../supabase/migrations/", import.meta.url));
 const migrations = readdirSync(dir).filter((f) => f.endsWith(".sql")).map((name) => ({ name, body: readFileSync(join(dir, name), "utf8") }));
@@ -141,5 +141,21 @@ describe("putting plans on sale", () => {
     expect(await onSale()).toEqual([]);
     await db.exec(purchasableSql(null));
     expect(await onSale()).toEqual([]);
+  });
+});
+
+describe("complimentary plans", () => {
+  it("give the account the plan with no end date, once (re-runs change nothing)", async () => {
+    const db = await createDb();
+    const c = { email: "owner@example.com", plan: "studio" };
+    expect((await db.query(complimentaryCheckSql(c))).rows[0]).toEqual({ found: false, already: false });
+    await createUser(db, c.email, "Owner", { plan: "free" });
+    expect((await db.query(complimentaryCheckSql(c))).rows[0]).toEqual({ found: true, already: false });
+    await db.exec(complimentaryGrantSql(c));
+    expect((await db.query(complimentaryCheckSql(c))).rows[0]).toEqual({ found: true, already: true });
+    const [sub] = (await db.query<Record<string, unknown>>("select s.plan_id, s.status, s.current_period_end from subscriptions s join profiles p on p.id = s.owner_id where p.email = $1", [c.email])).rows;
+    expect(sub).toEqual({ plan_id: "studio", status: "active", current_period_end: null });
+    const [{ eff }] = (await db.query<{ eff: string }>("select (public._effective_plan(p.id)).id as eff from profiles p where email = $1", [c.email])).rows;
+    expect(eff).toBe("studio");
   });
 });

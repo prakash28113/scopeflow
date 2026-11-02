@@ -1,5 +1,5 @@
 {
-  "_note": "Public site settings. customDomains: the first is the main address; add a domain only after Cloudflare shows it as Active (Websites → the domain). The workers.dev address keeps working. passwordResetEmail: turn on only after a free SMTP provider (e.g. Brevo) is set up in Supabase → Authentication → Emails → SMTP, because Supabase's built-in email only reaches project team members. googleClientId: the public OAuth Client ID from Google Cloud (ends in .apps.googleusercontent.com); empty hides the Google button. The client secret never goes here: it goes only into Supabase → Authentication → Providers → Google. billingPlans: paid plans put on sale when live Razorpay keys are configured (Studio stays in early access until its team and white-label features exist). blogAuthors: accounts (sign-in emails) that can write blog posts and create publishing keys.",
+  "_note": "Public site settings. customDomains: the first is the main address; add a domain only after Cloudflare shows it as Active (Websites → the domain). The workers.dev address keeps working. passwordResetEmail: turn on only after a free SMTP provider (e.g. Brevo) is set up in Supabase → Authentication → Emails → SMTP, because Supabase's built-in email only reaches project team members. googleClientId: the public OAuth Client ID from Google Cloud (ends in .apps.googleusercontent.com); empty hides the Google button. The client secret never goes here: it goes only into Supabase → Authentication → Providers → Google. billingPlans: paid plans put on sale when live Razorpay keys are configured (Studio stays in early access until its team and white-label features exist). blogAuthors: accounts (sign-in emails) that can write blog posts and create publishing keys. complimentaryPlans: accounts given a paid plan free with no end date (applied by the release once the account exists).",
   "customDomains": [
     "scopeflow.in",
     "www.scopeflow.in"
@@ -11,5 +11,11 @@
   ],
   "blogAuthors": [
     "prakashmummidisetti@gmail.com"
+  ],
+  "complimentaryPlans": [
+    {
+      "email": "prakashmummidisetti@gmail.com",
+      "plan": "studio"
+    }
   ]
 }

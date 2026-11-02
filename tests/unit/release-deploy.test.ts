@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 // @ts-expect-error — plain ESM script
-import { run, publicSupabaseConfig, signupsOpen, parseEmails, parseDomains, billingConfig, purchasableSql, blogAuthors, blogAuthorsSql } from "../../scripts/ci/release.mjs";
+import { run, publicSupabaseConfig, signupsOpen, parseEmails, parseDomains, billingConfig, purchasableSql, blogAuthors, blogAuthorsSql, complimentaryPlans } from "../../scripts/ci/release.mjs";
 
 const REF = "abcdefghijklmnopqrst";
 const SUPA = `https://${REF}.supabase.co`;
@@ -297,5 +297,14 @@ describe("blog authors", () => {
     expect(() => blogAuthors(JSON.stringify({ blogAuthors: ["x'); drop table blog_posts; --"] }))).toThrow(/Not a valid email/);
     expect(blogAuthorsSql([])).toContain("delete from public.blog_authors;");
     expect(blogAuthorsSql(["a@b.co"])).toContain("insert into public.blog_authors (email) values ('a@b.co')");
+  });
+});
+
+describe("complimentary plans", () => {
+  it("are read from config and validated", () => {
+    expect(complimentaryPlans(JSON.stringify({ complimentaryPlans: [{ email: "Me@Example.com", plan: "studio" }] }))).toEqual([{ email: "me@example.com", plan: "studio" }]);
+    expect(complimentaryPlans("{}")).toEqual([]);
+    expect(() => complimentaryPlans(JSON.stringify({ complimentaryPlans: [{ email: "me@example.com", plan: "free" }] }))).toThrow(/Invalid complimentary/);
+    expect(() => complimentaryPlans(JSON.stringify({ complimentaryPlans: [{ email: "x'; drop table plans; --", plan: "studio" }] }))).toThrow();
   });
 });
