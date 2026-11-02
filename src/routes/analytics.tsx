@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from "react";
 import { Link } from "react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Alert, Button, Card, CardHeader, EmptyState, Field, Input, Meter, PageHeader, Select, Tag } from "@/components/ui";
+import { Alert, Button, Card, CardHeader, EmptyState, Field, Figure, Figures, Input, Meter, PageHeader, Select, Tag } from "@/components/ui";
 import { ActionButton } from "@/components/form-bits";
 import { PageSpinner } from "@/components/app-shell";
 import { MonthlyChart } from "@/components/monthly-chart";
@@ -36,7 +36,7 @@ import {
   type ReceiptFact,
 } from "@/lib/analytics";
 
-type ProjectRow = {
+export type ProjectRow = {
   id: string;
   title: string;
   currency: string;
@@ -49,9 +49,9 @@ type ProjectRow = {
   milestones: { id: string; amount_cents: number; status: string; paid_at: string | null; due_date: string | null; paid_cents: number }[];
   deliverables: { progress: Progress }[];
 };
-type ExpenseRow = { id: string; spent_on: string; category: string; description: string | null; amount_cents: number; currency: string; project_id: string | null; projects: { title: string } | null };
+export type ExpenseRow = { id: string; spent_on: string; category: string; description: string | null; amount_cents: number; currency: string; project_id: string | null; projects: { title: string } | null };
 
-function useAnalyticsData() {
+export function useAnalyticsData() {
   return useQuery({
     queryKey: ["analytics"],
     queryFn: async () => {
@@ -72,20 +72,6 @@ function useAnalyticsData() {
       };
     },
   });
-}
-
-function Kpi({ label, value, delta, vs, hint, testid }: { label: string; value: string; delta?: number | null; vs: string; hint?: string; testid?: string }) {
-  return (
-    <Card className="px-4 py-3">
-      <p className="text-[12px] text-muted">{label}</p>
-      <p className="num mt-1 truncate text-xl font-semibold tracking-[-0.02em]" title={value} data-testid={testid}>
-        {value}
-      </p>
-      <p className="num mt-0.5 text-[12px] text-muted">
-        {delta === null || delta === undefined ? (hint ?? " ") : `${delta > 0 ? "▲" : delta < 0 ? "▼" : "■"} ${Math.abs(delta)}% vs ${vs}`}
-      </p>
-    </Card>
-  );
 }
 
 export default function AnalyticsPage() {
@@ -110,6 +96,7 @@ export default function AnalyticsPage() {
   const currency = currencyChoice ?? (used.includes(profile.data?.default_currency ?? "") ? profile.data!.default_currency : (used[0] ?? profile.data?.default_currency ?? "INR"));
   const currencies = [...new Set([currency, ...used])];
   const fmt = (n: number) => formatMoney(n, currency);
+  const vsPrev = (d: number | null) => (d === null ? undefined : `${d > 0 ? "▲" : d < 0 ? "▼" : "■"} ${Math.abs(d)}% vs ${period.prevLabel}`);
 
   const payments: PaymentFact[] = projects.flatMap((p) =>
     p.approved_at && p.status !== "cancelled"
@@ -225,12 +212,12 @@ export default function AnalyticsPage() {
         ) : null}
       </div>
 
-      <div className="mb-6 grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <Kpi label="Received" value={fmt(cur.received)} delta={prev ? change(cur.received, prev.received) : null} vs={period.prevLabel} hint="Payments marked as received" testid="kpi-received" />
-        <Kpi label="Invoiced" value={fmt(cur.invoiced)} delta={prev ? change(cur.invoiced, prev.invoiced) : null} vs={period.prevLabel} hint="Invoices issued (not void)" />
-        <Kpi label="Expenses" value={fmt(cur.expenses)} delta={prev ? change(cur.expenses, prev.expenses) : null} vs={period.prevLabel} hint="From your expense log" testid="kpi-expenses" />
-        <Kpi label="Profit" value={fmt(cur.profit)} delta={prev ? change(cur.profit, prev.profit) : null} vs={period.prevLabel} hint="Received − expenses" testid="kpi-profit" />
-      </div>
+      <Figures label="Key figures">
+        <Figure label="Received" tone="accent" value={fmt(cur.received)} note={vsPrev(prev ? change(cur.received, prev.received) : null) ?? "Payments marked as received"} testid="kpi-received" />
+        <Figure label="Invoiced" tone="neutral" value={fmt(cur.invoiced)} note={vsPrev(prev ? change(cur.invoiced, prev.invoiced) : null) ?? "Invoices issued (not void)"} />
+        <Figure label="Expenses" tone="warning" value={fmt(cur.expenses)} note={vsPrev(prev ? change(cur.expenses, prev.expenses) : null) ?? "From your expense log"} testid="kpi-expenses" />
+        <Figure label="Profit" tone="positive" value={fmt(cur.profit)} note={vsPrev(prev ? change(cur.profit, prev.profit) : null) ?? "Received minus expenses"} testid="kpi-profit" />
+      </Figures>
 
       {!hasAnything ? (
         <Card className="mb-6">
@@ -345,12 +332,43 @@ export default function AnalyticsPage() {
 
       <ProfitByProject rows={profits} currency={currency} />
 
-      <ExpensesCard period={period} currency={currency} expenses={monthExpenses} byCategory={byCategory} projects={inCur.filter((p) => p.status !== "cancelled")} today={today} />
+      <Card>
+        <CardHeader
+          title="Spending by category"
+          description={`${period.label} · ${currency}`}
+          action={
+            <Link to="/expenses" className="text-[13px] font-medium text-accent hover:underline">
+              Log and manage expenses
+            </Link>
+          }
+        />
+        {byCategory.length ? (
+          <ul className="space-y-3 px-5 py-4" data-testid="spending-by-category">
+            {byCategory.map(([c, v]) => (
+              <li key={c} className="text-[13px]">
+                <div className="mb-1 flex justify-between gap-3">
+                  <span className="truncate font-medium">{categoryLabel(c)}</span>
+                  <span className="num">{fmt(v)}</span>
+                </div>
+                <Meter value={v} max={byCategory[0][1]} tone="warning" />
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="px-5 py-4 text-[13px] text-muted">
+            No expenses in this period.{" "}
+            <Link to="/expenses" className="font-medium text-accent hover:underline">
+              Log one
+            </Link>{" "}
+            so your profit is real.
+          </p>
+        )}
+      </Card>
     </>
   );
 }
 
-function ExpensesCard({
+export function ExpensesCard({
   period,
   currency,
   expenses,

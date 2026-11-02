@@ -54,7 +54,7 @@ export function InvoiceDocument({ inv, status, paidAt, paidCents = 0, className 
       ) : null}
       <header className="border-b border-line pb-6">
         <p className="text-[12px] font-semibold uppercase tracking-[0.08em] text-accent">{invoiceTitle(inv)}</p>
-        <h1 className="num mt-1 text-2xl font-semibold tracking-[-0.02em]">{inv.number}</h1>
+        <h1 className="display num mt-1 text-[26px] font-semibold leading-tight">{inv.number}</h1>
         <dl className="mt-3 grid max-w-sm grid-cols-2 gap-x-4 gap-y-1 text-[13px]">
           <dt className="text-muted">Invoice date</dt>
           <dd>{formatDate(inv.issue_date)}</dd>

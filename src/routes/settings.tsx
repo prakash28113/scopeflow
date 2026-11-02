@@ -1,8 +1,8 @@
-import { useState, type FormEvent } from "react";
+import { useState, type FormEvent, type ReactNode } from "react";
 import { useNavigate } from "react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import { z } from "zod";
-import { Alert, Card, CardHeader, Field, Input, Logo, PageHeader, Select, Textarea } from "@/components/ui";
+import { Alert, Card, Field, Input, Logo, PageHeader, Select, Textarea } from "@/components/ui";
 import { SubmitButton } from "@/components/form-bits";
 import { PageSpinner } from "@/components/app-shell";
 import { useToast } from "@/components/toast";
@@ -64,7 +64,7 @@ export function OnboardingPage() {
       <main className="flex flex-1 justify-center px-4 pb-16 pt-6 sm:pt-14">
         <div className="w-full max-w-[420px]">
           <p className="text-[13px] font-medium text-accent">Step 1 of 2</p>
-          <h1 className="mt-2 text-2xl font-semibold tracking-[-0.02em]">Set up your workspace</h1>
+          <h1 className="display mt-2 text-[28px] font-semibold leading-tight">Set up your workspace</h1>
           <p className="mb-8 mt-1.5 text-sm text-muted">Two quick details, then you'll create your first project.</p>
           <WorkspaceForm profile={profile.data} submitLabel="Continue" onDone={() => navigate("/projects/new?welcome=1", { replace: true })} />
         </div>
@@ -210,38 +210,38 @@ export function SettingsPage() {
   const toast = useToast();
   if (!profile.data) return <PageSpinner />;
   return (
-    <div className="mx-auto max-w-2xl">
-      <PageHeader title="Settings" description={profile.data.email} />
-      <div className="space-y-6">
-        <Card>
-          <CardHeader title="Workspace" description="Shown to clients on their project page." />
-          <div className="p-5">
-            <WorkspaceForm profile={profile.data} submitLabel="Save" onDone={() => toast("positive", "Settings saved.")} />
-          </div>
-        </Card>
-        <Card>
-          <CardHeader title="Getting paid" description="For projects in Indian rupees, clients see a “Pay via UPI” button and QR code on each unpaid milestone." />
-          <div className="p-5">
-            <UpiForm current={profile.data.upi_id ?? ""} />
-          </div>
-        </Card>
-        <Card>
-          <CardHeader title="Invoice details" description="Shown on every invoice you create. Changing them later never alters invoices you've already issued." />
-          <div className="p-5">
-            <InvoiceDetailsForm
-              address={profile.data.business_address ?? ""}
-              gstin={profile.data.gstin ?? ""}
-              prefix={profile.data.invoice_prefix ?? "INV"}
-            />
-          </div>
-        </Card>
-        <Card>
-          <CardHeader title="Password" description={PASSWORD_RESET_EMAIL ? "Change the password you sign in with." : "Password resets go through support during the beta, so keep this somewhere safe."} />
-          <div className="p-5">
-            <PasswordForm email={profile.data.email} />
-          </div>
-        </Card>
+    <>
+      <PageHeader title="Settings" description={`Signed in as ${profile.data.email}`} />
+      <div className="divide-y divide-line border-t border-line">
+        <SettingsSection title="Workspace" description="Your name and business, shown to clients on their project page.">
+          <WorkspaceForm profile={profile.data} submitLabel="Save" onDone={() => toast("positive", "Settings saved.")} />
+        </SettingsSection>
+        <SettingsSection title="Getting paid" description="For projects in Indian rupees, clients see a “Pay via UPI” button and QR code on each unpaid payment.">
+          <UpiForm current={profile.data.upi_id ?? ""} />
+        </SettingsSection>
+        <SettingsSection title="Invoice details" description="Shown on every invoice you create. Changing them later never alters invoices you've already issued.">
+          <InvoiceDetailsForm address={profile.data.business_address ?? ""} gstin={profile.data.gstin ?? ""} prefix={profile.data.invoice_prefix ?? "INV"} />
+        </SettingsSection>
+        <SettingsSection
+          title="Password"
+          description={PASSWORD_RESET_EMAIL ? "Change the password you sign in with." : "Password resets go through support during the beta, so keep this somewhere safe."}
+        >
+          <PasswordForm email={profile.data.email} />
+        </SettingsSection>
       </div>
-    </div>
+    </>
+  );
+}
+
+/** One settings group: what it is on the left, the form on the right (stacked on phones). */
+function SettingsSection({ title, description, children }: { title: string; description: string; children: ReactNode }) {
+  return (
+    <section className="grid grid-cols-1 gap-4 py-7 lg:grid-cols-[280px_minmax(0,1fr)] lg:gap-10">
+      <div>
+        <h2 className="text-[15px] font-semibold text-ink">{title}</h2>
+        <p className="mt-1 text-[13px] leading-relaxed text-muted">{description}</p>
+      </div>
+      <Card className="max-w-2xl p-5 sm:p-6">{children}</Card>
+    </section>
   );
 }

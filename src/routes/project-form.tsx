@@ -126,7 +126,7 @@ export function ProjectForm({ projectId, initial, showTemplates = false }: { pro
           />
           {saved.data?.length ? (
             <div className="border-b border-line px-5 py-4" data-testid="saved-templates">
-              <p className="mb-2 text-[12px] font-semibold uppercase tracking-[0.06em] text-muted">Your templates</p>
+              <p className="mb-2 text-[13px] font-medium text-ink-2">Your templates</p>
               <ul className="flex flex-wrap gap-2">
                 {saved.data.map((t) => (
                   <li key={t.id} className={cx("inline-flex items-center rounded-lg border text-[13px] font-medium", applied === t.name ? "border-accent bg-accent-soft text-accent-hover" : "border-line-strong")}>

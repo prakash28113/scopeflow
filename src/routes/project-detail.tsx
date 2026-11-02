@@ -108,19 +108,21 @@ export default function ProjectPage() {
       <ShareLinkDialog link={newLink} clientName={p.clients.name} clientEmail={p.clients.email} projectTitle={p.title} onClose={() => setNewLink(null)} />
       <PageHeader
         eyebrow={
-          <Link to="/dashboard" className="hover:text-ink">
-            ← Dashboard
+          <Link to="/projects" className="hover:text-ink">
+            ← Projects
           </Link>
         }
         title={p.title}
-        description={
-          <span className="inline-flex flex-wrap items-center gap-2">
+        meta={
+          <>
             <StatusBadge status={p.status} />
-            <span className="break-all">
-              {p.clients.name}
-              {p.clients.company ? ` · ${p.clients.company}` : ""} · {p.clients.email}
-            </span>
-          </span>
+            <Link to={`/clients/${p.client_id}`} className="font-medium text-ink-2 hover:text-ink hover:underline">
+              {p.clients.company ? `${p.clients.name}, ${p.clients.company}` : p.clients.name}
+            </Link>
+            <span className="break-all">{p.clients.email}</span>
+            <span className="num font-medium text-ink-2">{formatMoney(money.contract, p.currency)}</span>
+            {due ? <span className="num">Due {formatDate(due)}</span> : null}
+          </>
         }
         actions={
           <>
@@ -831,7 +833,7 @@ function TimelineStep({ label, done = false, tone = "accent" }: { label: string;
 function ProgressControl({ title, value, disabled, onChange }: { title: string; value: Progress; disabled: boolean; onChange: (p: Progress) => Promise<unknown> }) {
   const [pending, setPending] = useState<Progress | null>(null);
   return (
-    <div className="mt-3 inline-flex rounded-lg border border-line bg-canvas p-0.5" role="radiogroup" aria-label={`${title} progress`}>
+    <div className="mt-3 inline-flex rounded-lg bg-sunken p-0.5" role="radiogroup" aria-label={`${title} progress`}>
       {PROGRESS.map((o) => {
         const on = value === o.value;
         return (
@@ -847,10 +849,11 @@ function ProgressControl({ title, value, disabled, onChange }: { title: string; 
               await onChange(o.value);
               setPending(null);
             }}
-            className={`rounded-md px-2.5 py-1 text-[12px] font-medium transition disabled:opacity-60 ${
-              on ? (o.value === "delivered" ? "bg-positive text-white" : o.value === "in_progress" ? "bg-accent text-white" : "bg-surface text-ink shadow-sm") : "text-muted hover:text-ink"
+            className={`inline-flex h-7 items-center gap-1.5 rounded-md px-2.5 text-[12px] font-medium transition-colors disabled:opacity-60 ${
+              on ? "bg-surface text-ink shadow-[var(--shadow-xs)]" : "text-muted hover:text-ink"
             }`}
           >
+            {on ? <span className={`size-1.5 rounded-full ${o.value === "delivered" ? "bg-[#17b26a]" : o.value === "in_progress" ? "bg-accent" : "bg-subtle"}`} aria-hidden /> : null}
             {pending === o.value ? "…" : o.label}
           </button>
         );
@@ -911,7 +914,7 @@ function ProjectTimeline({ activity }: { activity: { id: string; event: string; 
         <div className="max-h-[560px] overflow-y-auto px-5 py-4" data-testid="project-timeline">
           {[...days].map(([day, items]) => (
             <section key={day} className="mb-4 last:mb-0">
-              <h3 className="mb-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-muted">{day}</h3>
+              <h3 className="mb-2 text-[12px] font-semibold text-muted">{day}</h3>
               <ol className="space-y-3 border-l border-line pl-4">
                 {items.map((a) => (
                   <li key={a.id} className="relative text-[13px]">
@@ -951,10 +954,10 @@ function DeliverableDue({ due, delivered, extended }: { due: string; delivered: 
   );
 }
 
-/** Phones: the project page is long, so a sticky row of links jumps to each part. */
+/** Phones: the project page is long, so a row of links jumps to each part (not sticky: nothing covers the content). */
 function JumpLinks({ links }: { links: { href: string; label: string }[] }) {
   return (
-    <nav aria-label="On this page" className="sticky top-14 z-20 -mx-4 mb-4 border-b border-line bg-canvas/95 px-4 py-2 backdrop-blur lg:hidden print:hidden" data-testid="jump-links">
+    <nav aria-label="On this page" className="mb-5 lg:hidden print:hidden" data-testid="jump-links">
       <ul className="flex gap-2 overflow-x-auto">
         {links.map((l) => (
           <li key={l.href}>

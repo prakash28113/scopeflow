@@ -62,6 +62,7 @@ function money(projects: ClientProject[]) {
 }
 
 export function ClientsPage() {
+  const [adding, setAdding] = useState(false);
   const q = useQuery({
     queryKey: ["clients"],
     queryFn: async () => {
@@ -78,37 +79,63 @@ export function ClientsPage() {
 
   return (
     <>
-      <PageHeader title="Clients" description="Everyone you work with, with their projects, approvals, invoices and payments." />
-      <div className="mb-4">
-        <AddClient />
-      </div>
+      <PageHeader
+        title="Clients"
+        description="Everyone you work with, with their projects, approvals, invoices and payments."
+        actions={
+          <Button type="button" onClick={() => setAdding(true)}>
+            Add client
+          </Button>
+        }
+      />
+      <AddClient open={adding} onClose={() => setAdding(false)} />
       <Card>
         {q.data.length === 0 ? (
           <EmptyState title="No clients yet" body="Add a client here, or they're added automatically when you create a project for them." />
         ) : (
-          <ul className="divide-y divide-line">
-            {q.data.map((c) => {
-              const open = c.projects.filter((p) => OPEN.includes(p.status)).length;
-              const totals = money(c.projects);
-              return (
-                <li key={c.id}>
-                  <Link to={`/clients/${c.id}`} className="flex flex-wrap items-center gap-x-4 gap-y-1 px-5 py-4 hover:bg-sunken/60">
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-medium">{c.name}</p>
-                      <p className="truncate text-[13px] text-muted">{[c.company, c.email].filter(Boolean).join(" · ")}</p>
-                    </div>
-                    <p className="text-[13px] text-ink-2">
-                      {c.projects.length} project{c.projects.length === 1 ? "" : "s"}
-                      {open ? ` · ${open} open` : ""}
-                    </p>
-                    <p className="num w-full text-[13px] text-muted sm:w-auto sm:text-right">
-                      {totals.length ? totals.map((t) => `${formatMoney(t.outstanding, t.currency)} outstanding`).join(" · ") : "—"}
-                    </p>
-                  </Link>
-                </li>
-              );
-            })}
-          </ul>
+          <>
+            <div className="hidden grid-cols-[minmax(0,1fr)_150px_200px] gap-4 border-b border-line bg-canvas/60 px-5 py-2.5 text-[12px] font-medium text-muted md:grid">
+              <span>Client</span>
+              <span>Projects</span>
+              <span className="text-right">Outstanding</span>
+            </div>
+            <ul className="divide-y divide-line">
+              {q.data.map((c) => {
+                const open = c.projects.filter((p) => OPEN.includes(p.status)).length;
+                const totals = money(c.projects).filter((t) => t.outstanding);
+                return (
+                  <li key={c.id}>
+                    <Link to={`/clients/${c.id}`} className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-1 px-5 py-3.5 transition-colors hover:bg-canvas md:grid-cols-[minmax(0,1fr)_150px_200px]">
+                      <span className="flex min-w-0 items-center gap-3">
+                        <span className="grid size-9 shrink-0 place-items-center rounded-full bg-sunken text-[12px] font-semibold text-ink-2" aria-hidden>
+                          {c.name.split(/\s+/).slice(0, 2).map((w) => w[0]?.toUpperCase()).join("")}
+                        </span>
+                        <span className="min-w-0">
+                          <span className="block truncate text-[14px] font-medium text-ink">{c.name}</span>
+                          <span className="block truncate text-[13px] text-muted">{c.company || c.email}</span>
+                        </span>
+                      </span>
+                      <span className="text-[13px] text-ink-2">
+                        {c.projects.length} project{c.projects.length === 1 ? "" : "s"}
+                        {open ? <span className="text-muted">, {open} open</span> : null}
+                      </span>
+                      <span className="num col-span-2 text-[13px] md:col-span-1 md:text-right">
+                        {totals.length ? (
+                          totals.map((t) => (
+                            <span key={t.currency} className="block font-medium text-ink">
+                              {formatMoney(t.outstanding, t.currency)}
+                            </span>
+                          ))
+                        ) : (
+                          <span className="text-muted">Nothing owed</span>
+                        )}
+                      </span>
+                    </Link>
+                  </li>
+                );
+              })}
+            </ul>
+          </>
         )}
       </Card>
     </>
@@ -393,18 +420,12 @@ const newClientSchema = z.object({
 });
 
 /** Add a client without starting a project. Plan limits apply (checked by the database). */
-function AddClient() {
+function AddClient({ open, onClose }: { open: boolean; onClose: () => void }) {
   const qc = useQueryClient();
   const toast = useToast();
   const navigate = useNavigate();
   const action = useAction();
-  const [open, setOpen] = useState(false);
-  if (!open)
-    return (
-      <Button type="button" onClick={() => setOpen(true)}>
-        Add client
-      </Button>
-    );
+  if (!open) return null;
   async function onSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const id = await action.run(newClientSchema, Object.fromEntries(new FormData(e.currentTarget)), (v) => supabase.rpc("create_client", { p: v }));
@@ -414,7 +435,8 @@ function AddClient() {
     navigate(`/clients/${id as string}`);
   }
   return (
-    <Card>
+    <Card className="mb-6">
+      <CardHeader title="New client" description="Name and email are enough. You can add billing details later." />
       <form onSubmit={onSubmit} className="space-y-4 p-5" noValidate data-testid="add-client">
         {action.error ? <Alert>{action.error}</Alert> : null}
         <div className="grid gap-4 sm:grid-cols-2">
@@ -433,7 +455,7 @@ function AddClient() {
         </div>
         <div className="flex gap-2">
           <SubmitButton pending={action.pending} pendingLabel="Adding…">Add client</SubmitButton>
-          <button type="button" className={buttonClass("ghost")} onClick={() => setOpen(false)}>
+          <button type="button" className={buttonClass("ghost")} onClick={onClose}>
             Cancel
           </button>
         </div>

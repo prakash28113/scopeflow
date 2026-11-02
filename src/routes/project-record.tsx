@@ -87,7 +87,7 @@ export default function ProjectRecordPage() {
       <article data-print-scope data-testid="project-record" className="rounded-[var(--radius-card)] border border-line bg-surface p-6 sm:p-10">
         <header className="border-b border-line pb-6">
           <p className="text-[12px] font-semibold uppercase tracking-[0.08em] text-accent">Project record</p>
-          <h1 className="mt-1 text-2xl font-semibold tracking-[-0.02em]">{p.title}</h1>
+          <h1 className="display mt-1 text-[26px] font-semibold leading-tight">{p.title}</h1>
           <p className="mt-1 text-[13px] text-muted">Generated {formatDateTime(new Date().toISOString())} from ScopeFlow records</p>
           <dl className="mt-4 grid gap-4 text-[13px] sm:grid-cols-2">
             <div>

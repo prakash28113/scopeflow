@@ -1,3 +1,4 @@
+import { LogoFull } from "@/components/brand";
 import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 import { Link, Navigate, useNavigate, useSearchParams } from "react-router";
 import { Alert, Field, Input, Logo } from "@/components/ui";
@@ -14,16 +15,43 @@ import { GoogleSignIn } from "@/components/google-signin";
 
 function AuthLayout({ children }: { children: ReactNode }) {
   return (
-    <div className="flex min-h-dvh flex-col">
-      <header className="flex items-center gap-2 px-6 py-5">
-        <Link to="/" aria-label="ScopeFlow home">
-          <Logo className="text-[15px]" />
+    <div className="grid min-h-dvh grid-cols-1 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
+      {/* Brand panel (wide screens): what ScopeFlow keeps on record. */}
+      <aside className="relative hidden flex-col justify-between overflow-hidden bg-chrome p-10 text-white lg:flex xl:p-14">
+        <Link to="/" aria-label="ScopeFlow home" className="inline-flex items-center gap-2">
+          <LogoFull tone="white" className="h-[26px] w-auto" />
+          <span className="rounded-full bg-chrome-2 px-2 py-0.5 text-[11px] font-medium leading-none text-chrome-text ring-1 ring-chrome-line">Beta</span>
         </Link>
-        <BetaBadge />
-      </header>
-      <main className="flex flex-1 items-start justify-center px-4 pb-16 pt-6 sm:pt-16">
-        <div className="w-full max-w-[400px]">{children}</div>
-      </main>
+        <div className="max-w-md">
+          <p className="display text-[40px] font-semibold leading-[1.05] xl:text-[46px]">Every client job, on the record.</p>
+          <ul className="mt-8 space-y-4 text-[15px] text-chrome-text">
+            {[
+              "The scope your client approved, locked with a fingerprint",
+              "Every request checked against it, even ones from WhatsApp",
+              "Change orders, GST invoices with UPI, and what you earned",
+            ].map((t) => (
+              <li key={t} className="flex gap-3">
+                <svg width="18" height="18" viewBox="0 0 16 16" className="mt-[3px] shrink-0 text-accent-line" aria-hidden>
+                  <path d="M3.8 8.4 6.7 11.2 12.3 5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+                {t}
+              </li>
+            ))}
+          </ul>
+        </div>
+        <p className="text-[13px] text-chrome-muted">Free for 2 active projects. Your clients never need an account.</p>
+      </aside>
+      <div className="flex min-h-dvh flex-col">
+        <header className="flex items-center gap-2 px-6 py-5 lg:invisible">
+          <Link to="/" aria-label="ScopeFlow home">
+            <Logo className="text-[15px]" />
+          </Link>
+          <BetaBadge />
+        </header>
+        <main className="flex flex-1 items-start justify-center px-4 pb-16 pt-4 sm:pt-12 lg:items-center lg:pt-0">
+          <div className="w-full max-w-[400px]">{children}</div>
+        </main>
+      </div>
     </div>
   );
 }
@@ -72,7 +100,7 @@ export function LoginPage() {
 
   return (
     <AuthLayout>
-      <h1 className="text-2xl font-semibold tracking-[-0.02em]">Welcome back</h1>
+      <h1 className="display text-[28px] font-semibold leading-tight">Welcome back</h1>
       <p className="mb-8 mt-1.5 text-sm text-muted">Sign in to manage your projects.</p>
       <div className="mb-4">
         <GoogleSignIn context="signin" onSignedIn={() => navigate(next, { replace: true })} onError={f.setError} />
@@ -143,7 +171,7 @@ export function SignupPage() {
 
   return (
     <AuthLayout>
-      <h1 className="text-2xl font-semibold tracking-[-0.02em]">Create your account</h1>
+      <h1 className="display text-[28px] font-semibold leading-tight">Create your account</h1>
       <p className="mb-8 mt-1.5 text-sm text-muted">Start free. No card needed.</p>
       {notice ? (
         <Alert tone="info">{notice}</Alert>
@@ -254,7 +282,7 @@ export function ForgotPasswordPage() {
 
   return (
     <AuthLayout>
-      <h1 className="text-2xl font-semibold tracking-[-0.02em]">Reset your password</h1>
+      <h1 className="display text-[28px] font-semibold leading-tight">Reset your password</h1>
       {!PASSWORD_RESET_EMAIL ? (
         <div className="mt-6">
           <SupportReset />
@@ -353,7 +381,7 @@ export function ResetPasswordPage() {
 
   return (
     <AuthLayout>
-      <h1 className="text-2xl font-semibold tracking-[-0.02em]">Choose a new password</h1>
+      <h1 className="display text-[28px] font-semibold leading-tight">Choose a new password</h1>
       {state.status === "checking" ? (
         <p className="mt-6 text-sm text-muted">Checking your link…</p>
       ) : state.status === "invalid" ? (

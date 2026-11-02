@@ -53,7 +53,8 @@ async function pdfDownload(p, button, nameRe) {
 }
 const IN_14_DAYS = (() => { const d = new Date(Date.now() + 14 * 86_400_000); d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); return d.toISOString().slice(0, 10); })();
 const longDate = (iso) => new Intl.DateTimeFormat("en", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" }).format(new Date(`${iso}T00:00:00Z`));
-const accept = (p) => p.once("dialog", (d) => d.accept());
+/** Confirms the in-app dialog that destructive actions open. */
+const confirmDialog = (p) => p.getByRole("alertdialog").getByRole("button").last().click();
 const SOON = (() => { const d = new Date(Date.now() + 3 * 86_400_000); d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); return d.toISOString().slice(0, 10); })();
 
 try {
@@ -63,6 +64,8 @@ try {
   await f.getByRole("heading", { name: "Every client job, on the record." }).waitFor();
   await f.getByRole("link", { name: "Start free" }).first().waitFor();
   assert.equal(await f.locator(".lp-row").count(), 7); // the example job record
+  // The app preview is a picture of the product: built from the app's components, not focusable.
+  assert.equal(await f.locator(".lp-app[inert]").count(), 1);
   await f.getByText("Does ScopeFlow take payments?").click();
   await f.getByText("It records the payments you receive.").waitFor();
   {
@@ -72,6 +75,15 @@ try {
     await lp.getByRole("heading", { name: "Every client job, on the record." }).waitFor();
     assert.equal(await lp.evaluate(() => document.documentElement.scrollWidth > window.innerWidth || window.innerWidth > 390), false, "home page scrolls sideways on a phone");
     await lp.waitForTimeout(3500); // let the record finish writing in
+    // Sections appear as they scroll into view: scroll through once, like a visitor would.
+    const height = await lp.evaluate(() => document.documentElement.scrollHeight);
+    for (let y = 0; y < height; y += 500) {
+      await lp.evaluate((yy) => window.scrollTo(0, yy), y);
+      await lp.waitForTimeout(80);
+    }
+    await lp.waitForTimeout(1200);
+    assert.equal(await lp.locator("[data-reveal]:not([data-in])").count(), 0, "every section has been revealed");
+    await lp.evaluate(() => window.scrollTo(0, 0));
     await shot(lp, "00-landing-mobile");
     await lp.close();
   }
@@ -216,7 +228,8 @@ try {
   step("dashboard shows upcoming payment dates");
   await f.goto(`${BASE}/dashboard`);
   assert.match(await f.getByTestId("feedback-link").getAttribute("href"), /^mailto:.+\?subject=ScopeFlow%20feedback&body=.*Page%3A%20%2Fdashboard/);
-  await f.getByText("Payment · 50% deposit · Brand identity for Northwind Coffee").waitFor();
+  await f.getByTestId("upcoming").getByText("50% deposit", { exact: true }).waitFor();
+  await f.getByTestId("upcoming").getByText("Payment for Brand identity for Northwind Coffee").waitFor();
   await f.getByText(/^In 3 days/).waitFor();
 
   // ---------------------------------------------------------- revisions + scope check
@@ -317,8 +330,8 @@ try {
   step("security: replaced link stops working immediately");
   await f.goto(projectUrl);
   await f.getByLabel("Link validity").selectOption("7");
-  accept(f);
   await f.getByRole("button", { name: "Replace link" }).click();
+  await confirmDialog(f);
   await f.getByRole("heading", { name: "Client link ready" }).waitFor();
   const newUrl = await f.getByTestId("share-url").innerText();
   assert.notEqual(newUrl, portalUrl);
@@ -331,8 +344,8 @@ try {
   await c.getByText("Brand identity for Northwind Coffee").first().waitFor();
 
   step("security: revoke");
-  accept(f);
   await f.getByRole("button", { name: "Revoke" }).click();
+  await confirmDialog(f);
   await f.getByText("No active link").waitFor();
   await c.goto("about:blank");
   await c.goto(newUrl);
@@ -512,8 +525,8 @@ try {
   await f.goto(`${BASE}/invoices`);
   await f.getByTestId("invoice-list").getByText(`RS-${year}-001`).waitFor();
   await f.goto(invoiceUrl);
-  accept(f);
   await f.getByRole("button", { name: "Void invoice" }).click();
+  await confirmDialog(f);
   await f.getByText(/Voided .* Clients no longer see this invoice/).waitFor();
   await f.goto(menuUrl);
   await f.getByRole("button", { name: "Create invoice" }).first().waitFor();
@@ -547,13 +560,20 @@ try {
   await f.getByRole("heading", { name: "Analytics" }).waitFor();
   // Priya's default currency is USD; $1,600 was marked received earlier.
   assert.equal(await f.getByTestId("kpi-received").innerText(), "$1,600.00");
+  // Expenses have their own page.
+  await f.getByRole("link", { name: "Log one" }).click();
+  await f.waitForURL("**/expenses");
   await f.getByLabel("Amount (USD)").fill("50");
   await f.getByLabel("What for (optional)").fill("Figma");
   await f.getByLabel("Project (optional)").selectOption({ label: "Brand identity for Northwind Coffee" });
   await f.getByRole("button", { name: "Add expense" }).click();
   await f.getByText("Expense added.").waitFor();
   await f.getByTestId("expense-list").getByText("Figma").waitFor();
+  assert.equal(await f.getByTestId("expenses-total").innerText(), "$50.00");
+  await f.getByRole("link", { name: "Analytics", exact: true }).click();
+  await f.waitForURL("**/analytics");
   assert.equal(await f.getByTestId("kpi-expenses").innerText(), "$50.00");
+  await f.getByTestId("spending-by-category").getByText("Software & subscriptions").waitFor();
   assert.equal(await f.getByTestId("kpi-profit").innerText(), "$1,550.00");
   await f.getByText("Show as a table").click();
   assert.match(await f.getByTestId("monthly-table").innerText(), /\$1,600\.00\s+\$0\.00\s+\$50\.00\s+\$1,550\.00/);
@@ -575,9 +595,9 @@ try {
   await shot(f, "32-analytics");
   await f.goto(projectUrl);
   assert.equal(await f.getByTestId("project-profit-so-far").innerText(), "$1,550.00");
-  await f.goto(`${BASE}/analytics`);
-  accept(f);
+  await f.goto(`${BASE}/expenses`);
   await f.getByRole("button", { name: "Delete expense Figma" }).click();
+  await confirmDialog(f);
   await f.getByText("No expenses logged for").waitFor();
   await f.goto(projectUrl);
   await f.getByText("Contract total").waitFor();
@@ -765,7 +785,8 @@ try {
     await gp.waitForURL("**/projects/new?welcome=1");
     // Returning: sign out, then Continue with Google on the sign-in page goes straight in.
     await gp.goto(`${BASE}/dashboard`);
-    await gp.locator('summary[aria-label="Account menu"]').click();
+    await gp.getByRole("button", { name: "Open menu" }).click(); // on a phone the account menu is in the drawer
+    await gp.getByTestId("nav-drawer").locator('summary[aria-label="Account menu"]').click();
     await gp.getByRole("button", { name: "Sign out" }).click();
     await gp.waitForURL(/\/login/);
     await gp.getByTestId("google-stub").click();
@@ -822,6 +843,29 @@ try {
   await f.getByRole("button", { name: "Sign in" }).click();
   await f.waitForURL("**/dashboard");
 
+  step("every main page on a computer: one layout, sidebar navigation, nothing wider than the window");
+  for (const [path, name, ready] of [
+    ["/dashboard", "50-overview", /^Hello/],
+    ["/projects", "51-projects", "Projects"],
+    ["/clients", "52-clients", "Clients"],
+    ["/quotations", "53-quotations", "Quotations"],
+    ["/invoices", "54-invoices", "Invoices"],
+    ["/approvals", "55-approvals", "Approvals"],
+    ["/analytics", "56-analytics", "Analytics"],
+    ["/expenses", "57-expenses", "Expenses"],
+    ["/settings", "58-settings", "Settings"],
+    ["/plan", "59-plan", /Plan/],
+    ["/notifications", "60-notifications", "Notifications"],
+    [projectUrl.replace(BASE, ""), "61-project", "Brand identity for Northwind Coffee"],
+  ]) {
+    await f.goto(`${BASE}${path}`);
+    await f.getByRole("heading", { name: ready }).first().waitFor();
+    // The sidebar marks where you are.
+    if (!path.startsWith("/projects/")) assert.ok(await f.locator('aside nav a[aria-current="page"]').count() <= 1);
+    assert.equal(await f.evaluate(() => document.documentElement.scrollWidth > window.innerWidth), false, `${path} is wider than the window`);
+    await shot(f, name);
+  }
+
   step("mobile freelancer view");
   const fm = await phone.newPage();
   await fm.goto(`${BASE}/login`);
@@ -832,16 +876,22 @@ try {
   await fm.goto(projectUrl);
   await fm.getByText("Contract total").waitFor();
   await shot(fm, "15-project-mobile");
-  // Phones: jump links on the long project page, and the bottom tab bar.
+  // Phones: jump links on the long project page, and the navigation drawer (no bottom bar covering content).
   const jump = fm.getByTestId("jump-links");
   await jump.getByRole("link", { name: "Payments" }).click();
   await fm.waitForFunction(() => location.hash === "#payments");
   assert.ok(await fm.evaluate(() => Math.abs(document.getElementById("payments").getBoundingClientRect().top) < 200), "jump link scrolls to Payments");
-  assert.ok(await jump.isVisible(), "jump links stay on screen while scrolling");
-  const tabs = fm.getByTestId("mobile-tabs");
-  await tabs.getByRole("link", { name: "Invoices" }).click();
+  assert.equal(await fm.locator("[data-testid=mobile-tabs]").count(), 0, "no bottom tab bar");
+  await fm.getByRole("button", { name: "Open menu" }).click();
+  const drawer = fm.getByTestId("nav-drawer");
+  await drawer.getByRole("link", { name: "Invoices" }).click();
   await fm.waitForURL("**/invoices");
-  assert.equal(await tabs.getByRole("link", { name: "Invoices" }).getAttribute("aria-current"), "page");
+  await drawer.waitFor({ state: "hidden" });
+  await fm.getByRole("button", { name: "Open menu" }).click();
+  assert.equal(await drawer.getByRole("link", { name: "Invoices" }).getAttribute("aria-current"), "page");
+  await fm.waitForTimeout(400); // let the drawer finish sliding in
+  await shot(fm, "44-menu-mobile", false);
+  await fm.getByRole("button", { name: "Close menu" }).click();
   const overflow = await fm.evaluate(() => document.documentElement.scrollWidth > window.innerWidth);
   assert.equal(overflow, false, "mobile project page must not scroll horizontally");
   // Every main screen on a phone: no sideways scrolling.
@@ -851,6 +901,11 @@ try {
     ["/invoices", "38-invoices-mobile", "Invoices"],
     ["/clients", "39-clients-mobile", "Clients"],
     ["/settings", "40-settings-mobile", "Settings"],
+    ["/projects", "45-projects-mobile", "Projects"],
+    ["/quotations", "46-quotations-mobile", "Quotations"],
+    ["/approvals", "47-approvals-mobile", "Approvals"],
+    ["/expenses", "48-expenses-mobile", "Expenses"],
+    ["/notifications", "49-notifications-mobile", "Notifications"],
     [menuUrl.replace(BASE, ""), "41-menu-project-mobile", "Menu card for Northwind"],
     [projectUrl.replace(BASE, "") + "/record", "42-record-mobile", "Brand identity for Northwind Coffee"],
   ]) {
@@ -862,6 +917,21 @@ try {
     const sideways = await fm.evaluate(() => document.documentElement.scrollWidth > window.innerWidth || window.innerWidth > 390);
     assert.equal(sideways, false, `${path} scrolls sideways on a phone: ${wide.join(" | ")}`);
   }
+
+  step("responsive: small phones (360), large phones (430) and tablets (820): nothing wider than the screen");
+  for (const width of [360, 430, 820]) {
+    await fm.setViewportSize({ width, height: 900 });
+    for (const path of ["/dashboard", "/projects", "/invoices", "/analytics", "/expenses", "/approvals", projectUrl.replace(BASE, "")]) {
+      await fm.goto(`${BASE}${path}`);
+      await fm.getByRole("heading", { level: 1 }).first().waitFor();
+      const wide = await fm.evaluate((w) => [...document.querySelectorAll("main *")].filter((el) => el.getBoundingClientRect().right > w + 1 && !el.closest("[class*=overflow-x-auto]")).slice(0, 3).map((el) => `${el.tagName}.${String(el.className).slice(0, 50)}`), width);
+      assert.equal(await fm.evaluate((w) => document.documentElement.scrollWidth > w || window.innerWidth > w, width), false, `${path} at ${width}px: ${wide.join(" | ")}`);
+    }
+    await fm.goto(`${BASE}/dashboard`);
+    await fm.getByRole("heading", { level: 1 }).first().waitFor();
+    await shot(fm, `62-overview-${width}`, false);
+  }
+  await fm.setViewportSize({ width: 390, height: 844 });
 
   // Last on purpose: this locks the test IP out of the portal for the rest of the hour.
   step("rate limit: 20 failed link lookups lock out the IP, even for a valid link");

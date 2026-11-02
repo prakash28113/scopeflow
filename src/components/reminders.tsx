@@ -10,7 +10,13 @@ import { localToday } from "@/lib/upcoming";
 import { addDays } from "@/lib/invoice";
 import type { Reminder } from "@/lib/reminders";
 
-const DOT = { danger: "bg-danger", warning: "bg-warning", info: "bg-accent" } as const;
+const DOT = { danger: "bg-[#f04438]", warning: "bg-[#f79009]", info: "bg-accent" } as const;
+/** Urgency in words as well as colour. */
+const URGENCY = {
+  danger: { label: "Overdue", cls: "text-danger" },
+  warning: { label: "Follow up", cls: "text-warning" },
+  info: { label: "Coming up", cls: "text-accent" },
+} as const;
 
 /** "Remind me" form: a note, a date and (optionally) a project. */
 export function AddFollowUp({ projects, projectId, onAdded }: { projects?: { id: string; title: string }[]; projectId?: string; onAdded?: () => void }) {
@@ -79,28 +85,35 @@ export function AddFollowUp({ projects, projectId, onAdded }: { projects?: { id:
 }
 
 /** Dashboard card: everything that needs attention, most urgent first. */
-export function RemindersCard({ reminders, projects }: { reminders: Reminder[]; projects: { id: string; title: string }[] }) {
+export function RemindersCard({ reminders, projects, className = "mb-8" }: { reminders: Reminder[]; projects: { id: string; title: string }[]; className?: string }) {
   const qc = useQueryClient();
   const toast = useToast();
   const [all, setAll] = useState(false);
   const shown = all ? reminders : reminders.slice(0, 6);
   return (
-    <Card className="mb-8">
+    <Card className={className}>
       <CardHeader
         title={reminders.length ? `Reminders · ${reminders.length}` : "Reminders"}
-        description="Pending approvals, overdue invoices and payments, deadlines and your own follow-ups."
+        description="Overdue payments, waiting approvals, deadlines and your own follow-ups, most urgent first."
       />
       {reminders.length === 0 ? (
-        <p className="px-5 py-4 text-[13px] text-muted">You're all caught up.</p>
+        <p className="flex items-center gap-2.5 px-5 py-4 text-[13px] text-muted">
+          <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden className="text-positive">
+            <circle cx="8" cy="8" r="7.5" fill="currentColor" />
+            <path d="M5 8.3 7.1 10.4 11 6" fill="none" stroke="#fff" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+          You're all caught up.
+        </p>
       ) : (
         <ul className="divide-y divide-line" data-testid="reminders">
           {shown.map((r) => (
-            <li key={r.id} className="flex items-start gap-3 px-5 py-3">
-              <span className={cx("mt-1.5 size-2 shrink-0 rounded-full", DOT[r.tone])} aria-hidden />
-              <Link to={r.href} className="min-w-0 flex-1 hover:underline">
+            <li key={r.id} className="relative flex items-start gap-3 px-5 py-3 transition-colors hover:bg-canvas">
+              <span className={cx("absolute inset-y-2.5 left-0 w-[3px] rounded-r-full", DOT[r.tone])} aria-hidden />
+              <Link to={r.href} className="min-w-0 flex-1">
                 <p className="text-[13px] font-medium text-ink">{r.title}</p>
                 <p className="text-[12px] text-muted">{r.detail}</p>
               </Link>
+              <span className={cx("mt-0.5 hidden shrink-0 text-[12px] font-medium sm:block", URGENCY[r.tone].cls)}>{URGENCY[r.tone].label}</span>
               {r.followUpId ? (
                 <ActionButton
                   size="sm"
