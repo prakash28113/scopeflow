@@ -77,7 +77,9 @@ function scanRepo() {
     if (/\.(woff2?|png|jpe?g|gif|webp|ico|lock)$|package-lock\.json$/.test(rel)) continue;
     if (/^\.env(?!\.example$)/.test(rel.split("/").pop())) problems.push(`${rel}: dotenv file committed`);
     // Docs, this scanner and its tests legitimately name server-only variables.
-    const allowNames = /\.(md)$|^scripts\/secret-scan\.mjs$|^tests\//.test(rel);
+    // Server-only code may read server-only variables by name: Supabase Edge Functions run on Supabase, are
+    // never bundled into the app, and receive the values at run time. The build scan still forbids them in dist/.
+    const allowNames = /\.(md)$|^scripts\/secret-scan\.mjs$|^tests\/|^supabase\/functions\//.test(rel);
     for (const f of scanText(readFileSync(join(ROOT, rel), "utf8"), { allowServerEnvNames: allowNames })) problems.push(`${rel}: ${f}`);
   }
   return { problems, count: files.length };
