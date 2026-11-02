@@ -160,6 +160,34 @@ export function purchasableSql(billing) {
 
 export const FUNCTION_FILES = ["index.ts", "handler.ts"];
 
+/**
+ * Accounts that get a paid plan free and forever (the owner's own account, partners).
+ * From config/public-site.json: "complimentaryPlans": [{ "email": "…", "plan": "studio" }].
+ * Applied through admin_set_plan (audited in subscription_changes); removing an entry changes nothing.
+ */
+export function complimentaryPlans(siteText) {
+  let list = [];
+  try {
+    list = JSON.parse(siteText ?? readFileSync(join(ROOT, "config/public-site.json"), "utf8")).complimentaryPlans ?? [];
+  } catch {
+    return [];
+  }
+  return list.map((c) => {
+    const [email] = parseEmails(String(c?.email ?? ""));
+    if (!email || !["solo", "studio"].includes(c?.plan)) throw new Error(`Invalid complimentary plan entry: ${JSON.stringify(c)}`);
+    return { email, plan: c.plan };
+  });
+}
+
+export const complimentaryCheckSql = (c) => `select
+  exists (select 1 from public.profiles where email = ${quote(c.email)}) as found,
+  exists (select 1 from public.subscriptions s join public.profiles p on p.id = s.owner_id
+           where p.email = ${quote(c.email)} and s.plan_id = ${quote(c.plan)} and s.status = 'active'
+             and s.current_period_end is null) as already`;
+
+export const complimentaryGrantSql = (c) =>
+  `select public.admin_set_plan(${quote(c.email)}, ${quote(c.plan)}, 'active', 'year', null, 'complimentary (config/public-site.json)');`;
+
 /** Blog authors from config/public-site.json (blogAuthors): the only accounts that can write posts. */
 export function blogAuthors(siteText) {
   try {
@@ -311,6 +339,20 @@ revoke all on all tables in schema scopeflow_admin from public, anon, authentica
     const emails = parseEmails(allowText);
     await sql(allowlistSql(emails));
     ok(emails.length ? `Beta allowlist synced (${emails.length} email${emails.length === 1 ? "" : "s"})` : "Beta allowlist empty → sign-ups kept **closed**");
+  }
+
+  // Complimentary plans (config/public-site.json → complimentaryPlans): set once, never expire.
+  for (const c of complimentaryPlans()) {
+    const [state] = await sql(complimentaryCheckSql(c));
+    if (!state?.found) {
+      log(`::notice::Complimentary ${c.plan}: no account yet for ${c.email}; it will be applied on a release after they sign up.`);
+      report.push(`- ⏭️ Complimentary ${c.plan === "studio" ? "Studio" : "Solo"} waiting: no account yet for the configured email (sign up, then release again)`);
+    } else if (state.already) {
+      ok(`Complimentary ${c.plan === "studio" ? "Studio" : "Solo"} already active for ${c.email}`);
+    } else {
+      await sql(complimentaryGrantSql(c));
+      ok(`Complimentary ${c.plan === "studio" ? "Studio" : "Solo"} switched on for ${c.email} (no end date)`);
+    }
   }
 
   let publishable = configured?.publishable;

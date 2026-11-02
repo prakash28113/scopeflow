@@ -35,7 +35,8 @@ export default function PlanPage() {
   const testMode = b?.mode === "test";
   // On sale (live), or the owner's own test accounts in test mode. The server checks again.
   const canBuy = (p: Plan) => Boolean(b?.enabled) && p.id !== "free" && effective.id === "free" && (testMode ? b!.tester : p.purchasable);
-  const subscribed = BILLING_ENABLED && paid && (m.status === "active" || m.status === "past_due");
+  // A paid subscription renews on a date; a plan without one (complimentary) has nothing to cancel.
+  const subscribed = BILLING_ENABLED && paid && (m.status === "active" || m.status === "past_due") && Boolean(m.current_period_end);
 
   /** After Razorpay confirms, wait (briefly) for the plan to switch on. */
   async function waitForPlan() {
@@ -131,8 +132,10 @@ export default function PlanPage() {
             <p>
               {subscribed
                 ? "Cancel anytime: you keep the plan until the end of the period you paid for. Cancelling never deletes projects."
-                : paid
-                  ? "Downgrading never deletes projects."
+                : paid && m.status === "active" && !m.current_period_end
+                  ? "Complimentary plan with no end date. Nothing is charged."
+                  : paid
+                    ? "Downgrading never deletes projects."
                   : "Free forever. Completed and cancelled projects don't count toward your limit."}
             </p>
             {subscribed && !m.cancel_at_period_end ? (
