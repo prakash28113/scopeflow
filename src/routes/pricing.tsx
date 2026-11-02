@@ -6,17 +6,11 @@ import { FeatureMatrix, IntervalToggle, PlanCards } from "@/components/plans";
 import { PageSpinner } from "@/components/app-shell";
 import { usePlans, type Interval } from "@/lib/plans";
 import { useAuth } from "@/lib/auth";
-
-const FAQ: [string, string][] = [
-  ["Can I use ScopeFlow for free?", "Yes. The Free plan includes 2 active projects and 5 clients with every core feature: scope agreements, client approvals, revision tracking, change orders, quotes, invoices and payment tracking. Expenses and analytics are free for everyone during the beta. Completed and cancelled projects don't count toward the limit."],
-  ["Can I change plans later?", "Yes. When paid plans launch you can upgrade, downgrade or cancel at any time from Plan & usage."],
-  ["What happens to my projects if I downgrade?", "Nothing is deleted or locked. Every project, approval and client link keeps working. You just can't start new projects beyond the lower plan's limit."],
-  ["Can clients approve projects without an account?", "Yes, on every plan. Clients open a private link, review the scope and approve — no sign-up."],
-  ["Can I cancel anytime?", "Yes. Paid features stay on until the end of the period you paid for, then the account moves to Free with all data intact."],
-  ["Are payments processed securely?", "Paid plans aren't on sale yet, and ScopeFlow has never taken a payment. When they launch, a certified payment provider will handle cards; ScopeFlow never sees or stores card details."],
-];
+import { PRICING_FAQ as FAQ } from "@/lib/faq";
+import { useSeo } from "@/lib/seo";
 
 export default function PricingPage() {
+  useSeo("/pricing");
   const plans = usePlans();
   const { session } = useAuth();
   const [interval, setInterval] = useState<Interval>("year");

@@ -42,6 +42,9 @@ export function wantsPage(request: Request): boolean {
   return (request.headers.get("accept") ?? "").includes("text/html");
 }
 
+/** A path with no file, so static assets answer with the app shell (index.html). */
+const SHELL_PROBE = "/__app-shell";
+
 export async function servePage(request: Request, env: Env): Promise<Response> {
   if (!env.ASSETS || !wantsPage(request)) return json({ error: "Not found" }, 404);
   let supabaseUrl: string;
@@ -51,7 +54,11 @@ export async function servePage(request: Request, env: Env): Promise<Response> {
     return json({ error: "Not found" }, 404);
   }
   const url = new URL(request.url);
-  const shell = await env.ASSETS.fetch(new Request(new URL("/", url), { method: request.method }));
+  // The app shell is what static assets serve for an unknown page address (single-page-application handling).
+  // Not "/" (rewritten to the prerendered home page by _redirects) and not "/index.html" (redirects to "/").
+  const shell = await env.ASSETS.fetch(
+    new Request(new URL(SHELL_PROBE, url), { method: request.method, redirect: "manual", headers: { Accept: "text/html", "Sec-Fetch-Mode": "navigate" } }),
+  );
   if (!shell.ok) return json({ error: "Not found" }, 404);
   const headers = new Headers({ "content-type": shell.headers.get("content-type") ?? "text/html; charset=utf-8" });
   for (const [k, v] of Object.entries(pageHeaders({ supabaseUrl, turnstile: env.TURNSTILE_ENABLED === "true", google: env.GOOGLE_SIGNIN_ENABLED === "true" }))) headers.set(k, v);

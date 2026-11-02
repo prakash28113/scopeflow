@@ -1,0 +1,11 @@
+/* Loaded only when JavaScript is off (see scripts/prerender.mjs): show sections that normally reveal on scroll. */
+[data-reveal],
+.lp-steps .lp-step {
+  opacity: 1 !important;
+  transform: none !important;
+}
+.lp-steps .lp-track,
+.lp-bar,
+.lp-tilt .lp-app {
+  transform: none !important;
+}

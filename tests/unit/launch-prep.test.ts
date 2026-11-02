@@ -77,8 +77,8 @@ describe("link previews and search", () => {
     expect(robots).toMatch(/Disallow: \/dashboard/);
     expect(robots).not.toMatch(/Disallow: \/p\s*$/m);
     expect(robots).toContain("Sitemap: https://scopeflow.in/sitemap.xml");
-    const sitemap = readFileSync("public/sitemap.xml", "utf8");
-    expect(sitemap.match(/<loc>/g)).toHaveLength(4);
+    for (const path of ["/invoices", "/quotations", "/approvals", "/expenses", "/analytics"]) expect(robots).toContain(`Disallow: ${path}`);
+    // The sitemap is generated at build time from the public page list (scripts/prerender.mjs, tests/unit/seo.test.ts).
   });
 });
 

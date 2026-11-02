@@ -33,6 +33,15 @@ else {
   // Local stack URLs and doc placeholders. (Bare "127.0.0.1" appears inside supabase-js itself, so match full URLs.)
   if (/https?:\/\/(127\.0\.0\.1|localhost):54321|example\.supabase\.co|your-project-ref|YOUR-PROJECT-REF/.test(js)) fail("The build contains a local/test/placeholder Supabase URL");
   if (readdirSync(dist).some((f) => f.startsWith(".env") || f.endsWith(".map"))) fail("dist/ contains a .env or source map");
+  // Search engines: the shell stays empty (it's served for every app address) and each public page is prerendered.
+  if (!readFileSync(join(dist, "index.html"), "utf8").includes('<div id="root"></div>')) fail("dist/index.html must be the empty app shell");
+  for (const [file, path] of [["home.html", "/"], ["pricing.html", "/pricing"], ["privacy.html", "/privacy"], ["terms.html", "/terms"]]) {
+    const html = existsSync(join(dist, file)) ? readFileSync(join(dist, file), "utf8") : "";
+    if (!html.includes(`data-page="${path}"`) || !html.includes('rel="canonical"')) fail(`dist/${file} is missing or not prerendered — run npm run build`);
+  }
+  const redirects = existsSync(join(dist, "_redirects")) ? readFileSync(join(dist, "_redirects"), "utf8") : "";
+  if (!/^\/ \/home 200$/m.test(redirects)) fail("dist/_redirects must serve the prerendered home page at /");
+  if (!existsSync(join(dist, "sitemap.xml"))) fail("dist/sitemap.xml is missing");
 }
 
 if (errors.length) {

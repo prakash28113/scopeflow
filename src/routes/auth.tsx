@@ -1,4 +1,5 @@
 import { LogoFull } from "@/components/brand";
+import { useTitle } from "@/lib/title";
 import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 import { Link, Navigate, useNavigate, useSearchParams } from "react-router";
 import { Alert, Field, Input, Logo } from "@/components/ui";
@@ -74,6 +75,7 @@ function useAuthForm() {
 }
 
 export function LoginPage() {
+  useTitle("Sign in");
   const { session } = useAuth();
   const [params] = useSearchParams();
   const navigate = useNavigate();
@@ -134,6 +136,7 @@ export function LoginPage() {
 }
 
 export function SignupPage() {
+  useTitle("Create your free account");
   const { session } = useAuth();
   const navigate = useNavigate();
   const f = useAuthForm();
@@ -258,6 +261,7 @@ function SupportReset() {
 }
 
 export function ForgotPasswordPage() {
+  useTitle("Reset your password");
   const f = useAuthForm();
   const [sent, setSent] = useState<string | null>(null);
 
@@ -323,6 +327,7 @@ export function ForgotPasswordPage() {
 type RecoveryState = { status: "checking" } | { status: "ready" } | { status: "invalid"; message: string };
 
 export function ResetPasswordPage() {
+  useTitle("Choose a new password");
   const navigate = useNavigate();
   const f = useAuthForm();
   const [state, setState] = useState<RecoveryState>({ status: "checking" });

@@ -35,19 +35,22 @@ export type MyPlan = {
 
 export type Invoice = { id: string; amount_cents: number; currency: string; status: string; paid_at: string | null; provider_invoice_id: string };
 
+/** The public plan catalogue. Also prefetched at build time so the prerendered pricing page shows real plans. */
+export const plansQuery = {
+  queryKey: ["plans"],
+  staleTime: 10 * 60_000,
+  queryFn: async () => {
+    const { data, error } = await supabase
+      .from("plans")
+      .select("id, name, position, currency, monthly_price_cents, annual_price_cents, max_active_projects, max_clients, max_team_members, purchasable")
+      .order("position");
+    if (error) throw error;
+    return data as Plan[];
+  },
+};
+
 export function usePlans() {
-  return useQuery({
-    queryKey: ["plans"],
-    staleTime: 10 * 60_000,
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("plans")
-        .select("id, name, position, currency, monthly_price_cents, annual_price_cents, max_active_projects, max_clients, max_team_members, purchasable")
-        .order("position");
-      if (error) throw error;
-      return data as Plan[];
-    },
-  });
+  return useQuery(plansQuery);
 }
 
 export function useMyPlan(enabled = true) {

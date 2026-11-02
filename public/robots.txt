@@ -2,13 +2,15 @@
 # Client project links (/p) and reset pages stay crawlable so link previews work,
 # but they send "X-Robots-Tag: noindex" so they never appear in search results.
 User-agent: *
-Allow: /$
-Allow: /pricing
-Allow: /privacy
-Allow: /terms
+Allow: /
 Disallow: /dashboard
 Disallow: /projects
+Disallow: /quotations
+Disallow: /approvals
+Disallow: /invoices
 Disallow: /clients
+Disallow: /analytics
+Disallow: /expenses
 Disallow: /settings
 Disallow: /plan
 Disallow: /notifications

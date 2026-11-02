@@ -4,7 +4,9 @@ import { Link } from "react-router";
 import { buttonClass, cx } from "@/components/ui";
 import { LogoFull } from "@/components/brand";
 import { SiteFooter } from "@/components/site-footer";
-import { AppPreview, FauxQr, LedgerSheet, QA } from "./landing-parts";
+import { HOME_FAQ as QA } from "@/lib/faq";
+import { useSeo } from "@/lib/seo";
+import { AppPreview, FauxQr, LedgerSheet } from "./landing-parts";
 
 /**
  * Home page, dark and animated. The logo's charcoal, with its cobalt used as light (glows, beams, sheen).
@@ -13,6 +15,7 @@ import { AppPreview, FauxQr, LedgerSheet, QA } from "./landing-parts";
  * names and amounts are examples; there are no invented customers or numbers.
  */
 export default function Landing() {
+  useSeo("/");
   useReveal();
   return (
     <div className="lp min-h-dvh overflow-x-clip bg-[var(--lp-bg)] text-[var(--lp-text)]">

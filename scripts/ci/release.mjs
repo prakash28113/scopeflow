@@ -347,6 +347,14 @@ export async function smokeTest({ fetch, wait = sleep, appUrl, supabaseUrl, publ
   if ((home.headers.get("x-frame-options") ?? "").toUpperCase() !== "DENY") throw new Error("Live site is missing X-Frame-Options: DENY.");
   passed.push("Live site responds with security headers (CSP pinned to Supabase, framing denied)");
 
+  // Search engines see the prerendered home page, indexable, with its canonical address.
+  const homeHtml = await home.text();
+  if (!homeHtml.includes('data-page="/"') || !homeHtml.includes('rel="canonical"')) throw new Error("Live home page isn't the prerendered page (check dist/_redirects).");
+  if (/<meta name="robots"[^>]*noindex/i.test(homeHtml) || /noindex/i.test(home.headers.get("x-robots-tag") ?? "")) throw new Error("Live home page is marked noindex.");
+  const sitemap = await fetch(appUrl + "/sitemap.xml");
+  if (!sitemap.ok || !(await sitemap.text()).includes("<urlset")) throw new Error("Live sitemap.xml is missing.");
+  passed.push("Home page is prerendered and indexable; sitemap is live");
+
   const portal = await fetch(appUrl + "/p", { headers: { "Sec-Fetch-Mode": "navigate", Accept: "text/html" } });
   if (!/noindex/i.test(portal.headers.get("x-robots-tag") ?? "")) throw new Error("Client portal page is missing noindex.");
   passed.push("Client portal page is private (noindex, no-store)");

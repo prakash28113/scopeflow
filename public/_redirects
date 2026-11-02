@@ -1,0 +1,3 @@
+# The home page is prerendered to home.html (scripts/prerender.mjs); index.html stays the empty
+# app shell that Cloudflare serves for every app address. This rewrite keeps the address "/".
+/ /home 200

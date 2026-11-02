@@ -46,7 +46,17 @@ describe("error messages", () => {
 });
 
 describe("worker", () => {
-  const assets = { fetch: async (r: Request) => (new URL(r.url).pathname === "/" ? new Response("<!doctype html>app", { headers: { "content-type": "text/html" } }) : new Response("nope", { status: 404 })) };
+  // Behaves like Cloudflare static assets: "/" is rewritten to the prerendered home page (_redirects),
+  // /index.html redirects to "/", and an unknown address requested as a navigation gets the app shell.
+  const assets = {
+    fetch: async (r: Request) => {
+      const path = new URL(r.url).pathname;
+      if (path === "/") return new Response('<!doctype html><div id="root" data-page="/">home</div>', { headers: { "content-type": "text/html" } });
+      if (path === "/index.html") return new Response(null, { status: 307, headers: { location: "/" } });
+      if (r.headers.get("sec-fetch-mode") === "navigate") return new Response('<!doctype html><div id="root"></div>app', { headers: { "content-type": "text/html" } });
+      return new Response("nope", { status: 404 });
+    },
+  };
   const env = { SUPABASE_URL: "https://abcdefghijklmnopqrst.supabase.co", SUPABASE_ANON_KEY: "anon", ASSETS: assets };
   const req = (path: string, accept: string, method = "GET") => new Request(`https://app.example.workers.dev${path}`, { method, headers: { accept } });
 
@@ -61,7 +71,8 @@ describe("worker", () => {
   it("serves the app shell with full security headers when a page is requested outside a navigation", async () => {
     const res = await worker.fetch(req("/projects/1", "text/html,*/*"), env);
     expect(res.status).toBe(200);
-    expect(await res.text()).toContain("app");
+    const body = await res.text();
+    expect(body).toContain('<div id="root"></div>app'); // the shell, never the prerendered home page
     expect(res.headers.get("content-security-policy")).toContain("connect-src 'self' https://abcdefghijklmnopqrst.supabase.co https://cloudflareinsights.com");
     expect(res.headers.get("content-security-policy")).not.toContain("challenges.cloudflare.com");
     expect(res.headers.get("x-frame-options")).toBe("DENY");

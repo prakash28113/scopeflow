@@ -1,7 +1,10 @@
 import { Link, isRouteErrorResponse, useRouteError } from "react-router";
 import { buttonClass } from "@/components/ui";
+import { useNoIndex, useTitle } from "@/lib/title";
 
 function Message({ title, body }: { title: string; body: string }) {
+  useTitle(title);
+  useNoIndex();
   return (
     <div className="flex min-h-[60dvh] flex-col items-center justify-center px-4 text-center">
       <h1 className="text-xl font-semibold">{title}</h1>
