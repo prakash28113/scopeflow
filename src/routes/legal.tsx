@@ -63,13 +63,13 @@ export function PrivacyPage() {
           <li>No advertising, tracking or analytics cookies. Your browser only keeps your sign-in session.</li>
           <li>We count visits with Cloudflare Web Analytics, which uses no cookies, doesn&apos;t follow you across other websites and doesn&apos;t identify you.</li>
           <li>We don&apos;t sell or share your data, and we don&apos;t email your clients. You share client links yourself.</li>
-          <li>We don&apos;t process payments or store card details.</li>
+          <li>We never see or store your card, UPI or bank details. If you buy a paid plan, you pay in Razorpay&apos;s own payment window.</li>
         </ul>
       </section>
       <section>
         <h2>Where it&apos;s kept</h2>
         <p>
-          Data is stored with Supabase (database and sign-in) and the app is served by Cloudflare. Once a week the database is backed up so it can be restored after an outage: the backup is encrypted (AES-256) as it is made, stored with GitHub for up to 90 days, and can&apos;t be opened without a passphrase only the operator holds. Password-reset emails are sent through Brevo, which receives only your email address and the reset link. These providers may process data outside India.
+          Data is stored with Supabase (database and sign-in) and the app is served by Cloudflare. Once a week the database is backed up so it can be restored after an outage: the backup is encrypted (AES-256) as it is made, stored with GitHub for up to 90 days, and can&apos;t be opened without a passphrase only the operator holds. Password-reset emails are sent through Brevo, which receives only your email address and the reset link. If you buy a paid plan, Razorpay (Razorpay Software Private Limited) processes the payment: it receives your name, email address and the payment details you enter, under its own privacy policy, and we receive back only the payment&apos;s amount, status, date and references. These providers may process data outside India.
           Access to your data is restricted by database security rules: only you can see your projects, and a client link shows only that
           one project&apos;s client-facing details.
         </p>
@@ -103,6 +103,7 @@ export function PrivacyPage() {
 /** Plain-language Terms & Conditions. Operator and courts confirmed by the owner (1 Nov 2026). */
 const OPERATOR = OPERATOR_NAME;
 const COURTS = "Hyderabad, Telangana";
+const CITY = "Hyderabad, Telangana";
 
 export function TermsPage() {
   useSeo("/terms");
@@ -158,9 +159,12 @@ export function TermsPage() {
         <h2>5. Plans and fees</h2>
         <ul>
           <li>The <strong>Free plan</strong> costs nothing and has the limits shown on the <Link to="/pricing" className="font-medium text-accent hover:underline">Pricing</Link> page (currently 2 active projects and 5 clients).</li>
-          <li>Paid plans aren&apos;t on sale yet. Before you can buy one, its price, billing period, taxes and refund terms will be shown clearly, and you&apos;ll be charged only after you choose a paid plan yourself.</li>
+          <li><strong>Paid plans</strong> are subscriptions, priced in Indian rupees and billed in advance, monthly or yearly, through Razorpay. A plan marked &ldquo;Not on sale yet&rdquo; can&apos;t be bought. You&apos;re charged only after you choose a paid plan yourself and approve the payment in Razorpay&apos;s window.</li>
+          <li>A subscription renews automatically at the end of each period, at the price you signed up at, until you cancel. You can cancel at any time from Plan &amp; usage; you keep the paid plan until the end of the period already paid for, and you won&apos;t be charged again.</li>
+          <li>If a renewal payment fails, Razorpay retries it. Paid features stay on for a short grace period; if the payment still fails, the account moves to the Free plan&apos;s limits.</li>
+          <li>Refunds follow our <Link to="/refunds" className="font-medium text-accent hover:underline">Refund and cancellation policy</Link>.</li>
           <li>If a paid plan ends or you move to a lower plan, your existing projects, client links and approval records keep working. Only new projects above the plan&apos;s limits are blocked.</li>
-          <li>We may change plan limits or prices in the future. We&apos;ll give notice before a change affects a plan you pay for.</li>
+          <li>We may change plan limits or prices in the future. A new price applies to a plan you pay for only from a renewal at least 30 days after we tell you, and you can cancel before it does.</li>
         </ul>
       </section>
 
@@ -274,6 +278,77 @@ export function TermsPage() {
         <h2>18. Contact</h2>
         <p>
           {OPERATOR}, ScopeFlow · <Mail />
+        </p>
+      </section>
+    </LegalLayout>
+  );
+}
+
+export function RefundsPage() {
+  useSeo("/refunds");
+  return (
+    <LegalLayout title="Refund and cancellation policy">
+      <section>
+        <p>
+          This policy covers payments for ScopeFlow&apos;s paid plans. ScopeFlow never handles money between you and your clients, so it
+          can&apos;t refund those payments: ask your client or freelancer directly.
+        </p>
+      </section>
+      <section>
+        <h2>Cancelling</h2>
+        <ul>
+          <li>You can cancel a paid plan at any time from Plan &amp; usage in your account. No email or call is needed.</li>
+          <li>After you cancel, you keep the paid plan until the end of the period you&apos;ve already paid for, and you won&apos;t be charged again.</li>
+          <li>When the period ends, the account moves to the Free plan&apos;s limits. Nothing is deleted: every project, client link and approval record keeps working.</li>
+        </ul>
+      </section>
+      <section>
+        <h2>Refunds</h2>
+        <ul>
+          <li>We refund in full if you were charged by mistake, charged twice for the same period, or charged after you cancelled. Write to <Contact subject="ScopeFlow refund" /> within 7 days of the charge, from your account email.</li>
+          <li>Otherwise, payments for a period that has started aren&apos;t refunded, including for the unused part of a month or year; cancelling stops the next charge.</li>
+          <li>If ScopeFlow is unavailable for a long time or we close a paid plan, we refund the unused part of the period you paid for.</li>
+          <li>Approved refunds are made to the original payment method through Razorpay. We confirm by email within 2 working days of approving; banks usually show the money within 5 to 7 working days.</li>
+        </ul>
+      </section>
+      <section>
+        <h2>Delivery</h2>
+        <p>
+          ScopeFlow is an online service: nothing is shipped. A paid plan starts as soon as Razorpay confirms the payment, usually within a
+          minute, and you can see it on the Plan &amp; usage page. If it hasn&apos;t started within an hour of paying, write to <Contact subject="ScopeFlow payment" />.
+        </p>
+      </section>
+      <section>
+        <h2>Contact</h2>
+        <p>
+          {OPERATOR}, ScopeFlow, {CITY} · <Contact subject="ScopeFlow refund" />
+        </p>
+      </section>
+    </LegalLayout>
+  );
+}
+
+export function ContactPage() {
+  useSeo("/contact");
+  return (
+    <LegalLayout title="Contact us">
+      <section>
+        <p>
+          ScopeFlow is run by <strong>{OPERATOR}</strong>, an independent developer in {CITY}, India.
+        </p>
+      </section>
+      <section>
+        <h2>Email</h2>
+        <p>
+          For support, billing, refunds, privacy requests or feedback: <Contact subject="ScopeFlow support" />. We usually reply within 1
+          working day.
+        </p>
+      </section>
+      <section>
+        <h2>Complaints</h2>
+        <p>
+          Our grievance officer is {OPERATOR}, at the same email address. We acknowledge complaints within 24 hours and aim to resolve them
+          within 15 days. See the <Link to="/terms" className="font-medium text-accent hover:underline">Terms &amp; Conditions</Link>.
         </p>
       </section>
     </LegalLayout>

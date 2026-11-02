@@ -22,23 +22,34 @@ export const TURNSTILE_ORIGIN = "https://challenges.cloudflare.com";
 export const GOOGLE_GSI_SCRIPT = "https://accounts.google.com/gsi/client";
 export const GOOGLE_GSI = "https://accounts.google.com/gsi/";
 export const GOOGLE_GSI_STYLE = "https://accounts.google.com/gsi/style";
+/**
+ * Razorpay Checkout (only when paid plans are switched on): checkout.js and its risk script, the
+ * payment window (an iframe from api.razorpay.com), its API and telemetry calls, and its images.
+ */
+export const RAZORPAY = {
+  script: ["https://checkout.razorpay.com", "https://cdn.razorpay.com"],
+  frame: ["https://api.razorpay.com", "https://checkout.razorpay.com"],
+  connect: ["https://api.razorpay.com", "https://lumberjack.razorpay.com", "https://checkout.razorpay.com"],
+  img: ["https://*.razorpay.com"],
+};
 export const ANALYTICS_SCRIPT_ORIGIN = "https://static.cloudflareinsights.com";
 export const ANALYTICS_BEACON_ORIGIN = "https://cloudflareinsights.com";
 
-type HeaderOptions = { supabaseUrl: string; turnstile: boolean; google?: boolean };
+type HeaderOptions = { supabaseUrl: string; turnstile: boolean; google?: boolean; razorpay?: boolean };
 
 export function buildCsp(opts: HeaderOptions): string {
   const supabase = new URL(opts.supabaseUrl).origin;
   const t = opts.turnstile ? ` ${TURNSTILE_ORIGIN}` : "";
   const g = (src: string) => (opts.google ? ` ${src}` : "");
-  const frames = [opts.turnstile ? TURNSTILE_ORIGIN : "", opts.google ? GOOGLE_GSI : ""].filter(Boolean);
+  const r = (list: string[]) => (opts.razorpay ? ` ${list.join(" ")}` : "");
+  const frames = [opts.turnstile ? TURNSTILE_ORIGIN : "", opts.google ? GOOGLE_GSI : "", ...(opts.razorpay ? RAZORPAY.frame : [])].filter(Boolean);
   return [
     "default-src 'self'",
-    `script-src 'self' ${ANALYTICS_SCRIPT_ORIGIN}${t}${g(GOOGLE_GSI_SCRIPT)}`,
+    `script-src 'self' ${ANALYTICS_SCRIPT_ORIGIN}${t}${g(GOOGLE_GSI_SCRIPT)}${r(RAZORPAY.script)}`,
     `style-src 'self' 'unsafe-inline'${g(GOOGLE_GSI_STYLE)}`,
-    "img-src 'self' data:",
+    `img-src 'self' data:${r(RAZORPAY.img)}`,
     "font-src 'self'",
-    `connect-src 'self' ${supabase} ${ANALYTICS_BEACON_ORIGIN}${t}${g(GOOGLE_GSI)}`,
+    `connect-src 'self' ${supabase} ${ANALYTICS_BEACON_ORIGIN}${t}${g(GOOGLE_GSI)}${r(RAZORPAY.connect)}`,
     `frame-src ${frames.length ? frames.join(" ") : "'none'"}`,
     "frame-ancestors 'none'",
     "base-uri 'none'",
@@ -54,12 +65,14 @@ export function pageHeaders(opts: HeaderOptions): Record<string, string> {
     "Content-Security-Policy": buildCsp(opts),
     "X-Content-Type-Options": "nosniff",
     "X-Frame-Options": "DENY",
-    // Google's sign-in button needs to know which site it's on; "strict-origin" sends only https://scopeflow.in, never a path.
-    "Referrer-Policy": opts.google ? "strict-origin" : "no-referrer",
-    "Permissions-Policy": "camera=(), microphone=(), geolocation=(), payment=(), usb=()",
+    // Google's sign-in button and Razorpay Checkout need to know which site they're on; "strict-origin" sends
+    // only https://scopeflow.in, never a path.
+    "Referrer-Policy": opts.google || opts.razorpay ? "strict-origin" : "no-referrer",
+    // Razorpay's payment window may use the browser's Payment Request API (e.g. saved cards, UPI apps).
+    "Permissions-Policy": `camera=(), microphone=(), geolocation=(), payment=(${opts.razorpay ? '"https://api.razorpay.com"' : ""}), usb=()`,
     "Strict-Transport-Security": "max-age=31536000; includeSubDomains",
-    // Google's sign-in popup must be able to report back to this page.
-    "Cross-Origin-Opener-Policy": opts.google ? "same-origin-allow-popups" : "same-origin",
+    // Google's sign-in popup and Razorpay's bank/UPI windows must be able to report back to this page.
+    "Cross-Origin-Opener-Policy": opts.google || opts.razorpay ? "same-origin-allow-popups" : "same-origin",
   };
 }
 

@@ -58,7 +58,10 @@ export default function PricingPage() {
           <>
             <PlanCards plans={plans.data} interval={interval} />
             <p className="mx-auto mt-6 max-w-2xl text-center text-[13px] text-muted">
-              Prices in US dollars. Paid plans are in early access: join the list from your account, and nothing is charged until they launch.
+              {plans.data.some((p) => p.purchasable)
+                ? "Prices in Indian rupees, billed monthly or yearly until you cancel. Payments are handled by Razorpay (UPI, cards, netbanking). Plans marked “Not on sale yet” are in early access."
+                : "Prices in Indian rupees. Paid plans are in early access: join the list from your account, and nothing is charged until they launch."}{" "}
+              <Link to="/refunds" className="underline hover:text-ink">Refunds and cancellation</Link>.
             </p>
             <h2 className="mb-4 mt-16 text-xl font-semibold tracking-[-0.02em]">Compare plans</h2>
             <FeatureMatrix plans={plans.data} />

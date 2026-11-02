@@ -7,9 +7,9 @@ import { PGlite } from "@electric-sql/pglite";
 import { readFileSync, readdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { join } from "node:path";
-import { SUPABASE_STUB } from "./harness";
+import { SUPABASE_STUB, createDb } from "./harness";
 // @ts-expect-error — plain ESM script
-import { run, allowlistSql, parseEmails, CLOSED_SENTINEL, EXPECTED } from "../../scripts/ci/release.mjs";
+import { run, allowlistSql, parseEmails, CLOSED_SENTINEL, EXPECTED, billingConfig, purchasableSql } from "../../scripts/ci/release.mjs";
 
 const dir = fileURLToPath(new URL("../../supabase/migrations/", import.meta.url));
 const migrations = readdirSync(dir).filter((f) => f.endsWith(".sql")).map((name) => ({ name, body: readFileSync(join(dir, name), "utf8") }));
@@ -127,5 +127,19 @@ describe("allowlist input safety", () => {
     expect(() => parseEmails("x@y")).toThrow();
     expect(parseEmails(" A@Example.com, b@example.com\n# c@example.com\nA@example.com ")).toEqual(["a@example.com", "b@example.com"]);
     expect(allowlistSql([])).toContain(CLOSED_SENTINEL);
+  });
+});
+
+describe("putting plans on sale", () => {
+  it("live keys sell the configured plans; test keys or none sell nothing", async () => {
+    const db = await createDb();
+    const onSale = async () => (await db.query<{ id: string }>("select id from plans where purchasable order by position")).rows.map((r) => r.id);
+    const keys = { RAZORPAY_KEY_SECRET: "12345678", RAZORPAY_WEBHOOK_SECRET: "12345678" };
+    await db.exec(purchasableSql(billingConfig({ ...keys, RAZORPAY_KEY_ID: "rzp_live_abcdef12" }, JSON.stringify({ billingPlans: ["solo"] }))));
+    expect(await onSale()).toEqual(["solo"]);
+    await db.exec(purchasableSql(billingConfig({ ...keys, RAZORPAY_KEY_ID: "rzp_test_abcdef12" }, "{}")));
+    expect(await onSale()).toEqual([]);
+    await db.exec(purchasableSql(null));
+    expect(await onSale()).toEqual([]);
   });
 });

@@ -14,7 +14,7 @@ export const SITE_URL = "https://scopeflow.in";
 export const SITE_NAME = "ScopeFlow";
 export const OG_IMAGE = `${SITE_URL}/og.png?v=3`;
 
-export type PublicPath = "/" | "/pricing" | "/privacy" | "/terms";
+export type PublicPath = "/" | "/pricing" | "/privacy" | "/terms" | "/refunds" | "/contact";
 export type PageSeo = {
   /** Shown as the search result's headline. Brand first on the home page, so a search for "ScopeFlow" matches it. */
   title: string;
@@ -54,6 +54,20 @@ export const PUBLIC_PAGES: Record<PublicPath, PageSeo> = {
     title: "Terms & Conditions | ScopeFlow",
     description: "The terms for using ScopeFlow, the scope, approval and invoicing workspace for freelancers.",
     file: "terms.html",
+    changefreq: "yearly",
+    priority: "0.3",
+  },
+  "/refunds": {
+    title: "Refund and cancellation policy | ScopeFlow",
+    description: "How to cancel a ScopeFlow paid plan, when payments are refunded, and how long refunds take.",
+    file: "refunds.html",
+    changefreq: "yearly",
+    priority: "0.3",
+  },
+  "/contact": {
+    title: "Contact us | ScopeFlow",
+    description: "How to reach ScopeFlow for support, billing, refunds, privacy requests and complaints.",
+    file: "contact.html",
     changefreq: "yearly",
     priority: "0.3",
   },

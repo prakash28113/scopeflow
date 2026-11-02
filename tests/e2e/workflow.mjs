@@ -96,9 +96,9 @@ try {
   await f.goto(`${BASE}/pricing`);
   await f.getByRole("heading", { name: /Simple pricing/ }).waitFor();
   await f.getByText("Recommended").waitFor();
-  await f.getByText("$90.00").waitFor();
+  await f.getByText("₹4,999").waitFor();
   await f.getByRole("radio", { name: "Monthly" }).click();
-  await f.getByText("$9.00").waitFor();
+  await f.getByText("₹499").first().waitFor();
   await f.getByText("Not on sale yet — no payment taken.").first().waitFor();
   await shot(f, "00-pricing", false);
 
@@ -111,7 +111,9 @@ try {
     };
     const pages = {
       "/": ["Every client job, on the record.", "Does ScopeFlow take payments?"],
-      "/pricing": ["Simple pricing.", "$90.00"], // plans fetched at build time
+      "/pricing": ["Simple pricing.", "₹4,999"], // plans fetched at build time
+      "/refunds": ["Refund and cancellation policy", "within 7 days"],
+      "/contact": ["Contact us", "Hyderabad, Telangana"],
       "/privacy": ["Privacy Policy"],
       "/terms": ["Terms &amp; Conditions", "Hyderabad, Telangana"],
     };
@@ -855,6 +857,123 @@ try {
     await g.close();
   }
 
+  step("paid plans: a tester buys Solo in Razorpay Checkout (test mode); verified payment activates it; renewal webhook; cancel");
+  {
+    const { createHmac } = await import("node:crypto");
+    const RZP = { keySecret: "e2e-razorpay-key-secret", webhookSecret: "e2e-razorpay-webhook-secret" };
+    const b = await newCtx({ viewport: { width: 1360, height: 900 } });
+    // Stand-in for Razorpay's checkout.js: records the options and shows a minimal payment window.
+    let checkoutScriptLoads = 0;
+    await b.route("https://checkout.razorpay.com/v1/checkout.js", (route) => {
+      checkoutScriptLoads++;
+      return route.fulfill({
+        contentType: "text/javascript",
+        body: `window.Razorpay=function(o){this.o=o;this.h={}};
+window.Razorpay.prototype.on=function(e,cb){this.h[e]=cb};
+window.Razorpay.prototype.open=function(){var o=this.o,h=this.h;window.__rzp=o;
+var d=document.createElement("div");d.style.cssText="position:fixed;top:80px;left:50%;transform:translateX(-50%);z-index:2147483647;background:#fff;color:#000;padding:24px;border:1px solid #ccc;width:360px";d.setAttribute("role","dialog");d.setAttribute("aria-label","Razorpay test checkout");
+var t=document.createElement("p");t.textContent=o.name+": "+o.description;d.appendChild(t);
+window.__rzpPay=function(sig,pay){d.remove();o.handler({razorpay_payment_id:pay,razorpay_subscription_id:o.subscription_id,razorpay_signature:sig})};
+window.__rzpFail=function(){h["payment.failed"]&&h["payment.failed"]({error:{description:"Card declined (test)."}})};
+var c=document.createElement("button");c.textContent="Close checkout";c.onclick=function(){d.remove();o.modal.ondismiss()};d.appendChild(c);
+document.body.appendChild(d)}`,
+      });
+    });
+    const bp = await b.newPage();
+    const bErrors = [];
+    bp.on("pageerror", (e) => bErrors.push(e.message));
+    bp.on("console", (m) => m.type() === "error" && !/Failed to load resource/.test(m.text()) && bErrors.push(m.text()));
+    await bp.goto(`${BASE}/signup`);
+    await bp.getByLabel("Your name").fill("Bina Shah");
+    await bp.getByLabel("Email").fill("buyer@studio.test");
+    await bp.getByLabel("Password").fill("correct-horse-9");
+    await bp.getByRole("button", { name: "Create account" }).click();
+    await bp.waitForURL("**/onboarding");
+    await bp.getByLabel("Business or studio name").fill("Shah Studio");
+    await bp.getByRole("button", { name: "Continue" }).click();
+    await bp.waitForURL("**/projects/new?welcome=1");
+
+    const page = await bp.goto(`${BASE}/plan`);
+    // Checkout's origins are allowed only because paid plans are on in this build.
+    const csp = page.headers()["content-security-policy"];
+    assert.match(csp, /script-src [^;]*https:\/\/checkout\.razorpay\.com/);
+    assert.match(csp, /frame-src [^;]*https:\/\/api\.razorpay\.com/);
+    assert.equal(page.headers()["referrer-policy"], "strict-origin");
+    await bp.getByRole("heading", { name: "Plan & usage" }).waitFor();
+    await bp.getByText("Test mode: use Razorpay's test card or UPI. No real money moves.").waitFor();
+    assert.equal(checkoutScriptLoads, 0, "checkout.js loads only when someone starts a payment");
+    // Studio stays in early access; Solo can be bought.
+    assert.equal(await bp.getByRole("button", { name: "Upgrade to Studio" }).count(), 1); // testers can try both in test mode
+    await bp.getByRole("radio", { name: "Monthly" }).click();
+
+    // 1. Closing the window changes nothing.
+    await bp.getByRole("button", { name: "Upgrade to Solo" }).click();
+    const win = bp.getByRole("dialog", { name: "Razorpay test checkout" });
+    await win.waitFor();
+    const opts = await bp.evaluate(() => ({ key: window.__rzp.key, sub: window.__rzp.subscription_id, email: window.__rzp.prefill.email, desc: window.__rzp.description }));
+    assert.equal(opts.key, "rzp_test_e2estandin01"); // the key id only; the secret never reaches the browser
+    assert.match(opts.sub, /^sub_e2e\d+$/);
+    assert.equal(opts.email, "buyer@studio.test");
+    assert.match(opts.desc, /Solo plan, billed monthly \(test mode\)/);
+    await shot(bp, "62-razorpay-checkout", false);
+    await bp.getByRole("button", { name: "Close checkout" }).click();
+    await bp.getByRole("button", { name: "Upgrade to Solo" }).waitFor();
+    assert.match(await bp.getByRole("heading", { name: /plan$/ }).first().innerText(), /Free plan/);
+
+    // 2. A failed payment, then the window is closed: the reason is shown, nothing changes.
+    await bp.getByRole("button", { name: "Upgrade to Solo" }).click();
+    await win.waitFor();
+    await bp.evaluate(() => window.__rzpFail());
+    await bp.getByRole("button", { name: "Close checkout" }).click();
+    await bp.getByText("Card declined (test).").waitFor();
+
+    // 3. A genuine payment (signed by Razorpay with the key secret) switches Solo on right away.
+    await bp.getByRole("button", { name: "Upgrade to Solo" }).click();
+    await win.waitFor();
+    const sub = await bp.evaluate(() => window.__rzp.subscription_id);
+    const sig = createHmac("sha256", RZP.keySecret).update(`pay_e2e1|${sub}`).digest("hex");
+    await bp.evaluate(([s]) => window.__rzpPay(s, "pay_e2e1"), [sig]);
+    await bp.getByText("Your plan is active. Thank you!").waitFor();
+    await bp.getByRole("heading", { name: "Solo plan" }).waitFor();
+    await bp.getByText("Renews").waitFor();
+    assert.equal(await bp.getByRole("button", { name: /Upgrade to/ }).count(), 0, "no second subscription while one is active");
+
+    // 4. Razorpay's signed webhook for the charge: idempotent, and the payment appears in billing history.
+    const now = Math.floor(Date.now() / 1000);
+    const charged = JSON.stringify({
+      entity: "event",
+      event: "subscription.charged",
+      payload: {
+        subscription: { entity: { id: sub, status: "active", customer_id: "cust_e2e", current_start: now, current_end: now + 30 * 86400 } },
+        payment: { entity: { id: "pay_e2e1", invoice_id: "inv_e2e1", amount: 49900, currency: "INR", status: "captured", created_at: now } },
+      },
+    });
+    const hook = (body, sig) => fetch("http://127.0.0.1:54321/functions/v1/billing/webhook", { method: "POST", headers: { "content-type": "application/json", "x-razorpay-signature": sig, "x-razorpay-event-id": "evt_e2e_charge" }, body });
+    assert.equal((await hook(charged, createHmac("sha256", "not-the-secret").update(charged).digest("hex"))).status, 401, "forged webhook rejected");
+    const signed = createHmac("sha256", RZP.webhookSecret).update(charged).digest("hex");
+    assert.deepEqual(await (await hook(charged, signed)).json(), { result: "applied" });
+    assert.deepEqual(await (await hook(charged, signed)).json(), { result: "duplicate" });
+    await bp.reload();
+    await bp.getByText("inv_e2e1").waitFor();
+    await bp.getByText(/₹499\.00 · paid/).waitFor();
+    await shot(bp, "63-plan-paid");
+
+    // 5. Cancel: keeps Solo until the end of the paid period.
+    await bp.getByRole("button", { name: "Cancel plan" }).click();
+    await confirmDialog(bp);
+    await bp.getByText(/You keep your plan until the end of the period you paid for/).waitFor();
+    await bp.getByTestId("cancelling").waitFor();
+    await bp.getByRole("heading", { name: "Solo plan" }).waitFor();
+    assert.equal(await bp.getByRole("button", { name: "Cancel plan" }).count(), 0);
+
+    // The function refuses other websites (CORS) and signed-out callers.
+    const pre = await fetch("http://127.0.0.1:54321/functions/v1/billing/checkout", { method: "OPTIONS", headers: { origin: "https://evil.example", "access-control-request-method": "POST" } });
+    assert.equal(pre.status, 403);
+    assert.equal((await fetch("http://127.0.0.1:54321/functions/v1/billing/checkout", { method: "POST", body: "{}" })).status, 401);
+    assert.deepEqual(bErrors, [], "no browser errors during checkout");
+    await b.close();
+  }
+
   step("clients: profile, history and private notes");
   await f.goto(`${BASE}/clients`);
   await f.getByRole("link", { name: /Dana Whitfield/ }).click();
@@ -884,6 +1003,9 @@ try {
   await f.waitForURL("**/plan");
   await f.getByRole("heading", { name: "Plan & usage" }).waitFor();
   await f.getByText("2 of 2").first().waitFor();
+  // Payments are in test mode and this isn't a tester account: nothing can be bought.
+  assert.equal(await f.getByRole("button", { name: /Upgrade to/ }).count(), 0);
+  assert.equal(await f.getByText("Test mode: use Razorpay's test card").count(), 0);
   await f.getByRole("button", { name: "Join early access" }).first().click();
   await f.getByText("On the early-access list", { exact: true }).waitFor();
   await f.getByText(/ScopeFlow hasn't charged you anything/).waitFor();

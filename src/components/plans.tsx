@@ -36,6 +36,10 @@ export function PlanCards({
   earlyAccess,
   onJoin,
   joining,
+  canBuy,
+  onBuy,
+  buying,
+  testMode,
 }: {
   plans: Plan[];
   interval: Interval;
@@ -44,6 +48,11 @@ export function PlanCards({
   /** Signed in: join early access in place. Signed out: link to sign-up. */
   onJoin?: (plan: PlanId) => void;
   joining?: PlanId | null;
+  /** Signed in: can this plan be bought now (on sale, or a tester in test mode)? */
+  canBuy?: (plan: Plan) => boolean;
+  onBuy?: (plan: PlanId) => void;
+  buying?: PlanId | null;
+  testMode?: boolean;
 }) {
   return (
     <div className="grid gap-4 md:grid-cols-3">
@@ -51,6 +60,7 @@ export function PlanCards({
         const price = priceLabel(p, interval);
         const recommended = p.id === "solo";
         const isCurrent = current === p.id;
+        const buyable = Boolean(onBuy && canBuy?.(p));
         return (
           <section
             key={p.id}
@@ -87,6 +97,14 @@ export function PlanCards({
                     Start free
                   </Link>
                 )
+              ) : buyable ? (
+                <Button className="w-full" variant={recommended ? "primary" : "secondary"} disabled={Boolean(buying)} onClick={() => onBuy!(p.id)}>
+                  {buying === p.id ? "Opening payment…" : `Upgrade to ${p.name}`}
+                </Button>
+              ) : !onJoin && p.purchasable ? (
+                <Link to="/signup" className={cx(buttonClass(recommended ? "primary" : "secondary"), "w-full")}>
+                  Start free, upgrade anytime
+                </Link>
               ) : earlyAccess === p.id ? (
                 <p className="rounded-lg bg-accent-soft px-3 py-2 text-center text-[13px] font-medium text-accent-hover">On the early-access list</p>
               ) : onJoin ? (
@@ -98,7 +116,13 @@ export function PlanCards({
                   Start free, join early access
                 </Link>
               )}
-              {p.id !== "free" ? <p className="mt-2 text-center text-[11px] text-muted">Not on sale yet — no payment taken.</p> : null}
+              {p.id === "free" || isCurrent ? null : buyable || p.purchasable ? (
+                <p className="mt-2 text-center text-[11px] text-muted">
+                  {buyable && testMode ? "Test mode: no real money moves." : "Paid securely through Razorpay. Cancel anytime."}
+                </p>
+              ) : (
+                <p className="mt-2 text-center text-[11px] text-muted">Not on sale yet — no payment taken.</p>
+              )}
             </div>
           </section>
         );

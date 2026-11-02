@@ -21,6 +21,8 @@ export const routes: RouteObject[] = [
       { path: "/pricing", lazy: lazy(() => import("./pricing")) },
       { path: "/privacy", lazy: lazy(() => import("./legal").then((m) => ({ default: m.PrivacyPage }))) },
       { path: "/terms", lazy: lazy(() => import("./legal").then((m) => ({ default: m.TermsPage }))) },
+      { path: "/refunds", lazy: lazy(() => import("./legal").then((m) => ({ default: m.RefundsPage }))) },
+      { path: "/contact", lazy: lazy(() => import("./legal").then((m) => ({ default: m.ContactPage }))) },
       {
         element: <RequireAuth allowUnonboarded />,
         children: [{ path: "/onboarding", lazy: lazy(() => import("./settings").then((m) => ({ default: m.OnboardingPage }))) }],

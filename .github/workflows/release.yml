@@ -146,6 +146,11 @@ jobs:
           SUPABASE_PROJECT_NAME: ${{ vars.SUPABASE_PROJECT_NAME }}
           BETA_EMAILS: ${{ vars.BETA_EMAILS }}
           VITE_TURNSTILE_SITE_KEY: ${{ vars.VITE_TURNSTILE_SITE_KEY }}
+          # Paid plans (optional). Secrets only; copied into the billing Edge Function's secrets.
+          RAZORPAY_KEY_ID: ${{ secrets.RAZORPAY_KEY_ID }}
+          RAZORPAY_KEY_SECRET: ${{ secrets.RAZORPAY_KEY_SECRET }}
+          RAZORPAY_WEBHOOK_SECRET: ${{ secrets.RAZORPAY_WEBHOOK_SECRET }}
+          BILLING_TESTERS: ${{ vars.BILLING_TESTERS }}
 
   rollback:
     name: Rollback

@@ -4,11 +4,13 @@ import { SUPPORT_EMAIL, supportMailto } from "@/lib/site";
 export function SiteFooter() {
   return (
     <footer className="mx-auto mt-24 flex max-w-6xl flex-col gap-3 border-t border-line px-4 py-8 text-[12px] text-muted sm:flex-row sm:items-center sm:justify-between sm:px-6">
-      <p>ScopeFlow tracks payments you record; it doesn&apos;t process payments.</p>
+      <p>ScopeFlow records payments between you and your clients; it doesn&apos;t handle that money.</p>
       <nav className="flex flex-wrap gap-x-5 gap-y-2">
         <Link to="/pricing" className="hover:text-ink">Pricing</Link>
         <Link to="/privacy" className="hover:text-ink">Privacy</Link>
         <Link to="/terms" className="hover:text-ink">Terms &amp; Conditions</Link>
+        <Link to="/refunds" className="hover:text-ink">Refunds &amp; cancellation</Link>
+        <Link to="/contact" className="hover:text-ink">Contact</Link>
         <a href={supportMailto("ScopeFlow support")} className="hover:text-ink">{SUPPORT_EMAIL}</a>
       </nav>
     </footer>

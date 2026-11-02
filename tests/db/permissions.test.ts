@@ -23,7 +23,13 @@ const FREELANCER_FUNCTIONS = [
   "unread_notification_count", "mark_notifications_seen", "my_plan", "join_early_access", "update_client", "set_payment_details", "set_invoice_details", "update_client_billing", "create_invoice", "void_invoice", "set_deliverable_progress", "add_expense", "delete_expense", "record_payment", "delete_payment", "add_follow_up", "set_follow_up_done", "delete_follow_up", "log_client_request", "create_client", "save_template", "delete_template",
 ];
 // Plan changes: never callable from the app. admin_set_plan = SQL editor; process_billing_event = service role (future webhook).
-const BACK_OFFICE = ["admin_set_plan", "process_billing_event"];
+// Razorpay billing: the "billing" Edge Function calls these as service role, after verifying the
+// user's session or the webhook signature.
+const BILLING_SERVICE = [
+  "billing_prepare_checkout", "billing_save_provider_plan", "billing_record_checkout",
+  "billing_current_subscription", "billing_mark_cancelling", "process_razorpay_event",
+];
+const BACK_OFFICE = ["admin_set_plan", "process_billing_event", ...BILLING_SERVICE];
 const AUTHENTICATED_FUNCTIONS = [...FREELANCER_FUNCTIONS, ...ANON_FUNCTIONS].sort();
 const SECURITY_DEFINER = [...FREELANCER_FUNCTIONS, ...PORTAL_FUNCTIONS, ...BACK_OFFICE, "health", "_handle_new_user", "_create_subscription"].sort();
 
@@ -33,7 +39,7 @@ const OWNER_READABLE = [
   "subscription_changes", "invoices", "early_access_requests", "client_invoices", "expenses", "payments", "follow_ups", "scope_templates",
 ].sort();
 // share_links, subscriptions: column grants only (never the token hash / provider ids).
-const NOT_READABLE = ["beta_allowlist", "portal_rate_limits", "share_links", "subscriptions", "billing_events"].sort();
+const NOT_READABLE = ["beta_allowlist", "portal_rate_limits", "share_links", "subscriptions", "billing_events", "provider_plans", "billing_checkouts"].sort();
 const PUBLIC_CATALOGUE = ["plans"]; // prices and limits for the pricing page; no personal data
 const ALL_TABLES = [...OWNER_READABLE, ...NOT_READABLE, ...PUBLIC_CATALOGUE].sort();
 const PRIVS = ["SELECT", "INSERT", "UPDATE", "DELETE", "TRUNCATE", "REFERENCES", "TRIGGER"];
@@ -153,7 +159,7 @@ describe("functions", () => {
         [name],
       );
       expect([r.anon, r.auth], name).toEqual([false, false]);
-      expect(r.svc, name).toBe(name === "process_billing_event");
+      expect(r.svc, name).toBe(name !== "admin_set_plan");
     }
   });
 

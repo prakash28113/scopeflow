@@ -10,7 +10,12 @@
  *                            smoke-tests the live site and database.
  * If a secret is missing it stops cleanly and says what's needed (the run still shows green).
  *
- * Never prints secrets. Never uses the database password or any service-role key.
+ * Paid plans (optional): RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET and RAZORPAY_WEBHOOK_SECRET (GitHub
+ * secrets) are copied into the "billing" Edge Function's secrets, the function is deployed, and paid
+ * plans are put on sale only with live keys (test keys: only BILLING_TESTERS can buy).
+ *
+ * Never prints secrets. Never uses the database password or any service-role key (the Edge Function
+ * receives its own from Supabase at run time).
  */
 import { execFileSync } from "node:child_process";
 import { appendFileSync, readFileSync, readdirSync } from "node:fs";
@@ -23,7 +28,7 @@ const SUPABASE_API = "https://api.supabase.com/v1";
 const CF_API = "https://api.cloudflare.com/client/v4";
 
 /** Expected results of the post-migration security check (see DEPLOYMENT.md §2). */
-export const EXPECTED = { tables: 25, without_rls: 0, public_functions: 5, signup_trigger: 1 };
+export const EXPECTED = { tables: 27, without_rls: 0, public_functions: 5, signup_trigger: 1 };
 /** Keeps sign-ups closed when no invited emails are configured. */
 export const CLOSED_SENTINEL = "invites-closed@scopeflow.invalid";
 const EMAIL = /^[a-z0-9._%+-]+@[a-z0-9-]+(\.[a-z0-9-]+)*\.[a-z]{2,}$/;
@@ -116,6 +121,45 @@ export function parseDomains(text) {
   return [...new Set(list)];
 }
 
+/**
+ * Razorpay settings from GitHub secrets. null = paid plans off. A partial setup is reported, not fatal.
+ * Keys are only checked for shape here; they're never printed.
+ */
+export function billingConfig(env, siteText) {
+  const keyId = String(env.RAZORPAY_KEY_ID ?? "").trim();
+  const keySecret = String(env.RAZORPAY_KEY_SECRET ?? "").trim();
+  const webhookSecret = String(env.RAZORPAY_WEBHOOK_SECRET ?? "").trim();
+  if (!keyId && !keySecret && !webhookSecret) return null;
+  const missing = [];
+  if (!/^rzp_(test|live)_[A-Za-z0-9]{6,40}$/.test(keyId)) missing.push("RAZORPAY_KEY_ID (rzp_test_… or rzp_live_…)");
+  if (keySecret.length < 8 || /\s/.test(keySecret)) missing.push("RAZORPAY_KEY_SECRET");
+  if (webhookSecret.length < 8 || /\s/.test(webhookSecret)) missing.push("RAZORPAY_WEBHOOK_SECRET (8+ characters)");
+  if (missing.length) return { error: `Paid plans not switched on: check ${missing.join(", ")}.` };
+  let plans = ["solo"];
+  try {
+    const site = JSON.parse(siteText ?? readFileSync(join(ROOT, "config/public-site.json"), "utf8"));
+    if (Array.isArray(site.billingPlans)) plans = site.billingPlans.filter((p) => p === "solo" || p === "studio");
+  } catch {}
+  return {
+    keyId,
+    keySecret,
+    webhookSecret,
+    mode: keyId.startsWith("rzp_live_") ? "live" : "test",
+    testers: parseEmails(env.BILLING_TESTERS ?? ""),
+    plans,
+  };
+}
+
+/** SQL that puts plans on sale: live keys → the configured plans; test keys or no keys → none. */
+export function purchasableSql(billing) {
+  const ids = billing && !billing.error && billing.mode === "live" ? billing.plans : [];
+  for (const id of ids) if (!/^(solo|studio)$/.test(id)) throw new Error(`Unexpected plan id: ${id}`);
+  const on = `(id = any(array[${ids.map(quote).join(", ")}]::text[]))`;
+  return `update public.plans set purchasable = ${on} where purchasable is distinct from ${on};`;
+}
+
+export const BILLING_FUNCTION_FILES = ["index.ts", "handler.ts"];
+
 const short = (s) => String(s).replace(/\s+/g, " ").slice(0, 300);
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -135,9 +179,9 @@ export async function run(deps) {
 
   // ------------------------------------------------------------------ Supabase
   const sbToken = env.SUPABASE_ACCESS_TOKEN;
-  let supabaseUrl, publishable, setSiteUrl;
+  let supabaseUrl, publishable, setSiteUrl, setUpBilling;
   if (sbToken) {
-    ({ supabaseUrl, publishable, setSiteUrl } = await setUpSupabase());
+    ({ supabaseUrl, publishable, setSiteUrl, setUpBilling } = await setUpSupabase());
   } else if (env.SUPABASE_URL || env.SUPABASE_PUBLISHABLE_KEY) {
     // App-only release: the database was already set up by an earlier run; use its public values.
     ({ supabaseUrl, publishable } = publicSupabaseConfig(env));
@@ -256,9 +300,67 @@ revoke all on all tables in schema scopeflow_admin from public, anon, authentica
     if (!publishable || /[*•·]/.test(publishable)) throw new Error("Could not read the project's publishable (anon) key.");
   }
   ok("Public Supabase URL and publishable key ready");
+
+  /**
+   * Paid plans: function secrets, the "billing" Edge Function, and which plans are on sale.
+   * Returns true when checkout is available. Needs a token with Edge Functions + Secrets access;
+   * without it, paid plans stay off and the run says so.
+   */
+  async function setUpBilling(billing, origins) {
+    if (!billing || billing.error) {
+      await sql(purchasableSql(null));
+      if (billing?.error) {
+        log(`::warning::${billing.error}`);
+        report.push(`- ⏭️ ${billing.error} Nothing is on sale.`);
+      }
+      return false;
+    }
+    try {
+      await sb(`/projects/${ref}/secrets`, {
+        method: "POST",
+        body: [
+          { name: "RAZORPAY_KEY_ID", value: billing.keyId },
+          { name: "RAZORPAY_KEY_SECRET", value: billing.keySecret },
+          { name: "RAZORPAY_WEBHOOK_SECRET", value: billing.webhookSecret },
+          { name: "BILLING_TESTERS", value: billing.testers.join(",") || "none@scopeflow.invalid" },
+          { name: "APP_ORIGINS", value: origins.join(",") },
+        ],
+      });
+      const form = new FormData();
+      // JWT verification off: Razorpay's webhook has no Supabase session; the function checks sessions itself.
+      form.append("metadata", JSON.stringify({ entrypoint_path: "index.ts", name: "billing", verify_jwt: false }));
+      for (const f of BILLING_FUNCTION_FILES) {
+        form.append("file", new Blob([readFileSync(join(ROOT, "supabase/functions/billing", f), "utf8")], { type: "application/typescript" }), f);
+      }
+      const res = await fetch(`${SUPABASE_API}/projects/${ref}/functions/deploy?slug=billing`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${sbToken}` },
+        body: form,
+      });
+      const deployed = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(`Supabase API POST /functions/deploy failed (${res.status}): ${short(JSON.stringify(deployed))}`);
+      if (deployed.verify_jwt !== false) await sb(`/projects/${ref}/functions/billing`, { method: "PATCH", body: { verify_jwt: false } });
+    } catch (e) {
+      if (!/\((401|403)\)/.test(String(e.message))) throw e;
+      await sql(purchasableSql(null));
+      log("::warning::Paid plans not switched on: the Supabase token needs Edge Functions and Secrets access.");
+      report.push("- ⏭️ Paid plans not switched on — the `SUPABASE_ACCESS_TOKEN` needs **Edge Functions** and **Secrets** write access. Nothing is on sale.");
+      return false;
+    }
+    await sql(purchasableSql(billing));
+    ok(
+      billing.mode === "live"
+        ? `Payments: Razorpay **live** — on sale: ${billing.plans.map((p) => (p === "solo" ? "Solo" : "Studio")).join(", ") || "nothing"}`
+        : `Payments: Razorpay **test mode** — only ${billing.testers.length} tester account${billing.testers.length === 1 ? "" : "s"} (BILLING_TESTERS) can buy; nothing is on sale`,
+    );
+    report.push(`- ℹ️ Razorpay webhook URL: \`${supabaseUrl}/functions/v1/billing/webhook\` (events: subscription.*)`);
+    return true;
+  }
+
   return {
     supabaseUrl,
     publishable,
+    setUpBilling,
     // Password-reset links may only return to ScopeFlow's own addresses.
     setSiteUrl: (appUrl, allUrls = [appUrl]) =>
       optional("Supabase Site URL and sign-in return addresses set to the live addresses", `/projects/${ref}/config/auth`, {
@@ -301,8 +403,14 @@ revoke all on all tables in schema scopeflow_admin from public, anon, authentica
     ok(`Registered free address *.${subdomain}.workers.dev`);
   }
 
+  const domains = parseDomains(env.CUSTOM_DOMAINS);
+  const origins = [...domains.map((d) => `https://${d}`), `https://scopeflow.${subdomain}.workers.dev`];
+  // Paid plans need the Supabase token (function + secrets); an app-only release leaves them as they are.
+  const billingOn = setUpBilling ? await setUpBilling(billingConfig(env), origins) : false;
+
   const buildEnv = {
     ...process.env,
+    VITE_BILLING_PROVIDER: billingOn ? "razorpay" : "",
     VITE_SUPABASE_URL: supabaseUrl,
     VITE_SUPABASE_PUBLISHABLE_KEY: publishable,
     VITE_TURNSTILE_SITE_KEY: env.VITE_TURNSTILE_SITE_KEY ?? "",
@@ -313,9 +421,8 @@ revoke all on all tables in schema scopeflow_admin from public, anon, authentica
   exec("node", ["scripts/predeploy-check.mjs"], { env: buildEnv });
   ok("Built the app and passed the pre-deploy check");
 
-  const domains = parseDomains(env.CUSTOM_DOMAINS);
   const domainArgs = domains.flatMap((d) => ["--domain", d]);
-  const out = exec("npx", ["wrangler", "deploy", "--var", `SUPABASE_URL:${supabaseUrl}`, "--var", `SUPABASE_ANON_KEY:${publishable}`, "--var", `TURNSTILE_ENABLED:${env.VITE_TURNSTILE_SITE_KEY ? "true" : "false"}`, "--var", `GOOGLE_SIGNIN_ENABLED:${googleSignInEnabled() ? "true" : "false"}`, ...domainArgs], {
+  const out = exec("npx", ["wrangler", "deploy", "--var", `SUPABASE_URL:${supabaseUrl}`, "--var", `SUPABASE_ANON_KEY:${publishable}`, "--var", `TURNSTILE_ENABLED:${env.VITE_TURNSTILE_SITE_KEY ? "true" : "false"}`, "--var", `GOOGLE_SIGNIN_ENABLED:${googleSignInEnabled() ? "true" : "false"}`, "--var", `BILLING_ENABLED:${billingOn ? "true" : "false"}`, ...domainArgs], {
     env: { ...buildEnv, CLOUDFLARE_API_TOKEN: cfToken, CLOUDFLARE_ACCOUNT_ID: accountId, WRANGLER_SEND_METRICS: "false" },
   });
   const workersUrl = (String(out).match(/https:\/\/scopeflow\.[a-z0-9-]+\.workers\.dev/) ?? [`https://scopeflow.${subdomain}.workers.dev`])[0];

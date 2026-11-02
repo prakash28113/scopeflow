@@ -85,16 +85,23 @@ export const STATUS_TEXT: Record<SubscriptionStatus, string> = {
   expired: "Expired",
 };
 
+/** A plan price: whole amounts without decimals (₹4,999, not ₹4,999.00). */
+export function formatPrice(minor: number, currency: string) {
+  if (minor % 100 !== 0) return formatMoney(minor, currency);
+  return new Intl.NumberFormat("en-IN", { style: "currency", currency, maximumFractionDigits: 0 }).format(minor / 100);
+}
+
 /** Price shown on a plan card for the chosen billing interval. */
 export function priceLabel(plan: Plan, interval: Interval) {
-  if (plan.monthly_price_cents === 0) return { main: formatMoney(0, plan.currency), per: "forever", note: null as string | null };
-  if (interval === "month") return { main: formatMoney(plan.monthly_price_cents, plan.currency), per: "/month", note: null };
-  const perMonth = Math.round(plan.annual_price_cents / 12);
+  const money = (n: number) => formatPrice(n, plan.currency);
+  if (plan.monthly_price_cents === 0) return { main: money(0), per: "forever", note: null as string | null };
+  if (interval === "month") return { main: money(plan.monthly_price_cents), per: "/month", note: null };
+  const perMonth = Math.round(plan.annual_price_cents / 1200) * 100;
   const saved = plan.monthly_price_cents * 12 - plan.annual_price_cents;
   return {
-    main: formatMoney(plan.annual_price_cents, plan.currency),
+    main: money(plan.annual_price_cents),
     per: "/year",
-    note: `${formatMoney(perMonth, plan.currency)}/month · save ${formatMoney(saved, plan.currency)} a year`,
+    note: `about ${money(perMonth)}/month · save ${money(saved)} a year`,
   };
 }
 
