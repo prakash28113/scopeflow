@@ -348,7 +348,13 @@ export async function smokeTest({ fetch, wait = sleep, appUrl, supabaseUrl, publ
   passed.push("Live site responds with security headers (CSP pinned to Supabase, framing denied)");
 
   // Search engines see the prerendered home page, indexable, with its canonical address.
-  const homeHtml = await home.text();
+  // The previous version can keep answering for a short while after a deploy, so give the new one up to a minute.
+  let homeHtml = await home.text();
+  for (let i = 0; i < 12 && !homeHtml.includes('data-page="/"'); i++) {
+    await wait(5_000);
+    home = await fetch(appUrl + "/", { headers: { "Sec-Fetch-Mode": "navigate", Accept: "text/html" } });
+    homeHtml = await home.text();
+  }
   if (!homeHtml.includes('data-page="/"') || !homeHtml.includes('rel="canonical"')) throw new Error("Live home page isn't the prerendered page (check dist/_redirects).");
   if (/<meta name="robots"[^>]*noindex/i.test(homeHtml) || /noindex/i.test(home.headers.get("x-robots-tag") ?? "")) throw new Error("Live home page is marked noindex.");
   const sitemap = await fetch(appUrl + "/sitemap.xml");
