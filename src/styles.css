@@ -2,31 +2,46 @@
 
 @theme {
   --font-sans: "Inter Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-display: "Bricolage Grotesque Variable", "Inter Variable", ui-sans-serif, system-ui, sans-serif;
   --font-mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, monospace;
 
-  --color-canvas: #f7f7f5;
-  --color-surface: #ffffff;
-  --color-sunken: #f1f1ee;
-  --color-line: #e6e6e1;
-  --color-line-strong: #d6d6d0;
-  --color-ink: #16181d;
-  --color-ink-2: #3b3f46;
-  --color-muted: #6b6f76;
-  --color-subtle: #9a9da3;
+  /* Neutrals: cool, so the cobalt reads clean. */
+  --color-canvas: #f4f5f7; /* page background */
+  --color-surface: #ffffff; /* panels, tables, forms */
+  --color-sunken: #f0f2f5; /* wells, hovers, inactive segments */
+  --color-line: #e4e7ec; /* dividers, panel borders */
+  --color-line-strong: #d0d5dd; /* control borders */
+  --color-ink: #101828; /* primary text */
+  --color-ink-2: #344054; /* secondary text */
+  --color-muted: #667085; /* supporting text */
+  --color-subtle: #98a2b3; /* placeholders, disabled */
 
-  --color-accent: #005dd4; /* logo blue */
+  /* Brand: the logo's cobalt, for primary actions and "you are here" only. */
+  --color-accent: #005dd4;
   --color-accent-hover: #004cb0;
-  --color-accent-soft: #ebf3fe;
-  --color-accent-line: #c2d9f7;
+  --color-accent-soft: #eaf2fe;
+  --color-accent-line: #bcd5f8;
 
-  --color-positive: #1f7a4d;
-  --color-positive-soft: #ebf5ef;
-  --color-warning: #9a5b00;
-  --color-warning-soft: #fbf3e4;
-  --color-danger: #b4342b;
-  --color-danger-soft: #fbeeec;
+  /* Semantic: strong for text and dots, soft for backgrounds. */
+  --color-positive: #067647;
+  --color-positive-soft: #ecfdf3;
+  --color-warning: #b54708;
+  --color-warning-soft: #fffaeb;
+  --color-danger: #b42318;
+  --color-danger-soft: #fef3f2;
+  --color-info: #005dd4;
+  --color-info-soft: #eaf2fe;
+
+  /* App chrome: the logo's charcoal, for the sidebar. */
+  --color-chrome: #14171d;
+  --color-chrome-2: #1f232b;
+  --color-chrome-line: #2b303a;
+  --color-chrome-text: #d0d5dd;
+  --color-chrome-muted: #8a93a3;
 
   --radius-card: 12px;
+  --shadow-xs: 0 1px 2px rgb(16 24 40 / 0.05);
+  --shadow-pop: 0 16px 40px -12px rgb(16 24 40 / 0.28), 0 2px 6px rgb(16 24 40 / 0.06);
 }
 
 @layer base {
@@ -37,6 +52,12 @@
   }
   body {
     @apply bg-canvas text-ink;
+  }
+  select {
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 16 16' fill='none' stroke='%23667085' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m4 6 4 4 4-4'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 10px center;
   }
   ::selection {
     background: var(--color-accent-soft);
@@ -49,6 +70,44 @@
 
 @utility num {
   font-variant-numeric: tabular-nums;
+}
+/* Page titles and money figures: the brand's display face (also used on the home page). */
+@utility display {
+  font-family: var(--font-display);
+  font-variation-settings: "opsz" 48;
+  letter-spacing: -0.025em;
+}
+
+/* Loading placeholders: a calm shimmer, static with reduced motion. */
+.skeleton {
+  background: linear-gradient(90deg, var(--color-sunken) 0%, #e9ecf1 50%, var(--color-sunken) 100%);
+  background-size: 200% 100%;
+  border-radius: 6px;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .skeleton {
+    animation: skeleton 1.4s ease-in-out infinite;
+  }
+}
+@keyframes skeleton {
+  to {
+    background-position: -200% 0;
+  }
+}
+/* Dialogs: one style for every modal. */
+dialog.sf-dialog::backdrop {
+  background: rgb(16 24 40 / 0.45);
+}
+@media (prefers-reduced-motion: no-preference) {
+  dialog.sf-dialog[open] {
+    animation: dialog-in 0.16s ease-out;
+  }
+}
+@keyframes dialog-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px) scale(0.98);
+  }
 }
 
 /* Printing a quote or scope: only the marked document is printed. */
@@ -246,4 +305,19 @@
   outline: 2px solid var(--lp-blue);
   outline-offset: 2px;
   border-radius: 6px;
+}
+
+/* App navigation drawer (phones): slides in from the left. */
+dialog.sf-drawer {
+  inset: 0 auto 0 0;
+}
+@media (prefers-reduced-motion: no-preference) {
+  dialog.sf-drawer[open] {
+    animation: drawer-in 0.2s ease-out;
+  }
+}
+@keyframes drawer-in {
+  from {
+    transform: translateX(-100%);
+  }
 }

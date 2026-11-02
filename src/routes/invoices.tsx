@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Link, useParams } from "react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Alert, Card, EmptyState, PageHeader, Tag, cx } from "@/components/ui";
+import { Alert, Card, EmptyState, Figure, Figures, PageHeader, Tag, cx } from "@/components/ui";
 import { ActionButton } from "@/components/form-bits";
 import { PageSpinner } from "@/components/app-shell";
 import { DownloadPdfButton, PrintButton } from "@/components/quote";
@@ -63,21 +63,12 @@ export function InvoicesPage() {
   return (
     <>
       <PageHeader title="Invoices" description="Create an invoice from any payment in a project. Issued invoices are locked; void one to replace it." />
-      <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
-        {[
-          ["Invoiced this month", sums(live.filter((r) => r.issue_date.startsWith(month)))],
-          ["Unpaid", sums(live.filter((r) => balanceOf(r) > 0), balanceOf)],
-          ["Overdue", sums(live.filter((r) => statusOf(r, today) === "overdue"), balanceOf)],
-          ["Paid", sums(live.filter((r) => statusOf(r, today) === "paid"))],
-        ].map(([label, value]) => (
-          <Card key={label} className="px-4 py-3">
-            <p className="text-[12px] text-muted">{label}</p>
-            <p className="num mt-1 truncate text-lg font-semibold tracking-[-0.02em]" title={value}>
-              {value}
-            </p>
-          </Card>
-        ))}
-      </div>
+      <Figures label="Invoice totals">
+        <Figure label="Invoiced this month" tone="accent" value={sums(live.filter((r) => r.issue_date.startsWith(month)))} />
+        <Figure label="Unpaid" tone="warning" value={sums(live.filter((r) => balanceOf(r) > 0), balanceOf)} />
+        <Figure label="Overdue" tone="danger" value={sums(live.filter((r) => statusOf(r, today) === "overdue"), balanceOf)} />
+        <Figure label="Paid" tone="positive" value={sums(live.filter((r) => statusOf(r, today) === "paid"))} />
+      </Figures>
       <Card>
         <div className="flex flex-wrap gap-1 border-b border-line px-3 py-2" role="tablist" aria-label="Filter invoices">
           {FILTERS.map((f) => (

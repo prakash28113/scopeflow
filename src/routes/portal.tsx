@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Alert, Card, Logo, Meter, Tag } from "@/components/ui";
+import { Alert, Card, Logo, Meter, StatusBadge, Tag } from "@/components/ui";
 import { AgreementTerms, RevisionMeter } from "@/components/agreement";
 import { DownloadPdfButton, PrintButton, QuoteTable } from "@/components/quote";
 import { UpiPay } from "@/components/upi-pay";
@@ -83,11 +83,12 @@ export default function PortalPage() {
   return (
     <Shell from={v.freelancer.name}>
       <header className="mb-8">
-        <p className="text-[13px] text-muted">
-          {v.freelancer.name} · for {v.client.company || v.client.name}
-        </p>
-        <h1 className="mt-1.5 text-[28px] font-semibold leading-tight tracking-[-0.02em] text-balance">{p.title}</h1>
-        <p className="mt-2 text-[13px] text-ink-2">{STATUS_LABEL[p.status]}</p>
+        <p className="text-[13px] text-muted">Prepared for {v.client.company || v.client.name}</p>
+        <h1 className="display mt-1.5 text-[30px] font-semibold leading-[1.1] text-balance sm:text-[34px]">{p.title}</h1>
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          <StatusBadge status={p.status} />
+          <span className="sr-only">{STATUS_LABEL[p.status]}</span>
+        </div>
       </header>
 
       {/* ---------------------------------------------- scope approval */}
@@ -321,7 +322,20 @@ export default function PortalPage() {
 function Shell({ children, from }: { children: React.ReactNode; from?: string }) {
   return (
     <div className="min-h-dvh">
-      <div className="mx-auto max-w-2xl px-4 pb-20 pt-8 sm:pt-14">
+      {from ? (
+        <div className="border-b border-line bg-surface">
+          <div className="mx-auto flex h-14 max-w-2xl items-center gap-3 px-4">
+            <span className="grid size-8 shrink-0 place-items-center rounded-full bg-chrome text-[12px] font-semibold text-white" aria-hidden>
+              {from.split(/\s+/).slice(0, 2).map((w) => w[0]?.toUpperCase()).join("")}
+            </span>
+            <span className="min-w-0">
+              <span className="block truncate text-[14px] font-semibold leading-tight">{from}</span>
+              <span className="block text-[12px] leading-tight text-muted">Your project page</span>
+            </span>
+          </div>
+        </div>
+      ) : null}
+      <div className="mx-auto max-w-2xl px-4 pb-20 pt-8 sm:pt-12">
         {children}
         <footer className="mt-14 flex flex-wrap items-center justify-between gap-3 border-t border-line pt-6 text-[12px] text-muted">
           <span>{from ? `Shared privately by ${from}. Please don't forward this link.` : ""}</span>
@@ -338,7 +352,7 @@ function Summary({ label, value, sub }: { label: string; value: string; sub?: st
   return (
     <div className="bg-surface px-4 py-3.5 sm:px-5 last:col-span-2 sm:last:col-span-1">
       <p className="text-[12px] text-muted">{label}</p>
-      <p className="num mt-0.5 text-[17px] font-semibold tracking-[-0.01em]">{value}</p>
+      <p className="display num mt-1 text-[20px] font-semibold leading-tight">{value}</p>
       {sub ? <p className="num text-[11px] text-muted">{sub}</p> : null}
     </div>
   );
@@ -363,7 +377,7 @@ function ScopeDocument({
       {data.summary ? <p className="whitespace-pre-line border-b border-line px-5 py-5 text-sm leading-relaxed text-ink-2 sm:px-6">{data.summary}</p> : null}
 
       <section className="border-b border-line px-5 py-5 sm:px-6">
-        <h3 className="mb-3 text-[12px] font-semibold uppercase tracking-[0.06em] text-muted">Deliverables</h3>
+        <h3 className="mb-3 text-[14px] font-semibold text-ink">Deliverables</h3>
         <ol className="space-y-4">
           {data.deliverables.map((d, i) => (
             <li key={d.id} className="flex gap-3">
@@ -384,7 +398,7 @@ function ScopeDocument({
 
       {data.pricing ? (
         <section className="border-b border-line px-5 py-5 sm:px-6">
-          <h3 className="mb-3 text-[12px] font-semibold uppercase tracking-[0.06em] text-muted">Quote</h3>
+          <h3 className="mb-3 text-[14px] font-semibold text-ink">Quote</h3>
           <QuoteTable lines={data.deliverables} pricing={data.pricing} currency={data.currency} />
         </section>
       ) : null}
@@ -423,7 +437,7 @@ function ScopeDocument({
 
       {data.milestones.length ? (
         <section className="border-b border-line px-5 py-5 sm:px-6">
-          <h3 className="mb-3 text-[12px] font-semibold uppercase tracking-[0.06em] text-muted">Payment schedule</h3>
+          <h3 className="mb-3 text-[14px] font-semibold text-ink">Payment schedule</h3>
           <ul className="space-y-2">
             {data.milestones.map((m, i) => (
               <li key={i} className="flex items-baseline justify-between gap-3 text-[13px]">

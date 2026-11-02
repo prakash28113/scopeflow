@@ -1,4 +1,5 @@
 import "@fontsource-variable/inter";
+import "@fontsource-variable/bricolage-grotesque/opsz.css";
 import "./styles.css";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
@@ -42,6 +43,10 @@ const router = createBrowserRouter([
             element: <AppShell />,
             children: [
               { path: "/dashboard", lazy: lazy(() => import("./routes/dashboard")) },
+              { path: "/projects", lazy: lazy(() => import("./routes/projects")) },
+              { path: "/quotations", lazy: lazy(() => import("./routes/quotations")) },
+              { path: "/approvals", lazy: lazy(() => import("./routes/approvals")) },
+              { path: "/expenses", lazy: lazy(() => import("./routes/expenses")) },
               { path: "/notifications", lazy: lazy(() => import("./routes/notifications")) },
               { path: "/plan", lazy: lazy(() => import("./routes/plan")) },
               { path: "/settings", lazy: lazy(() => import("./routes/settings").then((m) => ({ default: m.SettingsPage }))) },

@@ -32,7 +32,7 @@ export function useDashboard(enabled = true) {
     queryKey: ["dashboard"],
     enabled,
     queryFn: async () => {
-      const [projects, changeOrders, revisions, activity, snapshots, invoices, links, followUps] = await Promise.all([
+      const [projects, changeOrders, revisions, activity, snapshots, invoices, links, followUps, payments] = await Promise.all([
         supabase.from("projects").select("*, clients(name, company), milestones(id, title, amount_cents, status, due_date, paid_cents), deliverables(id, title, due_date, progress)").order("updated_at", { ascending: false }),
         supabase
           .from("change_orders")
@@ -55,6 +55,8 @@ export function useDashboard(enabled = true) {
         supabase.from("client_invoices").select("id, number, due_date, amount_cents, currency, project_id, voided_at, milestone_id, milestones(status, paid_cents)").is("voided_at", null),
         supabase.from("share_links").select("project_id, expires_at, revoked_at").is("revoked_at", null),
         supabase.from("follow_ups").select("id, due_on, note, project_id, done_at").is("done_at", null).order("due_on"),
+        // Money received, by day: the overview's "money in" trend.
+        supabase.from("payments").select("amount_cents, paid_on, project_id").order("paid_on"),
       ]);
       return {
         projects: unwrap(projects) as DashboardProject[],
@@ -74,6 +76,7 @@ export function useDashboard(enabled = true) {
         }[],
         links: unwrap(links) as { project_id: string; expires_at: string; revoked_at: string | null }[],
         followUps: unwrap(followUps) as { id: string; due_on: string; note: string; project_id: string | null; done_at: string | null }[],
+        payments: unwrap(payments) as { amount_cents: number; paid_on: string; project_id: string }[],
       };
     },
   });

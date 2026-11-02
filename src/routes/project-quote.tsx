@@ -56,7 +56,7 @@ export default function ProjectQuotePage() {
         <header className="flex flex-wrap items-start justify-between gap-6 border-b border-line pb-6">
           <div>
             <p className="text-[12px] font-semibold uppercase tracking-[0.08em] text-accent">Quote</p>
-            <h1 className="mt-1 text-2xl font-semibold tracking-[-0.02em]">{d.title}</h1>
+            <h1 className="display mt-1 text-[26px] font-semibold leading-tight">{d.title}</h1>
             <p className="mt-1 text-[13px] text-muted">
               {sent ? `Version ${sent.version} · ${formatDate(sent.created_at)} · ref ${shortHash(sent.content_hash)}` : `Draft · ${formatDate(new Date().toISOString())}`}
             </p>
