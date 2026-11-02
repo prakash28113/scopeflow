@@ -7,6 +7,8 @@ export const PASSWORD_RESET_EMAIL: boolean = siteConfig.passwordResetEmail === t
 export const GOOGLE_CLIENT_ID: string = (import.meta.env.VITE_GOOGLE_CLIENT_ID as string | undefined) ?? String(siteConfig.googleClientId ?? "");
 
 /** Public site facts shown on the landing page, legal pages and sign-in help. */
+/** Who runs ScopeFlow (legal pages and structured data). */
+export const OPERATOR_NAME = "Prakash Mummidisetti";
 export const SUPPORT_EMAIL = "prakashmummidisetti@gmail.com";
 export const LEGAL_UPDATED = "1 November 2026";
 export const supportMailto = (subject: string) => `mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent(subject)}`;

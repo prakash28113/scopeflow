@@ -101,6 +101,66 @@ try {
   await f.getByText("$9.00").waitFor();
   await f.getByText("Not on sale yet — no payment taken.").first().waitFor();
   await shot(f, "00-pricing", false);
+
+  step("search engines: public pages arrive prerendered, with their own title, canonical address and structured data");
+  {
+    const raw = async (path) => {
+      const res = await fetch(BASE + path, { headers: { Accept: "text/html", "Sec-Fetch-Mode": "navigate" } });
+      assert.equal(res.status, 200, `${path} status`);
+      return res.text();
+    };
+    const pages = {
+      "/": ["Every client job, on the record.", "Does ScopeFlow take payments?"],
+      "/pricing": ["Simple pricing.", "$90.00"], // plans fetched at build time
+      "/privacy": ["Privacy Policy"],
+      "/terms": ["Terms &amp; Conditions", "Hyderabad, Telangana"],
+    };
+    const titles = new Set();
+    for (const [path, texts] of Object.entries(pages)) {
+      const html = await raw(path);
+      assert.ok(html.includes(`data-page="${path}"`), `${path} is prerendered`);
+      for (const t of texts) assert.ok(html.includes(t), `${path} HTML contains "${t}"`);
+      const url = path === "/" ? "https://scopeflow.in/" : `https://scopeflow.in${path}`;
+      assert.ok(html.includes(`<link rel="canonical" href="${url}" />`), `${path} canonical`);
+      assert.ok(!/name="robots"[^>]*noindex/.test(html), `${path} must be indexable`);
+      const title = html.match(/<title>([^<]+)<\/title>/)[1];
+      assert.ok(!titles.has(title), `${path} has its own title`);
+      titles.add(title);
+      const ld = JSON.parse(html.match(/<script type="application\/ld\+json">(.+?)<\/script>/)[1]);
+      assert.ok(ld["@graph"].some((n) => n["@type"] === "Organization" && n.name === "ScopeFlow"), `${path} structured data`);
+    }
+    // The app's pages and unknown addresses get the plain shell, never the home page's content.
+    for (const path of ["/dashboard", "/p", "/no-such-page"]) assert.ok((await raw(path)).includes('<div id="root"></div>'), `${path} gets the app shell`);
+    const sitemap = await (await fetch(`${BASE}/sitemap.xml`)).text();
+    for (const path of Object.keys(pages)) assert.ok(sitemap.includes(`<loc>https://scopeflow.in${path === "/" ? "/" : path}</loc>`), `sitemap lists ${path}`);
+    assert.match(await (await fetch(`${BASE}/robots.txt`)).text(), /Sitemap: https:\/\/scopeflow\.in\/sitemap\.xml/);
+
+    // In the browser, React adopts the prerendered markup (no flash, no re-render) and the page works.
+    const hp = await desk.newPage();
+    const hErrors = [];
+    hp.on("pageerror", (e) => hErrors.push(e.message));
+    hp.on("console", (m) => m.type() === "error" && hErrors.push(m.text()));
+    await hp.addInitScript(() => {
+      document.addEventListener("DOMContentLoaded", () => {
+        const root = document.getElementById("root");
+        window.__sfFirst = root.firstElementChild;
+      });
+    });
+    for (const path of Object.keys(pages)) {
+      await hp.goto(BASE + path, { waitUntil: "networkidle" });
+      assert.equal(await hp.evaluate(() => document.getElementById("root").firstElementChild === window.__sfFirst), true, `${path} was hydrated, not re-rendered`);
+    }
+    await hp.goto(BASE + "/", { waitUntil: "networkidle" });
+    await hp.getByRole("link", { name: "Pricing" }).first().click();
+    await hp.getByRole("heading", { name: /Simple pricing/ }).waitFor();
+    assert.equal(await hp.title(), "Pricing: free for 2 active projects | ScopeFlow", "title follows in-app navigation");
+    assert.equal(await hp.locator('link[rel="canonical"]').getAttribute("href"), "https://scopeflow.in/pricing");
+    await hp.goto(`${BASE}/no-such-page`);
+    await hp.getByRole("heading", { name: "Page not found" }).waitFor();
+    assert.equal(await hp.locator('meta[name="robots"]').getAttribute("content"), "noindex");
+    assert.deepEqual(hErrors, [], "no hydration or console errors on the public pages");
+    await hp.close();
+  }
   await f.goto(BASE);
   await shot(f, "01-landing", false);
   await f.goto(`${BASE}/signup`);

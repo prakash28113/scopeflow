@@ -2,7 +2,8 @@ import type { ReactNode } from "react";
 import { Link } from "react-router";
 import { Logo } from "@/components/ui";
 import { BetaBadge, SiteFooter } from "@/components/site-footer";
-import { LEGAL_UPDATED, SUPPORT_EMAIL, supportMailto } from "@/lib/site";
+import { LEGAL_UPDATED, OPERATOR_NAME, SUPPORT_EMAIL, supportMailto } from "@/lib/site";
+import { useSeo } from "@/lib/seo";
 
 function LegalLayout({ title, children }: { title: string; children: ReactNode }) {
   return (
@@ -32,6 +33,7 @@ const Contact = ({ subject = "ScopeFlow privacy" }: { subject?: string }) => (
 );
 
 export function PrivacyPage() {
+  useSeo("/privacy");
   return (
     <LegalLayout title="Privacy Policy">
       <section>
@@ -99,10 +101,11 @@ export function PrivacyPage() {
 }
 
 /** Plain-language Terms & Conditions. Operator and courts confirmed by the owner (1 Nov 2026). */
-export const OPERATOR = "Prakash Mummidisetti";
-export const COURTS = "Hyderabad, Telangana";
+const OPERATOR = OPERATOR_NAME;
+const COURTS = "Hyderabad, Telangana";
 
 export function TermsPage() {
+  useSeo("/terms");
   const Mail = () => <Contact subject="ScopeFlow terms" />;
   return (
     <LegalLayout title="Terms & Conditions">

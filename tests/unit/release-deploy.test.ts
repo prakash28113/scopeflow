@@ -8,7 +8,7 @@ const APP = "https://scopeflow.prakash-studio.workers.dev";
 
 type Call = { method: string; url: string; body?: unknown; headers?: Record<string, string> };
 
-function world(opts: { subdomain?: string | null; leak?: boolean; badCsp?: boolean; status?: string[]; accounts?: number; authForbidden?: boolean } = {}) {
+function world(opts: { subdomain?: string | null; leak?: boolean; badCsp?: boolean; shellHome?: boolean; status?: string[]; accounts?: number; authForbidden?: boolean } = {}) {
   const calls: Call[] = [];
   const statuses = [...(opts.status ?? ["ACTIVE_HEALTHY"])];
   const json = (status: number, data: unknown, headers: Record<string, string> = {}) =>
@@ -49,7 +49,10 @@ function world(opts: { subdomain?: string | null; leak?: boolean; badCsp?: boole
         "x-frame-options": "DENY",
       };
       if (u.pathname === "/p") headers["x-robots-tag"] = "noindex, nofollow";
-      return new Response("<!doctype html>", { status: 200, headers });
+      if (u.pathname === "/sitemap.xml") return new Response('<?xml version="1.0"?><urlset></urlset>', { status: 200 });
+      if (u.pathname === "/" && !opts.shellHome)
+        return new Response('<!doctype html><link rel="canonical" href="https://scopeflow.in/" /><div id="root" data-page="/"><h1>x</h1></div>', { status: 200, headers });
+      return new Response('<!doctype html><div id="root"></div>', { status: 200, headers });
     }
     // Supabase public API
     if (url.startsWith(`${SUPA}/rest/v1/rpc/health`)) return json(200, "ok");
@@ -126,6 +129,10 @@ describe("release automation — deploy and live checks", () => {
 
   it("fails the release if the live site lacks the security policy", async () => {
     await expect(run(world({ badCsp: true }).deps(BOTH))).rejects.toThrow(/Content-Security-Policy/);
+  });
+
+  it("fails the release if the live home page isn't the prerendered, indexable page", async () => {
+    await expect(run(world({ shellHome: true }).deps(BOTH))).rejects.toThrow(/prerendered/);
   });
 
   it("fails loudly if anonymous visitors could read project data", async () => {

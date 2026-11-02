@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useTitle } from "@/lib/title";
 import { Link, NavLink, Navigate, Outlet, useLocation } from "react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { intentProps, prefetchPath } from "@/lib/prefetch";
@@ -330,6 +331,7 @@ export function AppShell() {
   const attention = dash.data ? needsAttention(remindersFrom(dash.data)) : 0;
   const [menu, setMenu] = useState(false);
   useEffect(() => setMenu(false), [location.pathname]);
+  useTitle(sectionOf(location.pathname).split(" / ").pop() || "ScopeFlow");
   const qc = useQueryClient();
   // Once the app has loaded: download every page's code, and the client, invoice and analytics data, in the background.
   useEffect(() => {

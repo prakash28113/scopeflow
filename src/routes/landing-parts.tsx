@@ -327,29 +327,3 @@ export function AppPreview() {
     </div>
   );
 }
-
-
-export const QA: [string, string][] = [
-  [
-    "Does my client need an account?",
-    "No. They open a private link on any phone or computer, review the scope and approve it, or ask for changes.",
-  ],
-  [
-    "Is it free?",
-    "Yes, for 2 active projects and 5 clients at a time, with every core feature: scopes, approvals, revision tracking, change orders, quotes, invoices and payment tracking. Expenses and analytics are free for everyone during the beta. No card needed.",
-  ],
-  [
-    "Can I make GST invoices?",
-    "Yes. Add your GSTIN and address once, then create a tax invoice from any payment. CGST and SGST, or IGST, are worked out for you, and numbering stays in order.",
-  ],
-  [
-    "What if my client asks for changes on WhatsApp?",
-    "Log the request on the project in a few taps. It's checked against the approved scope like any other request, and your client sees it on their page.",
-  ],
-  [
-    "Does ScopeFlow take payments?",
-    "No. It records the payments you receive. Your client pays you directly, for example by scanning the UPI QR code on the invoice.",
-  ],
-  ["Can I use it on my phone?", "Yes. Everything works on a phone, for you and for your clients."],
-];
-
