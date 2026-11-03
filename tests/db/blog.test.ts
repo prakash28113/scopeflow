@@ -121,6 +121,30 @@ describe("publishing keys", () => {
   });
 });
 
+describe("images", () => {
+  it("saves an uploaded cover, keeps it when a tool leaves it out, and removes it on null", async () => {
+    const url = "https://abcdefghijklmnopqrst.supabase.co/storage/v1/object/public/blog/2026/11/a.webp";
+    const r = await rpc<Json>(author, "save_blog_post", [null, post({ title: "A post with a cover photo", cover_image: url })]);
+    const cover = async () => (await as<Json>(db, anon, "select cover_image from blog_posts where id = $1", [r.id]))[0].cover_image;
+    expect(await cover()).toBe(url);
+    await rpc(author, "save_blog_post", [r.id, post({ title: "A post with a cover photo" })]);
+    expect(await cover()).toBe(url);
+    await rpc(author, "save_blog_post", [r.id, post({ title: "A post with a cover photo", cover_image: null })]);
+    expect(await cover()).toBeNull();
+    for (const bad of ["javascript:alert(1)", "data:image/png;base64,x", 'https://x.com/a.png" onerror="x', "https://x.com/a b.png"]) {
+      await expect(rpc(author, "save_blog_post", [r.id, post({ title: "A post with a cover photo", cover_image: bad })])).rejects.toThrow(/uploaded image/);
+    }
+  });
+
+  it("only authors can upload to the public blog bucket", async () => {
+    const [bucket] = (await db.query<Json>("select public, file_size_limit, allowed_mime_types from storage.buckets where id = 'blog'")).rows;
+    expect(bucket).toEqual({ public: true, file_size_limit: 3145728, allowed_mime_types: ["image/webp", "image/jpeg", "image/png"] });
+    await as(db, author, "insert into storage.objects (bucket_id, name) values ('blog', '2026/11/x.webp')");
+    await expect(as(db, reader, "insert into storage.objects (bucket_id, name) values ('blog', '2026/11/y.webp')")).rejects.toThrow(/row-level security/);
+    await expect(as(db, author, "insert into storage.objects (bucket_id, name) values ('other', 'x')")).rejects.toThrow();
+  });
+});
+
 describe("rollback", () => {
   it("removes the blog and re-applies cleanly", async () => {
     const fresh = await createDb();
@@ -129,5 +153,18 @@ describe("rollback", () => {
     await fresh.exec(down);
     expect((await fresh.query("select to_regclass('public.blog_posts') as t")).rows).toEqual([{ t: null }]);
     await fresh.exec(readFileSync(new URL("../../supabase/migrations/20261113000000_blog.sql", import.meta.url), "utf8"));
+  });
+
+  it("removes cover images (twice), restores saving without them, and re-applies", async () => {
+    const fresh = await createDb();
+    const down = readFileSync(new URL("../../supabase/rollback/20261114000000_blog_images_down.sql", import.meta.url), "utf8");
+    await fresh.exec(down);
+    await fresh.exec(down);
+    expect((await fresh.query("select 1 from information_schema.columns where table_name = 'blog_posts' and column_name = 'cover_image'")).rows).toEqual([]);
+    const a = await createUser(fresh, "w2@example.com", "W");
+    await fresh.query("insert into blog_authors (email) values ('w2@example.com')");
+    const saved = await as<{ r: Json }>(fresh, a, "select public.save_blog_post(null, $1) as r", [post({ title: "Saved after rollback" })]);
+    expect(saved[0].r.status).toBe("published");
+    await fresh.exec(readFileSync(new URL("../../supabase/migrations/20261114000000_blog_images.sql", import.meta.url), "utf8"));
   });
 });

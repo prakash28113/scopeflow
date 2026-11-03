@@ -820,3 +820,11 @@ dialog.sf-drawer {
 .blog-prose > :first-child {
   margin-top: 0;
 }
+.blog-prose img {
+  border-radius: 12px;
+  height: auto;
+  max-width: 100%;
+}
+.blog-prose figure img {
+  width: 100%;
+}

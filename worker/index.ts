@@ -122,7 +122,7 @@ export async function serveBlog(request: Request, env: Env, f: Fetcher = fetch):
     }
     const [post, posts] = await Promise.all([getPost(env, f, route.slug), listPosts(env, f)]);
     if (!post) return new Response(body(fillShell(shellHtml, notFoundPage(route.slug))), { status: 404, headers: s.headers });
-    return new Response(body(fillShell(shellHtml, postPage(post, posts))), { status: 200, headers: s.headers });
+    return new Response(body(fillShell(shellHtml, postPage(post, posts, env.SUPABASE_URL))), { status: 200, headers: s.headers });
   } catch (e) {
     console.error(String(e));
     // The app loads the posts itself.

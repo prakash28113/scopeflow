@@ -1,4 +1,4 @@
-import { useMemo, useState, type FormEvent } from "react";
+import { useMemo, useRef, useState, type ChangeEvent, type FormEvent } from "react";
 import { Link } from "react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import { Alert, Badge, Button, Card, CardHeader, EmptyState, Field, Input, PageHeader, Select, Textarea, cx } from "@/components/ui";
@@ -8,11 +8,11 @@ import { useToast } from "@/components/toast";
 import { supabase } from "@/lib/supabase";
 import { call } from "@/lib/use-action";
 import { formatDateTime } from "@/lib/format";
-import { BLOG_API_URL, useBlogKeys, useIsBlogAuthor, useMyPosts, type MyPost } from "@/lib/blog";
+import { BLOG_API_URL, BLOG_IMAGE_PREFIX, uploadBlogImage, useBlogKeys, useIsBlogAuthor, useMyPosts, type MyPost } from "@/lib/blog";
 import { CATEGORIES, categoryOf, readingMinutes, renderMarkdown, type BlogCategory } from "@/lib/blog-content";
 
-type Draft = { id: string | null; title: string; description: string; category: BlogCategory; body: string; status: "draft" | "published" };
-const EMPTY: Draft = { id: null, title: "", description: "", category: "strategies", body: "", status: "draft" };
+type Draft = { id: string | null; title: string; description: string; category: BlogCategory; body: string; status: "draft" | "published"; cover_image: string | null };
+const EMPTY: Draft = { id: null, title: "", description: "", category: "strategies", body: "", status: "draft", cover_image: null };
 
 const MARKDOWN_HELP = [
   ["## Heading", "section heading"],
@@ -21,6 +21,7 @@ const MARKDOWN_HELP = [
   ["1. item", "numbered list"],
   ["[text](https://…)", "link"],
   ["> quote", "quote"],
+  ["![text](photo)", "photo (use Add photo)"],
   ["| a | b |", "table (first row = header)"],
 ];
 
@@ -76,7 +77,7 @@ export default function BlogWritePage() {
                     View
                   </Link>
                 ) : null}
-                <Button variant="secondary" size="sm" onClick={() => setDraft({ id: p.id, title: p.title, description: p.description, category: p.category, body: p.body, status: p.status })}>
+                <Button variant="secondary" size="sm" onClick={() => setDraft({ id: p.id, title: p.title, description: p.description, category: p.category, body: p.body, status: p.status, cover_image: p.cover_image ?? null })}>
                   Edit
                 </Button>
               </li>
@@ -96,7 +97,36 @@ function Editor({ initial, onDone }: { initial: Draft; onDone: () => void }) {
   const [preview, setPreview] = useState(false);
   const [saving, setSaving] = useState<"draft" | "publish" | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const html = useMemo(() => (preview ? renderMarkdown(d.body) : ""), [preview, d.body]);
+  const html = useMemo(() => (preview ? renderMarkdown(d.body, { imagePrefix: BLOG_IMAGE_PREFIX }) : ""), [preview, d.body]);
+  const [uploading, setUploading] = useState<"cover" | "body" | null>(null);
+  const bodyRef = useRef<HTMLTextAreaElement>(null);
+  const coverInput = useRef<HTMLInputElement>(null);
+  const bodyInput = useRef<HTMLInputElement>(null);
+
+  async function upload(e: ChangeEvent<HTMLInputElement>, where: "cover" | "body") {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    setUploading(where);
+    try {
+      const url = await uploadBlogImage(file);
+      if (where === "cover") {
+        set("cover_image", url);
+      } else {
+        // Insert at the cursor, on its own line.
+        const el = bodyRef.current;
+        const at = el ? el.selectionStart : d.body.length;
+        const alt = file.name.replace(/\.[a-z0-9]+$/i, "").replace(/[-_]+/g, " ").replace(/[\[\]()]/g, "").trim() || "Photo";
+        const snippet = `\n\n![${alt}](${url})\n\n`;
+        set("body", (d.body.slice(0, at) + snippet + d.body.slice(at)).replace(/^\n+/, ""));
+      }
+      toast("positive", where === "cover" ? "Cover photo added." : "Photo added to the post.");
+    } catch (err) {
+      toast("danger", err instanceof Error ? err.message : "The photo didn't upload.");
+    } finally {
+      setUploading(null);
+    }
+  }
   const set = <K extends keyof Draft>(k: K, v: Draft[K]) => setD((x) => ({ ...x, [k]: v }));
 
   async function save(publish: boolean, e?: FormEvent) {
@@ -104,7 +134,7 @@ function Editor({ initial, onDone }: { initial: Draft; onDone: () => void }) {
     setError(null);
     setSaving(publish ? "publish" : "draft");
     const r = await call(() =>
-      supabase.rpc("save_blog_post", { p_id: d.id, p: { title: d.title, description: d.description, category: d.category, body: d.body, publish } }),
+      supabase.rpc("save_blog_post", { p_id: d.id, p: { title: d.title, description: d.description, category: d.category, body: d.body, cover_image: d.cover_image, publish } }),
     );
     setSaving(null);
     if (!r.ok) return setError(r.message);
@@ -153,10 +183,43 @@ function Editor({ initial, onDone }: { initial: Draft; onDone: () => void }) {
             <Textarea id="post-summary" rows={2} value={d.description} maxLength={200} onChange={(e) => set("description", e.target.value)} />
           </Field>
           <div className="space-y-1.5">
-            <div className="flex items-center justify-between">
+            <p className="text-[13px] font-medium text-ink-2">Cover photo</p>
+            {d.cover_image ? (
+              <div className="relative overflow-hidden rounded-lg border border-line" data-testid="cover-preview">
+                <img src={d.cover_image} alt="Cover" className="aspect-[2/1] w-full object-cover" />
+                <div className="absolute right-2 top-2 flex gap-2">
+                  <Button type="button" size="sm" variant="secondary" disabled={Boolean(uploading)} onClick={() => coverInput.current?.click()}>
+                    Change
+                  </Button>
+                  <Button type="button" size="sm" variant="secondary" onClick={() => set("cover_image", null)}>
+                    Remove
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => coverInput.current?.click()}
+                disabled={Boolean(uploading)}
+                className="flex aspect-[3/1] w-full flex-col items-center justify-center gap-1 rounded-lg border border-dashed border-line-strong bg-sunken text-[13px] text-muted transition-colors hover:border-accent hover:text-accent"
+              >
+                <span className="font-medium text-ink-2">{uploading === "cover" ? "Uploading…" : "Add a cover photo"}</span>
+                <span>Optional. Without one, the post gets a cover in its category's colour.</span>
+              </button>
+            )}
+            <input ref={coverInput} type="file" accept="image/*" className="sr-only" aria-label="Cover photo file" onChange={(e) => upload(e, "cover")} />
+          </div>
+          <div className="space-y-1.5">
+            <div className="flex flex-wrap items-center justify-between gap-2">
               <label htmlFor="post-body" className="text-[13px] font-medium text-ink-2">
                 Post
               </label>
+              {!preview ? (
+                <Button type="button" size="sm" variant="ghost" disabled={Boolean(uploading)} onClick={() => bodyInput.current?.click()}>
+                  {uploading === "body" ? "Uploading…" : "Add photo"}
+                </Button>
+              ) : null}
+              <input ref={bodyInput} type="file" accept="image/*" className="sr-only" aria-label="Photo file for the post" onChange={(e) => upload(e, "body")} />
               <div className="flex rounded-lg border border-line-strong bg-sunken p-0.5 text-[12px] font-medium" role="tablist">
                 <button type="button" role="tab" aria-selected={!preview} onClick={() => setPreview(false)} className={cx("rounded-md px-3 py-1", !preview ? "bg-surface text-ink shadow-sm" : "text-muted")}>
                   Write
@@ -169,7 +232,7 @@ function Editor({ initial, onDone }: { initial: Draft; onDone: () => void }) {
             {preview ? (
               <div className="blog-prose min-h-[320px] rounded-lg border border-line bg-surface px-4 py-3" data-testid="post-preview" dangerouslySetInnerHTML={{ __html: html || "<p>Nothing to preview yet.</p>" }} />
             ) : (
-              <Textarea id="post-body" rows={18} value={d.body} onChange={(e) => set("body", e.target.value)} className="font-mono text-[14px] leading-relaxed" placeholder={"Paste or write the post here.\n\n## A section heading\n\nA paragraph with **bold** text."} />
+              <Textarea ref={bodyRef} id="post-body" rows={18} value={d.body} onChange={(e) => set("body", e.target.value)} className="font-mono text-[14px] leading-relaxed" placeholder={"Paste or write the post here.\n\n## A section heading\n\nA paragraph with **bold** text."} />
             )}
             <p className="text-[12px] text-muted">
               {d.body.trim() ? `${readingMinutes(d.body)} min read · ` : ""}Paste text from Grok or any writer; Markdown formatting is kept.

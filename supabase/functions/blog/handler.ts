@@ -41,6 +41,7 @@ const HELP = {
     category: "strategies | success-stories | market-prices | tools | news",
     body: "the post in Markdown: ## headings, **bold**, *italic*, [links](https://…), - lists, > quotes",
     draft: "optional: true saves a draft instead of publishing",
+    cover_image: "optional: the address of a photo uploaded to the blog (from the editor)",
   },
 };
 
@@ -77,6 +78,11 @@ export async function handleBlogApi(req: Request, cfg: BlogApiConfig, f: Fetch =
     slug: typeof input.slug === "string" ? input.slug : undefined,
     publish: input.draft !== true,
   };
+  if (typeof input.cover_image === "string" && input.cover_image) {
+    const prefix = `${cfg.supabaseUrl}/storage/v1/object/public/blog/`;
+    if (!input.cover_image.startsWith(prefix)) return reply(400, { error: "cover_image must be a photo uploaded to the blog (upload it in the editor first)." });
+    Object.assign(post, { cover_image: input.cover_image });
+  }
 
   const headers: Record<string, string> = { apikey: cfg.serviceKey, "content-type": "application/json" };
   if (cfg.serviceKey.startsWith("eyJ")) headers.authorization = `Bearer ${cfg.serviceKey}`;

@@ -263,6 +263,31 @@ async function blogApi(req, res, url) {
   res.end(Buffer.from(await r.arrayBuffer()));
 }
 
+// Storage stand-in for the public "blog" bucket: upload (authors only, like the storage policy) and public reads.
+const blobs = new Map();
+async function storage(req, res, url) {
+  const up = /^\/storage\/v1\/object\/blog\/([\w./-]+)$/.exec(url.pathname);
+  const pub = /^\/storage\/v1\/object\/public\/blog\/([\w./-]+)$/.exec(url.pathname);
+  if (pub && req.method === "GET") {
+    const f = blobs.get(pub[1]);
+    if (!f) return json(res, 404, { error: "not_found" });
+    res.writeHead(200, { "content-type": f.type, "cache-control": "public, max-age=31536000", ...CORS });
+    return res.end(f.data);
+  }
+  if (up && req.method === "POST") {
+    const chunks = [];
+    for await (const c of req) chunks.push(c);
+    const check = await fetch("http://127.0.0.1:3001/rpc/is_blog_author", { method: "POST", headers: { authorization: req.headers.authorization ?? "", "content-type": "application/json" }, body: "{}" });
+    if (!check.ok || (await check.json()) !== true) return json(res, 403, { statusCode: "403", error: "Unauthorized", message: "new row violates row-level security policy" });
+    if (blobs.has(up[1])) return json(res, 409, { statusCode: "409", error: "Duplicate", message: "The resource already exists" });
+    const type = String(req.headers["content-type"] ?? "");
+    if (!/^image\/(webp|jpeg|png)$/.test(type)) return json(res, 415, { statusCode: "415", error: "invalid_mime_type", message: `mime type ${type} is not supported` });
+    blobs.set(up[1], { type, data: Buffer.concat(chunks) });
+    return json(res, 200, { Key: `blog/${up[1]}`, Id: randomUUID() });
+  }
+  return json(res, 404, { error: "not_found" });
+}
+
 async function billing(req, res, url) {
   const chunks = [];
   for await (const c of req) chunks.push(c);
@@ -284,6 +309,7 @@ http
       // Edge Functions answer their own CORS preflight (only for the app's addresses).
       if (url.pathname.startsWith("/functions/v1/billing")) return await billing(req, res, url);
       if (url.pathname.startsWith("/functions/v1/blog")) return await blogApi(req, res, url);
+      if (url.pathname.startsWith("/storage/v1/") && req.method !== "OPTIONS") return await storage(req, res, url);
       if (req.method === "OPTIONS") {
         // Like Supabase: allow whatever headers the client asks for.
         res.writeHead(204, { ...CORS, "access-control-allow-headers": req.headers["access-control-request-headers"] ?? CORS["access-control-allow-headers"] });

@@ -1005,8 +1005,19 @@ document.body.appendChild(d)}`,
     await wp.getByLabel("Title").fill("How much should a logo cost in India?");
     await wp.getByLabel("Category").selectOption("market-prices");
     await wp.getByLabel("Summary").fill("Typical logo prices for Indian freelancers, and how to set yours with confidence.");
-    await wp.getByLabel("Post").fill("## Typical ranges\n\nMost freelancers charge **per project**.\n\n| Level | Price |\n|---|---|\n| Starting out | ₹5,000 |\n| Experienced | ₹25,000 |\n\n- Count your hours\n- Add revisions\n\n<script>window.__xss = 1</script>");
+    await wp.getByLabel("Post", { exact: true }).fill("## Typical ranges\n\nMost freelancers charge **per project**.\n\n| Level | Price |\n|---|---|\n| Starting out | ₹5,000 |\n| Experienced | ₹25,000 |\n\n- Count your hours\n- Add revisions\n\n<script>window.__xss = 1</script>");
+    // Photos: a cover, and one inside the post (uploaded, shrunk and served from the blog's storage).
+    await wp.getByLabel("Cover photo file").setInputFiles(new URL("../../public/og.png", import.meta.url).pathname);
+    await wp.getByText("Cover photo added.").waitFor();
+    const cover = await wp.getByTestId("cover-preview").locator("img").getAttribute("src");
+    assert.match(cover, /^http:\/\/127\.0\.0\.1:54321\/storage\/v1\/object\/public\/blog\/\d{4}\/\d{2}\/[0-9a-f-]+\.(webp|jpg)$/);
+    await wp.getByLabel("Post", { exact: true }).click();
+    await wp.getByLabel("Post", { exact: true }).press("Control+End");
+    await wp.getByLabel("Photo file for the post").setInputFiles(new URL("../../public/icon-512.png", import.meta.url).pathname);
+    await wp.getByText("Photo added to the post.").waitFor();
+    assert.match(await wp.getByLabel("Post", { exact: true }).inputValue(), /!\[icon 512\]\(http:\/\/127\.0\.0\.1:54321\/storage\/v1\/object\/public\/blog\/[^)]+\)/);
     await wp.getByRole("tab", { name: "Preview" }).click();
+    await wp.getByTestId("post-preview").locator("img[alt='icon 512']").waitFor();
     await wp.getByTestId("post-preview").getByRole("heading", { name: "Typical ranges" }).waitFor();
     await shot(wp, "64-blog-editor", false);
     await wp.getByRole("button", { name: "Publish" }).click();
@@ -1035,6 +1046,8 @@ document.body.appendChild(d)}`,
     assert.ok(raw.includes("<td>₹25,000</td>"));
     assert.ok(!raw.includes("<script>window.__xss"), "post HTML is escaped");
     assert.ok(raw.includes('"@type":"BlogPosting"'));
+    assert.ok(raw.includes(`<meta property="og:image" content="${cover}" />`), "link previews use the cover photo");
+    assert.ok(raw.includes('alt="icon 512" loading="lazy"'), "photos in the post are in the page");
     const sm = await (await fetch(`${BASE}/sitemap.xml`)).text();
     assert.ok(sm.includes("<loc>https://scopeflow.in/blog/five-ways-to-win-repeat-clients</loc>"));
     assert.ok(sm.includes("<loc>https://scopeflow.in/pricing</loc>"));
@@ -1046,6 +1059,8 @@ document.body.appendChild(d)}`,
     await v.getByRole("heading", { level: 1, name: "How much should a logo cost in India?" }).waitFor();
     await v.getByTestId("blog-body").getByRole("cell", { name: "₹25,000" }).waitFor();
     assert.equal(await v.evaluate(() => window.__xss), undefined, "a script in a post never runs");
+    // Photos load (allowed by the security policy) and show at full width.
+    await v.waitForFunction(() => [...document.querySelectorAll("main img")].length >= 2 && [...document.querySelectorAll("main img")].every((i) => i.complete && i.naturalWidth > 0));
     await v.getByRole("heading", { name: "More from the blog" }).waitFor();
     await shot(v, "65-blog-post");
     await v.getByRole("link", { name: "Blog", exact: true }).first().click();

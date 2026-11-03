@@ -3,7 +3,7 @@ import { Link, useParams, useSearchParams } from "react-router";
 import { buttonClass, cx, Logo } from "@/components/ui";
 import { SiteFooter } from "@/components/site-footer";
 import { useAuth } from "@/lib/auth";
-import { useBlogList, useBlogPost, useIsBlogAuthor, type BlogListItem } from "@/lib/blog";
+import { BLOG_IMAGE_PREFIX, useBlogList, useBlogPost, useIsBlogAuthor, type BlogListItem } from "@/lib/blog";
 import { CATEGORIES, categoryOf, formatPostDate, readingMinutes, renderMarkdown, type BlogCategory } from "@/lib/blog-content";
 import { SITE_URL, usePageHead } from "@/lib/seo";
 import NotFound from "./not-found";
@@ -55,11 +55,19 @@ function BlogHeader() {
   );
 }
 
-/** A designed cover in the category's colour (no stock photos). */
-export function PostCover({ category, title, large }: { category: BlogCategory; title?: string; large?: boolean }) {
+/** The post's cover photo, or a designed cover in the category's colour when there's none. */
+export function PostCover({ category, title, large, image, alt }: { category: BlogCategory; title?: string; large?: boolean; image?: string | null; alt?: string }) {
   const c = categoryOf(category);
+  const shape = large ? "aspect-[2/1] rounded-2xl sm:aspect-[5/2]" : "aspect-[16/9] rounded-xl";
+  if (image) {
+    return (
+      <div className={cx("relative overflow-hidden bg-sunken", shape)}>
+        <img src={image} alt={alt ?? ""} loading={large ? "eager" : "lazy"} decoding="async" className="absolute inset-0 h-full w-full object-cover" />
+      </div>
+    );
+  }
   return (
-    <div className={cx("blog-cover relative overflow-hidden", large ? "aspect-[2/1] rounded-2xl sm:aspect-[5/2]" : "aspect-[16/9] rounded-xl")} style={{ "--tone": c.tone } as CSSProperties} aria-hidden>
+    <div className={cx("blog-cover relative overflow-hidden", shape)} style={{ "--tone": c.tone } as CSSProperties} aria-hidden>
       <span className="blog-cover-grid" />
       <span className="absolute left-4 top-4 rounded-full bg-white/90 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.06em]" style={{ color: c.tone }}>
         {c.label}
@@ -83,7 +91,7 @@ function PostCard({ post, featured }: { post: BlogListItem; featured?: boolean }
     <article className={cx("group", featured && "grid gap-6 md:grid-cols-[1.3fr_1fr] md:items-center")}>
       <Link to={`/blog/${post.slug}`} className="block" tabIndex={-1} aria-hidden>
         <div className="transition-transform duration-300 group-hover:-translate-y-0.5">
-          <PostCover category={post.category} title={featured ? post.title : undefined} large={featured} />
+          <PostCover category={post.category} title={featured ? post.title : undefined} large={featured} image={post.cover_image} />
         </div>
       </Link>
       <div className={featured ? "" : "mt-4"}>
@@ -178,7 +186,7 @@ export function BlogPostPage() {
   const list = useBlogList();
   const post = q.data;
   usePageHead(post ? { title: `${post.title} | ScopeFlow blog`, description: post.description, url: `${SITE_URL}/blog/${post.slug}` } : null);
-  const html = useMemo(() => (post ? renderMarkdown(post.body) : ""), [post]);
+  const html = useMemo(() => (post ? renderMarkdown(post.body, { imagePrefix: BLOG_IMAGE_PREFIX }) : ""), [post]);
 
   if (q.isLoading) {
     return (
@@ -219,7 +227,7 @@ export function BlogPostPage() {
             <span>{readingMinutes(post.body)} min read</span>
           </p>
           <div className="mt-8">
-            <PostCover category={post.category} large />
+            <PostCover category={post.category} large image={post.cover_image} alt={post.title} />
           </div>
           <div className="blog-prose mt-10" data-testid="blog-body" dangerouslySetInnerHTML={{ __html: html }} />
           <aside className="mt-14 rounded-2xl bg-chrome px-6 py-7 text-white sm:px-8">
