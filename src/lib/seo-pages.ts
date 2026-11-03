@@ -125,7 +125,7 @@ export function structuredData(path: PublicPath): Record<string, unknown> {
         description: page.description,
         image: OG_IMAGE,
         publisher: { "@id": ORG_ID },
-        offers: { "@type": "Offer", price: "0", priceCurrency: "USD", description: "Free plan: 2 active projects and 5 clients" },
+        offers: { "@type": "Offer", price: "0", priceCurrency: "INR", description: "Free plan: 2 active projects and 5 clients" },
         featureList: [
           "Scope of work with deliverables, revision limits and dates",
           "Client approval through a private link, no client account needed",

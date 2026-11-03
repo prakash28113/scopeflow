@@ -1,6 +1,6 @@
 /** Invoices issued to clients: shared types and pure helpers (tested in tests/unit/invoice.test.ts). */
 
-export type InvoiceParty = { name: string; person?: string; company?: string; email?: string; address?: string; gstin?: string; upi_id?: string };
+export type InvoiceParty = { name: string; person?: string; company?: string; email?: string; address?: string; gstin?: string; upi_id?: string; state?: string };
 
 /** The fields every invoice view needs (a client_invoices row, or the client page's copy of it). */
 export type InvoiceDoc = {
@@ -19,6 +19,9 @@ export type InvoiceDoc = {
   seller: InvoiceParty;
   buyer: InvoiceParty;
   notes: string | null;
+  /** SAC code of the service and "State (code)" place of supply (tax invoices from Nov 2026). */
+  sac_code?: string | null;
+  place_of_supply?: string | null;
 };
 
 export type InvoiceRow = InvoiceDoc & {
@@ -53,7 +56,9 @@ export function taxRows(inv: Pick<InvoiceDoc, "tax_label" | "tax_bps" | "tax_spl
       { label: `SGST ${percent(inv.tax_bps / 2)}%`, cents: inv.tax_cents - half },
     ];
   }
-  return [{ label: `${inv.tax_label || "Tax"} ${percent(inv.tax_bps)}%`, cents: inv.tax_cents }];
+  // GST charged to another state is IGST.
+  const label = /^gst$/i.test(inv.tax_label ?? "") ? "IGST" : inv.tax_label || "Tax";
+  return [{ label: `${label} ${percent(inv.tax_bps)}%`, cents: inv.tax_cents }];
 }
 
 /** "Tax invoice" when the seller is GST-registered and charges tax; otherwise "Invoice". */

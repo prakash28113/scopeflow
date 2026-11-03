@@ -19,7 +19,7 @@ export default function PlanPage() {
   const invoices = useInvoices();
   const qc = useQueryClient();
   const toast = useToast();
-  const [interval, setInterval] = useState<Interval>("year");
+  const [interval, setInterval] = useState<Interval>("month");
   const [joining, setJoining] = useState<PlanId | null>(null);
   const [buying, setBuying] = useState<PlanId | null>(null);
   const [activating, setActivating] = useState(false);

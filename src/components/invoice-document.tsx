@@ -14,6 +14,7 @@ function Party({ label, p }: { label: string; p: InvoiceParty }) {
       {p.address ? <p className="whitespace-pre-line text-ink-2">{p.address}</p> : null}
       {p.email ? <p className="break-all text-ink-2">{p.email}</p> : null}
       {p.gstin ? <p className="num">GSTIN: {p.gstin}</p> : null}
+      {p.state ? <p className="text-ink-2">State: {p.state}</p> : null}
     </div>
   );
 }
@@ -60,6 +61,12 @@ export function InvoiceDocument({ inv, status, paidAt, paidCents = 0, className 
           <dd>{formatDate(inv.issue_date)}</dd>
           <dt className="text-muted">Due date</dt>
           <dd>{inv.due_date ? formatDate(inv.due_date) : "On receipt"}</dd>
+          {inv.place_of_supply ? (
+            <>
+              <dt className="text-muted">Place of supply</dt>
+              <dd data-testid="invoice-place-of-supply">{inv.place_of_supply}</dd>
+            </>
+          ) : null}
           {status === "paid" && paidAt ? (
             <>
               <dt className="text-muted">Paid on</dt>
@@ -79,40 +86,42 @@ export function InvoiceDocument({ inv, status, paidAt, paidCents = 0, className 
           <thead>
             <tr className="text-left text-[11px] uppercase tracking-[0.08em] text-muted">
               <th className="pb-2 font-semibold">Description</th>
+              {inv.sac_code ? <th className="pb-2 pr-4 font-semibold">SAC</th> : null}
               <th className="pb-2 text-right font-semibold">Amount</th>
             </tr>
           </thead>
           <tbody>
             <tr className="align-top">
               <td className="py-2 pr-4">{inv.description}</td>
+              {inv.sac_code ? <td className="py-2 pr-4" data-testid="invoice-sac">{inv.sac_code}</td> : null}
               <td className="py-2 text-right">{fmt(inv.taxable_cents)}</td>
             </tr>
           </tbody>
           <tfoot className="border-t border-line">
             {taxes.length ? (
               <tr>
-                <td className="pt-3 text-muted">Taxable value</td>
+                <td className="pt-3 text-muted" colSpan={inv.sac_code ? 2 : 1}>Taxable value</td>
                 <td className="pt-3 text-right">{fmt(inv.taxable_cents)}</td>
               </tr>
             ) : null}
             {taxes.map((t) => (
               <tr key={t.label}>
-                <td className="pt-1 text-muted">{t.label}</td>
+                <td className="pt-1 text-muted" colSpan={inv.sac_code ? 2 : 1}>{t.label}</td>
                 <td className="pt-1 text-right">{fmt(t.cents)}</td>
               </tr>
             ))}
             <tr className="text-[15px] font-semibold">
-              <td className="pt-3">Total</td>
+              <td className="pt-3" colSpan={inv.sac_code ? 2 : 1}>Total</td>
               <td className="pt-3 text-right" data-testid="invoice-total">{fmt(inv.amount_cents)}</td>
             </tr>
             {status !== "paid" && status !== "void" && paidCents > 0 ? (
               <>
                 <tr>
-                  <td className="pt-1 text-muted">Paid so far</td>
+                  <td className="pt-1 text-muted" colSpan={inv.sac_code ? 2 : 1}>Paid so far</td>
                   <td className="pt-1 text-right">− {fmt(paidCents)}</td>
                 </tr>
                 <tr className="font-semibold">
-                  <td className="pt-1">Balance due</td>
+                  <td className="pt-1" colSpan={inv.sac_code ? 2 : 1}>Balance due</td>
                   <td className="pt-1 text-right" data-testid="invoice-balance">{fmt(balance)}</td>
                 </tr>
               </>

@@ -210,7 +210,7 @@ const xml = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replac
 export function sitemap(posts: ListItem[]): string {
   const urls = [
     ...Object.entries(PUBLIC_PAGES).map(([path, p]) => `  <url><loc>${xml(canonicalUrl(path))}</loc><changefreq>${p.changefreq}</changefreq><priority>${p.priority}</priority></url>`),
-    `  <url><loc>${SITE_URL}/blog</loc>${posts[0] ? `<lastmod>${xml(posts[0].updated_at)}</lastmod>` : ""}<changefreq>daily</changefreq><priority>0.8</priority></url>`,
+    `  <url><loc>${SITE_URL}/blog</loc>${posts[0] ? `<lastmod>${xml(posts[0].updated_at)}</lastmod>` : ""}<changefreq>weekly</changefreq><priority>0.8</priority></url>`,
     ...posts.map((p) => `  <url><loc>${SITE_URL}/blog/${xml(p.slug)}</loc><lastmod>${xml(p.updated_at)}</lastmod><priority>0.6</priority></url>`),
   ];
   return `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urls.join("\n")}\n</urlset>\n`;

@@ -13,7 +13,7 @@ export default function PricingPage() {
   useSeo("/pricing");
   const plans = usePlans();
   const { session } = useAuth();
-  const [interval, setInterval] = useState<Interval>("year");
+  const [interval, setInterval] = useState<Interval>("month");
 
   return (
     <div className="min-h-dvh">

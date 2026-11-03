@@ -1,6 +1,6 @@
 export type ProjectStatus = "draft" | "awaiting_approval" | "changes_requested" | "active" | "completed" | "cancelled";
 
-export type Client = { id: string; name: string; email: string; company: string | null; phone?: string | null; notes?: string | null; billing_address?: string | null; gstin?: string | null };
+export type Client = { id: string; name: string; email: string; company: string | null; phone?: string | null; notes?: string | null; billing_address?: string | null; gstin?: string | null; state_code?: string | null; archived_at?: string | null };
 
 /** Deliverable pricing. Change orders stay fixed or hourly. */
 export type PricingType = "fixed" | "hourly" | "unit";
@@ -154,6 +154,11 @@ export type ChangeOrder = {
   hours: string | null;
   hourly_rate_cents: number | null;
   amount_cents: number;
+  /** Price before tax; amount_cents = subtotal_cents + tax_cents (what the client pays). */
+  subtotal_cents?: number | null;
+  tax_bps?: number;
+  tax_label?: string | null;
+  tax_cents?: number;
   additional_days: number;
   status: "sent" | "approved" | "rejected" | "withdrawn";
   decided_at: string | null;
@@ -239,6 +244,10 @@ export type PortalView = {
     hours: number | null;
     hourly_rate_cents: number | null;
     amount_cents: number;
+    subtotal_cents?: number | null;
+    tax_bps?: number;
+    tax_label?: string | null;
+    tax_cents?: number;
     additional_days: number;
     status: "sent" | "approved" | "rejected";
     created_at: string;

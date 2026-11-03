@@ -88,7 +88,7 @@ export const STATUS_TEXT: Record<SubscriptionStatus, string> = {
 /** A plan price: whole amounts without decimals (₹4,999, not ₹4,999.00). */
 export function formatPrice(minor: number, currency: string) {
   if (minor % 100 !== 0) return formatMoney(minor, currency);
-  return new Intl.NumberFormat("en-IN", { style: "currency", currency, maximumFractionDigits: 0 }).format(minor / 100);
+  return new Intl.NumberFormat(currency === "INR" ? "en-IN" : "en", { style: "currency", currency, maximumFractionDigits: 0 }).format(minor / 100);
 }
 
 /** Price shown on a plan card for the chosen billing interval. */

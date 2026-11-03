@@ -29,6 +29,8 @@ export type Profile = {
   business_name: string | null;
   business_address?: string | null;
   gstin?: string | null;
+  state_code?: string | null;
+  sac_code?: string | null;
   invoice_prefix?: string;
   upi_id?: string | null;
   default_currency: string;
@@ -44,7 +46,7 @@ export function useProfile() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("profiles")
-        .select("id, email, full_name, business_name, default_currency, onboarded_at, notifications_seen_at, upi_id, business_address, gstin, invoice_prefix")
+        .select("id, email, full_name, business_name, default_currency, onboarded_at, notifications_seen_at, upi_id, business_address, gstin, invoice_prefix, state_code, sac_code")
         .eq("id", session!.user.id)
         .single();
       if (error) throw error;

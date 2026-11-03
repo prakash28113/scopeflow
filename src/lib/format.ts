@@ -39,3 +39,14 @@ export function shortHash(hash: string) {
 export function pluralize(n: number, one: string, many = `${one}s`) {
   return `${n} ${n === 1 ? one : many}`;
 }
+
+/** Indian financial year for a date (1 April to 31 March), e.g. "2026-27". Defaults to today in India. */
+export function financialYear(date?: Date): string {
+  const d = date ?? new Date();
+  const [y, m] = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kolkata", year: "numeric", month: "2-digit" })
+    .format(d)
+    .split("-")
+    .map(Number);
+  const start = m >= 4 ? y : y - 1;
+  return `${start}-${String((start + 1) % 100).padStart(2, "0")}`;
+}

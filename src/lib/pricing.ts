@@ -75,3 +75,9 @@ export function increasePercent(originalMinor: number, addMinor: number): number
   if (originalMinor <= 0) return null;
   return Math.round((addMinor / originalMinor) * 1000) / 10;
 }
+
+/** Tax on a change order's price, rounded half-up like the database: price + tax = what the client pays. */
+export function withTax(subtotalMinor: number, taxBps: number) {
+  const tax = Math.round((subtotalMinor * taxBps) / 10000);
+  return { subtotal: subtotalMinor, tax, total: subtotalMinor + tax };
+}

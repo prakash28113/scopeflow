@@ -129,13 +129,18 @@ export default function PortalPage() {
                 </h2>
                 {c.description ? <p className="mt-1.5 whitespace-pre-line text-sm text-ink-2">{c.description}</p> : null}
               </div>
-              <dl className="num grid grid-cols-2 gap-4 border-b border-line px-5 py-4 text-[13px] sm:grid-cols-3 sm:px-6">
+              <dl className="num grid grid-cols-2 gap-4 border-b border-line px-5 py-4 text-[13px] sm:grid-cols-3 sm:px-6" data-testid="portal-co-totals">
                 <div>
                   <dt className="text-muted">Additional cost</dt>
                   <dd className="mt-0.5 text-base font-semibold">{fmt(c.amount_cents)}</dd>
                   {c.pricing_type === "hourly" && c.hourly_rate_cents !== null ? (
                     <dd className="text-[12px] text-muted">
                       {Number(c.hours)} h × {fmt(c.hourly_rate_cents)}
+                    </dd>
+                  ) : null}
+                  {Number(c.tax_cents) > 0 ? (
+                    <dd className="text-[12px] text-muted">
+                      {fmt(Number(c.subtotal_cents ?? Number(c.amount_cents) - Number(c.tax_cents)))} + {c.tax_label ?? "GST"} {Number(c.tax_bps) / 100}% {fmt(Number(c.tax_cents))}
                     </dd>
                   ) : null}
                 </div>

@@ -54,7 +54,7 @@ describe("recording payments", () => {
   it("refuses overpaying, future dates, bad methods, other accounts, and unapproved projects", async () => {
     const p = await approved();
     await rpc(owner, "record_payment", [p.final, JSON.stringify({ amount_cents: 900000, paid_on: "2026-10-01" })]);
-    await expect(rpc(owner, "record_payment", [p.final, JSON.stringify({ amount_cents: 35001 })])).rejects.toThrow(/more than the 35000 still due/);
+    await expect(rpc(owner, "record_payment", [p.final, JSON.stringify({ amount_cents: 35001 })])).rejects.toThrow(/more than the ₹350 still due/);
     await expect(rpc(owner, "record_payment", [p.final, JSON.stringify({ amount_cents: 0 })])).rejects.toThrow(/greater than zero/);
     await expect(rpc(owner, "record_payment", [p.final, JSON.stringify({ amount_cents: 100, paid_on: "2999-01-01" })])).rejects.toThrow(/future/);
     await expect(rpc(owner, "record_payment", [p.final, JSON.stringify({ amount_cents: 100, method: "barter" })])).rejects.toThrow(/check constraint/);

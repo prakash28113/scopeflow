@@ -7,8 +7,8 @@ import { received } from "@/lib/pricing";
 import { Link, useNavigate, useParams } from "react-router";
 import { z } from "zod";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Alert, Button, Card, CardHeader, EmptyState, Field, Input, LinkButton, PageHeader, StatusBadge, Tag, Textarea, buttonClass } from "@/components/ui";
-import { SubmitButton } from "@/components/form-bits";
+import { Alert, Button, Card, CardHeader, EmptyState, Field, Input, LinkButton, PageHeader, Select, StatusBadge, Tag, Textarea, buttonClass } from "@/components/ui";
+import { ActionButton, SubmitButton } from "@/components/form-bits";
 import { PageSpinner } from "@/components/app-shell";
 import { useToast } from "@/components/toast";
 import { supabase } from "@/lib/supabase";
@@ -16,6 +16,8 @@ import { useAction } from "@/lib/use-action";
 import { clientSchema } from "@/lib/validation";
 import { formatMoney } from "@/lib/money";
 import { formatDate, formatDateTime } from "@/lib/format";
+import { GST_STATES_SORTED, stateName, stateOf } from "@/lib/gst";
+import { useMyPlan } from "@/lib/plans";
 import type { ProjectStatus } from "@/lib/types";
 
 type ClientProject = {
@@ -42,6 +44,8 @@ type ClientRow = {
   notes: string | null;
   billing_address?: string | null;
   gstin?: string | null;
+  state_code?: string | null;
+  archived_at?: string | null;
   created_at: string;
   projects: ClientProject[];
 };
@@ -68,7 +72,7 @@ export const clientsQuery = {
   queryFn: async () => {
     const { data, error } = await supabase
       .from("clients")
-      .select("id, name, email, company, phone, notes, billing_address, gstin, created_at, projects(id, title, status, currency, budget_cents, approved_extras_cents, created_at, milestones(title, amount_cents, status, paid_at, payment_note, paid_cents))")
+      .select("id, name, email, company, phone, notes, billing_address, gstin, state_code, archived_at, created_at, projects(id, title, status, currency, budget_cents, approved_extras_cents, created_at, milestones(title, amount_cents, status, paid_at, payment_note, paid_cents))")
       .order("name");
     if (error) throw error;
     return data as unknown as ClientRow[];
@@ -77,9 +81,15 @@ export const clientsQuery = {
 
 export function ClientsPage() {
   const [adding, setAdding] = useState(false);
+  const [showArchived, setShowArchived] = useState(false);
   const q = useQuery(clientsQuery);
+  const plan = useMyPlan();
   if (q.isLoading) return <PageSpinner />;
   if (q.isError || !q.data) return <Alert>Couldn't load your clients. Please refresh.</Alert>;
+  const archived = q.data.filter((c) => c.archived_at);
+  const shown = q.data.filter((c) => (showArchived ? c.archived_at : !c.archived_at));
+  const limit = plan.data?.limits.clients ?? null;
+  const atLimit = limit !== null && (plan.data?.usage.clients ?? 0) >= limit;
 
   return (
     <>
@@ -92,10 +102,36 @@ export function ClientsPage() {
           </Button>
         }
       />
-      <AddClient open={adding} onClose={() => setAdding(false)} />
+      {adding && atLimit ? (
+        <Card className="mb-6" data-testid="client-limit">
+          <div className="space-y-3 p-5">
+            <p className="text-[15px] font-semibold text-ink">You've reached your plan's {limit} clients</p>
+            <p className="text-[13px] text-ink-2">
+              Archive a client you no longer work with (their records are kept), delete one you added by mistake, or see plans to get more.
+            </p>
+            <div className="flex flex-wrap gap-2">
+              <LinkButton to="/plan">See plans</LinkButton>
+              <button type="button" className={buttonClass("ghost")} onClick={() => setAdding(false)}>
+                Close
+              </button>
+            </div>
+          </div>
+        </Card>
+      ) : (
+        <AddClient open={adding} onClose={() => setAdding(false)} />
+      )}
+      {limit !== null ? (
+        <p className="mb-3 text-[13px] text-muted" data-testid="client-usage">
+          {plan.data?.usage.clients} of {limit} clients on your plan. Archived clients don't count.
+        </p>
+      ) : null}
       <Card>
-        {q.data.length === 0 ? (
-          <EmptyState title="No clients yet" body="Add a client here, or they're added automatically when you create a project for them." />
+        {shown.length === 0 ? (
+          showArchived ? (
+            <EmptyState title="No archived clients" body="Archive clients you no longer work with. Their projects and records are kept." />
+          ) : (
+            <EmptyState title="No clients yet" body="Add a client here, or they're added automatically when you create a project for them." />
+          )
         ) : (
           <>
             <div className="hidden grid-cols-[minmax(0,1fr)_150px_200px] gap-4 border-b border-line bg-canvas/60 px-5 py-2.5 text-[12px] font-medium text-muted md:grid">
@@ -103,8 +139,8 @@ export function ClientsPage() {
               <span>Projects</span>
               <span className="text-right">Outstanding</span>
             </div>
-            <ul className="divide-y divide-line">
-              {q.data.map((c) => {
+            <ul className="divide-y divide-line" data-testid="clients-list">
+              {shown.map((c) => {
                 const open = c.projects.filter((p) => OPEN.includes(p.status)).length;
                 const totals = money(c.projects).filter((t) => t.outstanding);
                 return (
@@ -142,6 +178,11 @@ export function ClientsPage() {
           </>
         )}
       </Card>
+      {archived.length || showArchived ? (
+        <button type="button" className="mt-3 text-[13px] font-medium text-accent hover:underline" onClick={() => setShowArchived((v) => !v)}>
+          {showArchived ? "← Back to clients" : `Archived clients (${archived.length})`}
+        </button>
+      ) : null}
     </>
   );
 }
@@ -159,7 +200,7 @@ export function ClientPage() {
       const { data, error } = await supabase
         .from("clients")
         .select(
-          "id, name, email, company, phone, notes, billing_address, gstin, created_at, projects(id, title, status, currency, budget_cents, approved_extras_cents, created_at, approved_at, milestones(title, amount_cents, status, paid_at, payment_note, paid_cents), scope_decisions(decision, client_name, created_at), change_orders(number, title, status, amount_cents, decided_at), client_invoices(id, number, issue_date, due_date, amount_cents, voided_at, milestones(status, paid_cents)), payments(id, amount_cents, paid_on, method, reference))",
+          "id, name, email, company, phone, notes, billing_address, gstin, state_code, archived_at, created_at, projects(id, title, status, currency, budget_cents, approved_extras_cents, created_at, approved_at, milestones(title, amount_cents, status, paid_at, payment_note, paid_cents), scope_decisions(decision, client_name, created_at), change_orders(number, title, status, amount_cents, decided_at), client_invoices(id, number, issue_date, due_date, amount_cents, voided_at, milestones(status, paid_cents)), payments(id, amount_cents, paid_on, method, reference))",
         )
         .eq("id", id!)
         .maybeSingle();
@@ -198,7 +239,7 @@ export function ClientPage() {
       supabase
         .rpc("update_client", { p_client_id: c!.id, p: v })
         .then((r) =>
-          r.error ? r : supabase.rpc("update_client_billing", { p_client_id: c!.id, p: { billing_address: v.billing_address, gstin: v.gstin } }),
+          r.error ? r : supabase.rpc("update_client_billing", { p_client_id: c!.id, p: { billing_address: v.billing_address, gstin: v.gstin, state_code: v.state_code } }),
         ),
     );
     if (ok === undefined) return;
@@ -386,6 +427,16 @@ export function ClientPage() {
                 <Field label="Client GSTIN (optional)" htmlFor="c-gstin" error={action.fieldErrors.gstin} hint="For business clients registered for GST.">
                   <Input id="c-gstin" name="gstin" defaultValue={c.gstin ?? ""} autoCapitalize="characters" spellCheck={false} />
                 </Field>
+                <Field label="State (for GST)" htmlFor="c-state" hint="Decides the place of supply on invoices. Filled from the GSTIN if empty.">
+                  <Select id="c-state" name="state_code" defaultValue={c.state_code ?? ""}>
+                    <option value="">Not set</option>
+                    {GST_STATES_SORTED.map(([code, n]) => (
+                      <option key={code} value={code}>
+                        {n} ({code})
+                      </option>
+                    ))}
+                  </Select>
+                </Field>
                 <Field label="Private notes" htmlFor="c-notes" error={action.fieldErrors.notes}>
                   <Textarea id="c-notes" name="notes" rows={5} defaultValue={c.notes ?? ""} maxLength={4000} />
                 </Field>
@@ -402,6 +453,7 @@ export function ClientPage() {
                 <div className="flex justify-between gap-3"><dt className="text-muted">Phone</dt><dd>{c.phone || "—"}</dd></div>
                 {c.billing_address ? <div className="flex justify-between gap-3"><dt className="text-muted">Billing address</dt><dd className="whitespace-pre-line text-right">{c.billing_address}</dd></div> : null}
                 {c.gstin ? <div className="flex justify-between gap-3"><dt className="text-muted">GSTIN</dt><dd className="num">{c.gstin}</dd></div> : null}
+                {stateOf(c) ? <div className="flex justify-between gap-3"><dt className="text-muted">State</dt><dd>{stateName(stateOf(c))}</dd></div> : null}
                 <div className="flex justify-between gap-3"><dt className="text-muted">Client since</dt><dd>{formatDate(c.created_at)}</dd></div>
                 <div className="pt-2">
                   <dt className="text-muted">Private notes</dt>
@@ -410,9 +462,88 @@ export function ClientPage() {
               </dl>
             )}
           </Card>
+          <ManageClient client={c} />
         </div>
       </div>
     </>
+  );
+}
+
+/** Archive (hide, keep every record, frees a plan slot) or delete a client added by mistake. */
+function ManageClient({ client: c }: { client: ClientRow }) {
+  const qc = useQueryClient();
+  const toast = useToast();
+  const navigate = useNavigate();
+  const [error, setError] = useState<string | null>(null);
+  const refresh = () =>
+    Promise.all([
+      qc.invalidateQueries({ queryKey: ["client", c.id] }),
+      qc.invalidateQueries({ queryKey: ["clients"] }),
+      qc.invalidateQueries({ queryKey: ["my-plan"] }),
+    ]);
+  async function archive(on: boolean) {
+    setError(null);
+    const { error: e } = await supabase.rpc("archive_client", { p_client_id: c.id, p_archived: on });
+    if (e) return setError(e.message);
+    await refresh();
+    toast("positive", on ? "Client archived." : "Client restored.");
+  }
+  async function remove() {
+    setError(null);
+    const { error: e } = await supabase.rpc("delete_client", { p_client_id: c.id });
+    if (e) return setError(e.message);
+    await Promise.all([qc.invalidateQueries({ queryKey: ["clients"] }), qc.invalidateQueries({ queryKey: ["my-plan"] })]);
+    toast("positive", "Client deleted.");
+    navigate("/clients");
+  }
+  const busy = c.projects.some((p) => ["awaiting_approval", "changes_requested", "active"].includes(p.status));
+  return (
+    <Card>
+      <CardHeader
+        title={c.archived_at ? "Archived client" : "Manage client"}
+        description={
+          c.archived_at
+            ? `Archived on ${formatDate(c.archived_at)}. Hidden from your lists and doesn't count towards your plan.`
+            : "Archive clients you no longer work with. Their projects, invoices and payments are kept."
+        }
+      />
+      <div className="space-y-3 px-5 py-4" data-testid="manage-client">
+        {error ? <Alert>{error}</Alert> : null}
+        <div className="flex flex-wrap gap-2">
+          {c.archived_at ? (
+            <ActionButton size="sm" variant="secondary" onAction={() => archive(false)} pendingLabel="Restoring…">
+              Restore client
+            </ActionButton>
+          ) : (
+            <ActionButton
+              size="sm"
+              variant="secondary"
+              disabled={busy}
+              onAction={() => archive(true)}
+              confirm={`Archive ${c.name}? Their records stay, and you can restore them any time.`}
+              confirmLabel="Archive client"
+              pendingLabel="Archiving…"
+            >
+              Archive client
+            </ActionButton>
+          )}
+          {c.projects.length === 0 ? (
+            <ActionButton
+              size="sm"
+              variant="danger"
+              onAction={remove}
+              confirm={`Delete ${c.name}? This can't be undone.`}
+              confirmLabel="Delete client"
+              pendingLabel="Deleting…"
+            >
+              Delete client
+            </ActionButton>
+          ) : null}
+        </div>
+        {busy && !c.archived_at ? <p className="text-[12px] text-muted">Complete or cancel the open project before archiving.</p> : null}
+        {c.projects.length ? <p className="text-[12px] text-muted">Clients with projects can be archived, not deleted, so your records stay complete.</p> : null}
+      </div>
+    </Card>
   );
 }
 

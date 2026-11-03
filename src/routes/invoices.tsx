@@ -170,8 +170,9 @@ export function InvoicePage() {
         <div className="flex gap-2">
           {status !== "void" ? (
             <ActionButton
-              variant="ghost"
-              size="sm"
+              variant="secondary"
+              size="md"
+              className="text-danger"
               confirm={`Void invoice ${inv.number}? It stays on record as void (the number is never reused), and you can create a new invoice for this payment.`}
               onAction={voidIt}
             >
