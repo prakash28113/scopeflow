@@ -15,7 +15,7 @@ function memory() {
 
 describe("brand", () => {
   it("uses the ScopeFlow name, the owner's spelling and the support address", () => {
-    expect(OPERATOR_NAME).toBe("Prakash Mummidisetty");
+    expect(OPERATOR_NAME).toBe("Prakash Mummidisetti");
     expect(SUPPORT_EMAIL).toBe("support@scopeflow.in");
     expect(INSTAGRAM_URL).toBe("https://www.instagram.com/scope_flow_official/");
     expect(PUBLIC_PAGES["/"].title).toBe("ScopeFlow: get paid for every “just one small change”");

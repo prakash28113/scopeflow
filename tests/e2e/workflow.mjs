@@ -64,7 +64,7 @@ try {
   await f.getByRole("heading", { name: "Get paid for every “just one small change”." }).waitFor();
   assert.equal(await f.getByTestId("hero-subline").innerText(), "Every client job, on the record.");
   // Footer: who built it, how to reach us.
-  assert.equal(await f.getByTestId("built-by").innerText(), "Built in Hyderabad by Prakash Mummidisetty");
+  assert.equal(await f.getByTestId("built-by").innerText(), "Built in Hyderabad by Prakash Mummidisetti");
   assert.equal(await f.getByRole("link", { name: "Instagram" }).getAttribute("href"), "https://www.instagram.com/scope_flow_official/");
   await f.getByRole("link", { name: "support@scopeflow.in" }).waitFor();
   await f.getByText("Fresh guides for Indian freelancers every week").waitFor();
@@ -122,7 +122,7 @@ try {
       return res.text();
     };
     const pages = {
-      "/": ["Get paid for every “just one small change”.", "Every client job, on the record.", "Does ScopeFlow take payments?", "Built in Hyderabad by Prakash Mummidisetty"],
+      "/": ["Get paid for every “just one small change”.", "Every client job, on the record.", "Does ScopeFlow take payments?", "Built in Hyderabad by Prakash Mummidisetti"],
       "/pricing": ["Simple pricing.", "₹499"], // plans fetched at build time
       "/refunds": ["Refund and cancellation policy", "within 7 days"],
       "/contact": ["Contact us", "Hyderabad, Telangana"],

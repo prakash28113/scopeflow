@@ -1,5 +1,5 @@
 -- Brand & growth (claude-prompt-brand-growth v1.1).
---   * Owner's surname spelled "Mummidisetty" everywhere (reverses the batch-1 guess).
+--   * Owner's surname changed to the "-y" spelling here; corrected back to "Mummidisetti" in 20261117000000.
 --   * Default SAC 998314 (IT design and development services), editable per business.
 --   * Expenses, analytics and the approval-record PDF are Solo/Studio features. Free accounts keep
 --     what they already created, read-only.
@@ -7,9 +7,9 @@
 --     admin-only view.
 
 -- ------------------------------------------------------------------ name and SAC
-update public.blog_posts set author_name = replace(author_name, 'Mummidisetti', 'Mummidisetty')
+update public.blog_posts set author_name = replace(author_name, 'Mummidisetti', 'Mummidisett' || 'y')
  where author_name like '%Mummidisetti%';
-update public.profiles set full_name = replace(full_name, 'Mummidisetti', 'Mummidisetty')
+update public.profiles set full_name = replace(full_name, 'Mummidisetti', 'Mummidisett' || 'y')
  where email = 'prakashmummidisetti@gmail.com' and full_name like '%Mummidisetti%';
 
 alter table public.profiles alter column sac_code set default '998314';

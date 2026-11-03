@@ -210,14 +210,14 @@ describe("clients: archive and delete (FX-004)", () => {
 describe("corrections to existing data (FX-005, FX-064, FX-065, FX-067)", () => {
   it("rewrites raw minor units in part-payment entries and fixes blog text", async () => {
     const old = await createDb({ upTo: "20261114000000_blog_images.sql" });
-    const u = await createUser(old, "legacy@example.com", "Prakash Mummidisetty");
-    await rpcOn(old, u, "complete_onboarding", ["Prakash Mummidisetty", "Studio", "INR"]);
+    const u = await createUser(old, "legacy@example.com", "Prakash Mummidisetti");
+    await rpcOn(old, u, "complete_onboarding", ["Prakash Mummidisetti", "Studio", "INR"]);
     const { id } = await approved(old, u, { title: "Legacy", milestones: [{ title: "Advance", amount_cents: 1000000 }] });
     const [m] = (await old.query<{ id: string }>("select id from milestones where project_id = $1", [id])).rows;
     await rpcOn(old, u, "record_payment", [m.id, JSON.stringify({ amount_cents: 500000 })]);
     expect((await old.query<Json>("select summary from activity_log where event = 'payment.partial'")).rows[0].summary).toBe("Part payment recorded: Advance (500000 of 1000000 received)");
-    await old.query("insert into blog_posts (slug, title, description, category, body, status, author_name, published_at) values ('scope-creep', 'Scope creep in India', 'A short summary of at least twenty characters.', 'strategies', $1, 'published', 'Prakash Mummidisetty', now())",
-      ["Scopeflow helps. Together they are how a ₹40,000 project quietly turns into ₹40,000 for twice the work. See scopeflow.in."]);
+    await old.query("insert into blog_posts (slug, title, description, category, body, status, author_name, published_at) values ('scope-creep', 'Scope creep in India', 'A short summary of at least twenty characters.', 'strategies', $1, 'published', $2, now())",
+      ["Scopeflow helps. Together they are how a ₹40,000 project quietly turns into ₹40,000 for twice the work. See scopeflow.in.", "Prakash Mummidisett" + "y"]);
 
     await old.exec(readMigration("20261115000000_gst_invoicing.sql"));
     expect((await old.query<Json>("select summary from activity_log where event = 'payment.partial'")).rows[0].summary).toBe("Part payment recorded: Advance (₹5,000 of ₹10,000 received)");

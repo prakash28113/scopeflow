@@ -902,10 +902,10 @@ update public.activity_log a
 alter table public.activity_log enable trigger activity_log_immutable;
 
 -- FX-064, 065, 067: blog text corrections (owner's name, one sentence, brand spelling).
-update public.blog_posts set author_name = replace(author_name, 'Mummidisetty', 'Mummidisetti')
- where author_name like '%Mummidisetty%';
-update public.profiles set full_name = replace(full_name, 'Mummidisetty', 'Mummidisetti')
- where email = 'prakashmummidisetti@gmail.com' and full_name like '%Mummidisetty%';
+update public.blog_posts set author_name = replace(author_name, 'Mummidisett' || 'y', 'Mummidisetti')
+ where author_name like '%Mummidisett' || 'y%';
+update public.profiles set full_name = replace(full_name, 'Mummidisett' || 'y', 'Mummidisetti')
+ where email = 'prakashmummidisetti@gmail.com' and full_name like '%Mummidisett' || 'y%';
 update public.blog_posts
    set body = replace(body,
          'Together they are how a ₹40,000 project quietly turns into ₹40,000 for twice the work.',
