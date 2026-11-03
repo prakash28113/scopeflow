@@ -468,7 +468,7 @@ function FromTheBlog() {
           <h2 id="from-the-blog" className="lp-display mt-3 text-[34px] leading-[1.05] text-white sm:text-[46px]">
             Pricing, clients and growth.
           </h2>
-          <p className="mt-4 text-[16px] leading-relaxed text-[var(--lp-muted)]">Market rates, freelancing strategies and success stories, with new posts every day.</p>
+          <p className="mt-4 text-[16px] leading-relaxed text-[var(--lp-muted)]">Practical guides for Indian freelancers: market rates, strategies and success stories.</p>
         </div>
         <Link to="/blog" className={btnGhost}>
           Read the blog

@@ -14,6 +14,10 @@ begin;
 
 drop trigger if exists on_auth_user_created on auth.users;
 
+-- GST and invoicing (if installed).
+drop function if exists public.add_payment, public.archive_client, public.delete_client, public._unarchive_client,
+  public._today_india, public._financial_year, public._money, public._gst_state_name, public._clean_state,
+  public._clean_gstin cascade;
 -- Blog (if installed).
 drop table if exists public.blog_api_keys, public.blog_posts, public.blog_authors cascade;
 drop function if exists public.blog_publish_with_key, public.revoke_blog_key, public.blog_my_keys, public.create_blog_key,

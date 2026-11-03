@@ -25,7 +25,9 @@ describe("tax lines", () => {
     ]);
   });
   it("shows a single line otherwise, and nothing without tax", () => {
-    expect(taxRows({ ...base, tax_split: false })).toEqual([{ label: "GST 18%", cents: 3151 }]);
+    // GST to another state is IGST; other taxes keep their own name.
+    expect(taxRows({ ...base, tax_split: false })).toEqual([{ label: "IGST 18%", cents: 3151 }]);
+    expect(taxRows({ ...base, tax_label: "VAT", tax_split: false })).toEqual([{ label: "VAT 18%", cents: 3151 }]);
     expect(taxRows({ ...base, tax_bps: 0, tax_cents: 0, tax_split: false })).toEqual([]);
     expect(percent(250)).toBe("2.5");
     expect(taxRows({ tax_label: "GST", tax_bps: 500, tax_cents: 100, tax_split: true })[0].label).toBe("CGST 2.5%");
@@ -55,5 +57,19 @@ describe("status, GSTIN and dates", () => {
   it("adds days across month and year ends", () => {
     expect(addDays("2026-11-28", 7)).toBe("2026-12-05");
     expect(addDays("2026-12-29", 7)).toBe("2027-01-05");
+  });
+});
+
+import { stateOf, supplyOf, stateName } from "@/lib/gst";
+describe("GST place of supply", () => {
+  it("reads states from the choice or the GSTIN, and picks CGST+SGST only within a state", () => {
+    expect(stateOf({ gstin: "36ABCDE1234F1Z5" })).toBe("36");
+    expect(stateOf({ state_code: "29", gstin: "36ABCDE1234F1Z5" })).toBe("29");
+    expect(stateOf({ gstin: "99ABCDE1234F1Z5" })).toBeNull();
+    expect(stateName("36")).toBe("Telangana");
+    expect(supplyOf("36", "36")).toEqual({ place: "36", split: true });
+    expect(supplyOf("36", "29")).toEqual({ place: "29", split: false });
+    expect(supplyOf("36", null)).toEqual({ place: "36", split: true });
+    expect(supplyOf(null, "29")).toEqual({ place: "29", split: false });
   });
 });

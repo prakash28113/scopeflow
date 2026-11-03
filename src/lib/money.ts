@@ -34,9 +34,12 @@ export function toInputAmount(minor: number, currency: string): string {
   return `${minor < 0 ? "-" : ""}${s.slice(0, -digits)}.${s.slice(-digits)}`;
 }
 
+/** Rupees use Indian digit grouping (₹1,24,000); other currencies the international style. */
+export const moneyLocale = (currency: string) => (currency === "INR" ? "en-IN" : "en");
+
 export function formatMoney(minor: number, currency: string): string {
   const digits = minorDigits(currency);
-  return new Intl.NumberFormat("en", {
+  return new Intl.NumberFormat(moneyLocale(currency), {
     style: "currency",
     currency,
     minimumFractionDigits: digits,

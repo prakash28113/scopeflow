@@ -1,4 +1,6 @@
 import { quoteExpired } from "@/lib/quote";
+import { stateOf } from "@/lib/gst";
+import { AddPayment } from "@/components/add-payment";
 import { useState, type FormEvent, type ReactNode } from "react";
 import { Link, useNavigate, useParams } from "react-router";
 import { useQueryClient } from "@tanstack/react-query";
@@ -331,6 +333,11 @@ export default function ProjectPage() {
                         </div>
                         <div className="text-right">
                           <p className="num text-sm font-semibold">{fmt(Number(c.amount_cents))}</p>
+                          {Number(c.tax_cents) > 0 ? (
+                            <p className="num text-[11px] text-muted">
+                              incl. {c.tax_label ?? "GST"} {fmt(Number(c.tax_cents))}
+                            </p>
+                          ) : null}
                           <div className="mt-1">
                             <CoStatus c={c} />
                           </div>
@@ -456,7 +463,7 @@ export default function ProjectPage() {
               </div>
             ) : null}
             {p.milestones.length === 0 ? (
-              <p className="px-5 py-4 text-[13px] text-muted">No milestones scheduled.</p>
+              <p className="px-5 py-4 text-[13px] text-muted">No payments scheduled yet.</p>
             ) : (
               <ul className="divide-y divide-line">
                 {p.milestones.map((m) => (
@@ -475,7 +482,7 @@ export default function ProjectPage() {
                         </p>
                       </div>
                       <div className="flex shrink-0 items-center gap-2">
-                        {m.status === "paid" ? <Tag tone="positive">Paid</Tag> : received(m) > 0 ? <Tag tone="accent">Part paid</Tag> : null}
+                        {m.status === "paid" ? <Tag tone="positive">Paid</Tag> : null}
                         <p className="num text-[13px] font-medium">{fmt(Number(m.amount_cents))}</p>
                       </div>
                     </div>
@@ -516,10 +523,15 @@ export default function ProjectPage() {
                       <div className="mt-2">
                         <CreateInvoice
                           milestoneId={m.id}
-                          taxBps={p.tax_bps ?? null}
-                          taxLabel={p.tax_label ?? null}
-                          sellerGstin={profile.data?.gstin}
-                          buyerGstin={p.clients.gstin}
+                          // The tax the client agreed to for this payment: the change order's, or the quote's.
+                          taxBps={(m.change_order_id ? changeOrders.find((c) => c.id === m.change_order_id)?.tax_bps : p.tax_bps) ?? null}
+                          taxLabel={(m.change_order_id ? changeOrders.find((c) => c.id === m.change_order_id)?.tax_label : p.tax_label) ?? null}
+                          sellerState={stateOf(profile.data)}
+                          buyerState={stateOf(p.clients)}
+                          sacCode={profile.data?.sac_code}
+                          hasGstin={Boolean(profile.data?.gstin)}
+                          hasUpi={Boolean(profile.data?.upi_id)}
+                          currency={p.currency}
                         />
                       </div>
                     ) : null}
@@ -537,8 +549,13 @@ export default function ProjectPage() {
                 ))}
               </ul>
             )}
-            {money.unscheduled > 0 && p.milestones.length ? (
-              <p className="num border-t border-line px-5 py-3 text-[12px] text-warning">{fmt(money.unscheduled)} of the contract isn&apos;t covered by a milestone.</p>
+            {money.unscheduled > 0 ? (
+              <div className="border-t border-line px-5 py-3" data-testid="uncovered">
+                <p className="num text-[12px] text-warning">{fmt(money.unscheduled)} of the contract isn&apos;t covered by a payment yet.</p>
+                {approved && p.status !== "cancelled" ? (
+                  <AddPayment projectId={p.id} currency={p.currency} uncovered={money.unscheduled} onDone={(msg) => act(() => Promise.resolve({ data: null, error: null }), msg)} />
+                ) : null}
+              </div>
             ) : null}
           </Card>
 

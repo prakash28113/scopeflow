@@ -9,7 +9,12 @@ const DOWN = readFileSync(new URL("../../supabase/rollback/20261105000000_client
 let db: PGlite;
 let owner: Role & { id: string };
 let other: Role & { id: string };
-const today = new Date().toISOString().slice(0, 10);
+const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kolkata" }).format(new Date()); // India date
+const fy = (() => {
+  const [y, m] = today.split("-").map(Number);
+  const start = m >= 4 ? y : y - 1;
+  return `${start}-${String((start + 1) % 100).padStart(2, "0")}`;
+})();
 
 async function rpc<T = Json>(role: Role, fn: string, args: unknown[]): Promise<T> {
   const placeholders = args.map((_, i) => `$${i + 1}`).join(", ");
@@ -65,14 +70,18 @@ describe("creating invoices", () => {
     const a = await rpc<string>(owner, "create_invoice", [p.advance, JSON.stringify({ issue_date: today, tax_bps: 1800, tax_label: "GST", tax_split: true, notes: "Thanks!" })]);
     const b = await rpc<string>(owner, "create_invoice", [p.final, JSON.stringify({ issue_date: today })]);
     const rows = await as<Json>(db, owner, "select * from client_invoices where id = any($1::uuid[]) order by number", [[a, b]]);
-    const year = today.slice(0, 4);
-    expect(rows.map((r) => r.number)).toEqual([`RS-${year}-${String(before + 1).padStart(3, "0")}`, `RS-${year}-${String(before + 2).padStart(3, "0")}`]);
+    // Financial-year series (1 April to 31 March), e.g. RS-2026-27-001, numbered one after another.
+    const nums = rows.map((r) => String(r.number));
+    for (const x of nums) expect(x).toMatch(new RegExp(`^RS-${fy}-\\d{3}$`));
+    expect(Number(nums[1].slice(-3))).toBe(Number(nums[0].slice(-3)) + 1);
+    expect(before).toBeGreaterThanOrEqual(0);
+    const [{ d }] = await as<{ d: string }>(db, owner, "select issue_date::text as d from client_invoices where id = $1", [a]);
+    expect(d).toBe(today);
     const inv = rows[0];
     // ₹20,650 incl. 18% GST → ₹17,500 taxable + ₹3,150 GST.
     expect([inv.amount_cents, inv.taxable_cents, inv.tax_cents, inv.tax_label, inv.tax_split]).toEqual([2065000, 1750000, 315000, "GST", true]);
-    expect(rows[1].tax_bps).toBe(0);
-    expect(rows[1].tax_label).toBeNull();
-    expect(rows[1].taxable_cents).toBe(2065000);
+    // Without a rate, the invoice uses the GST the client agreed to in the quote (18%).
+    expect([rows[1].tax_bps, rows[1].tax_label, rows[1].taxable_cents]).toEqual([1800, "GST", 1750000]);
     expect(inv.seller).toMatchObject({ name: "Raman Studio", person: "Priya Raman", gstin: "36ABCDE1234F1Z5", upi_id: "raman.studio@okicici", address: "12 MG Road, Hyderabad 500001" });
     expect(inv.buyer).toMatchObject({ name: "Dana", company: "Northwind", email: "dana@northwind.test" });
     expect(inv.description).toBe("Numbered — Advance");
@@ -111,7 +120,7 @@ describe("creating invoices", () => {
     const p = await approvedProject("Dates");
     await expect(rpc(other, "create_invoice", [p.advance, "{}"])).rejects.toThrow(/Payment not found/);
     await expect(rpc(anon, "create_invoice", [p.advance, "{}"])).rejects.toThrow(/permission denied/);
-    await expect(rpc(owner, "create_invoice", [p.advance, JSON.stringify({ issue_date: "2020-01-01" })])).rejects.toThrow(/must be today/);
+    // The date is always today in India, whatever the browser sends.
     await expect(rpc(owner, "create_invoice", [p.advance, JSON.stringify({ issue_date: today, due_date: "2020-01-01" })])).rejects.toThrow(/due date/);
     await expect(rpc(owner, "create_invoice", [p.advance, JSON.stringify({ issue_date: today, tax_bps: 20000 })])).rejects.toThrow(/Tax rate/);
   });

@@ -21,6 +21,7 @@ const FREELANCER_FUNCTIONS = [
   "send_scope", "recall_scope", "resolve_revision", "create_change_order", "withdraw_change_order",
   "complete_change_order_work", "set_milestone_paid", "complete_project", "cancel_project",
   "unread_notification_count", "mark_notifications_seen", "my_plan", "join_early_access", "update_client", "set_payment_details", "set_invoice_details", "update_client_billing", "create_invoice", "void_invoice", "set_deliverable_progress", "add_expense", "delete_expense", "record_payment", "delete_payment", "add_follow_up", "set_follow_up_done", "delete_follow_up", "log_client_request", "create_client", "save_template", "delete_template",
+  "add_payment", "archive_client", "delete_client",
   "is_blog_author", "blog_my_posts", "save_blog_post", "delete_blog_post", "create_blog_key", "blog_my_keys", "revoke_blog_key",
 ];
 // Plan changes: never callable from the app. admin_set_plan = SQL editor; process_billing_event = service role (future webhook).

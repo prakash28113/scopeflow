@@ -96,6 +96,10 @@ try {
   await f.goto(`${BASE}/pricing`);
   await f.getByRole("heading", { name: /Simple pricing/ }).waitFor();
   await f.getByText("Recommended").waitFor();
+  // Opens on monthly prices; yearly is one tap away.
+  assert.equal(await f.getByRole("radio", { name: "Monthly" }).getAttribute("aria-checked"), "true");
+  await f.getByText("₹499").first().waitFor();
+  await f.getByRole("radio", { name: /Yearly/ }).click();
   await f.getByText("₹4,999").waitFor();
   await f.getByRole("radio", { name: "Monthly" }).click();
   await f.getByText("₹499").first().waitFor();
@@ -111,7 +115,7 @@ try {
     };
     const pages = {
       "/": ["Every client job, on the record.", "Does ScopeFlow take payments?"],
-      "/pricing": ["Simple pricing.", "₹4,999"], // plans fetched at build time
+      "/pricing": ["Simple pricing.", "₹499"], // plans fetched at build time
       "/refunds": ["Refund and cancellation policy", "within 7 days"],
       "/contact": ["Contact us", "Hyderabad, Telangana"],
       "/privacy": ["Privacy Policy"],
@@ -552,13 +556,19 @@ try {
   assert.equal(await form.getByLabel("Rate %").inputValue(), "18");
   assert.equal(await form.getByLabel("Tax name").inputValue(), "GST");
   assert.equal(await form.getByLabel("Show as CGST + SGST").isChecked(), true);
+  // Same state as the business (Telangana, from the GSTIN), so CGST + SGST is picked for them.
+  assert.match(await form.getByTestId("invoice-tax-type").innerText(), /CGST \+ SGST · place of supply Telangana \(same state as you\)/);
+  await form.getByLabel("SAC code").fill("998391");
   await form.getByLabel("Note on the invoice (optional)").fill("Thank you, Dana!");
   await shot(f, "28-create-invoice", false);
   await form.getByRole("button", { name: "Create invoice" }).click();
   await f.waitForURL(/\/invoices\/[0-9a-f-]{36}$/);
   const invoiceUrl = f.url();
   const doc = f.getByTestId("invoice-document");
-  const year = new Date().getFullYear();
+  // Numbered per Indian financial year (1 April to 31 March), e.g. RS-2026-27-001.
+  const [iy, im] = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kolkata", year: "numeric", month: "2-digit" }).format(new Date()).split("-").map(Number);
+  const fyStart = im >= 4 ? iy : iy - 1;
+  const year = `${fyStart}-${String((fyStart + 1) % 100).padStart(2, "0")}`;
   await doc.getByRole("heading", { name: `RS-${year}-001` }).waitFor();
   const text = await doc.innerText();
   assert.match(text, /Tax invoice/i);
@@ -568,6 +578,8 @@ try {
   assert.match(text, /Total\s+₹206\.50/);
   assert.match(text, /Rupees Two Hundred Six and Fifty Paise Only/);
   assert.match(text, /GSTIN: 36ABCDE1234F1Z5/);
+  assert.equal(await doc.getByTestId("invoice-place-of-supply").innerText(), "Telangana (36)");
+  assert.equal(await doc.getByTestId("invoice-sac").innerText(), "998391");
   assert.match(text, /Thank you, Dana!/);
   await doc.getByRole("img", { name: /UPI QR code to pay RS-/ }).waitFor();
   await f.getByRole("button", { name: "Print", exact: true }).waitFor();
@@ -607,7 +619,7 @@ try {
   const timeline = f.getByTestId("project-timeline");
   await timeline.getByText("Concept options marked delivered").waitFor();
   await f.getByRole("tab", { name: "Payments" }).click();
-  await timeline.getByText(/Invoice RS-\d{4}-001 issued/).waitFor();
+  await timeline.getByText(/Invoice RS-\d{4}-\d{2}-001 issued/).waitFor();
   assert.equal(await timeline.getByText("Concept options marked delivered").count(), 0);
   await f.getByRole("tab", { name: "Client" }).click();
   await timeline.getByText(/approved by Dana Whitfield/i).first().waitFor();
@@ -777,6 +789,66 @@ try {
   await f.waitForURL(/\/projects\/new\?client=/);
   // This account is at the Free plan's 2 active projects, so the form explains the limit instead.
   await f.getByText("You've reached the Free plan's active projects").waitFor();
+
+  step("clients: archive hides a client and frees a plan slot, restore brings it back, delete removes one added by mistake");
+  await f.goto(`${BASE}/clients`);
+  await f.getByTestId("clients-list").getByText("Arjun Rao").first().click();
+  await f.getByRole("heading", { name: /Arjun Rao/ }).waitFor();
+  const mc = f.getByTestId("manage-client");
+  await mc.getByRole("button", { name: "Archive client" }).click();
+  await confirmDialog(f);
+  await f.getByText("Client archived.").waitFor();
+  await f.getByText(/^Archived on /).waitFor();
+  await shot(f, "44-client-archived", false);
+  await f.goto(`${BASE}/clients`);
+  await f.getByTestId("clients-list").getByText("Dana Whitfield").first().waitFor();
+  assert.equal(await f.getByTestId("clients-list").getByText("Arjun Rao").count(), 0, "archived clients are hidden");
+  await f.getByRole("button", { name: "Archived clients (1)" }).click();
+  await f.getByTestId("clients-list").getByText("Arjun Rao").first().click();
+  await mc.getByRole("button", { name: "Restore client" }).click();
+  await f.getByText("Client restored.").waitFor();
+  // Clients with projects can only be archived; this one has none, so it can be deleted.
+  await mc.getByRole("button", { name: "Delete client" }).click();
+  await confirmDialog(f);
+  await f.getByText("Client deleted.").waitFor();
+  await f.waitForURL(/\/clients$/);
+  assert.equal(await f.getByText("Arjun Rao").count(), 0);
+
+  step("change order with GST: the project's 18% is added to the price, and the client sees both");
+  await f.goto(`${menuUrl}/change-orders/new`);
+  await f.getByLabel("Title").fill("Takeaway cup sleeve");
+  await f.getByLabel("Price (INR)").fill("100");
+  assert.equal(await f.getByLabel("GST (%)").inputValue(), "18");
+  const coTotals = await f.getByTestId("co-totals").innerText();
+  assert.match(coTotals, /Price\s+₹100\.00/);
+  assert.match(coTotals, /GST 18%\s+₹18\.00/);
+  assert.match(coTotals, /Client pays\s+₹118\.00/);
+  assert.match(coTotals, /New contract total\s+₹531\.00/);
+  await shot(f, "45-change-order-gst", false);
+  await f.getByRole("button", { name: "Send for approval" }).click();
+  await f.getByText(/Change order sent/).waitFor();
+  await f.getByText(/incl\. GST ₹18\.00/).first().waitFor();
+  await c.goto("about:blank");
+  await c.goto(menuPortal);
+  await c.getByTestId("portal-co-totals").getByText(/₹100\.00 \+ GST 18% ₹18\.00/).waitFor();
+
+  step("payments after approval: schedule the part of the contract no payment covers, then invoice it");
+  await f.goto(menuUrl);
+  const unc = f.getByTestId("uncovered");
+  await unc.getByText("₹206.50 of the contract isn't covered by a payment yet.").waitFor();
+  await unc.getByRole("button", { name: "Add payment to invoice it" }).click();
+  const ap = f.getByTestId("add-payment");
+  assert.equal(await ap.getByLabel("Amount (INR)").inputValue(), "206.50");
+  await ap.getByLabel("Amount (INR)").fill("300");
+  await ap.getByRole("button", { name: "Add payment" }).click();
+  await ap.getByText("Only ₹206.50 isn't covered by a payment yet.").waitFor();
+  await ap.getByLabel("Amount (INR)").fill("206.50");
+  await ap.getByRole("button", { name: "Add payment" }).click();
+  await f.getByText("Payment added. You can create its invoice now.").waitFor();
+  await f.getByTestId("uncovered").waitFor({ state: "detached" });
+  await f.getByText("Balance payment").first().waitFor();
+  await f.getByTestId("project-timeline").getByText("Payment added: Balance payment (₹206.50)").waitFor();
+  await f.getByRole("button", { name: "Create invoice" }).first().waitFor();
 
   step("password reset by email: request, open the link, choose a new password, sign in with it");
   const resetCtx = await newCtx();
@@ -1090,7 +1162,7 @@ document.body.appendChild(d)}`,
   await f.getByText("Client saved.").waitFor();
   await f.getByText("Prefers email. Approves quickly.").waitFor();
   // Client history: invoices, quotes, payment records, repeat client.
-  await f.getByTestId("client-invoices").getByText(/RS-\d{4}-002/).waitFor();
+  await f.getByTestId("client-invoices").getByText(/RS-\d{4}-\d{2}-002/).waitFor();
   assert.equal(await f.getByTestId("client-quotes").getByRole("link", { name: "Quote" }).count(), 2);
   await f.getByText("Repeat client").waitFor();
   await f.getByText(/UPI · UTR 5521/).waitFor();

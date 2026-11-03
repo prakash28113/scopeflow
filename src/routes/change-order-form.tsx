@@ -4,7 +4,8 @@ import { useQueryClient } from "@tanstack/react-query";
 import { Alert, Card, CardHeader, Field, Input, Textarea, cx } from "@/components/ui";
 import { SubmitButton } from "@/components/form-bits";
 import { formatMoney, parseAmount } from "@/lib/money";
-import { addDays, changeOrderAmount, increasePercent, parseHours } from "@/lib/pricing";
+import { addDays, changeOrderAmount, increasePercent, parseHours, withTax } from "@/lib/pricing";
+import { bpsToPercent, parsePercent } from "@/lib/quote";
 import { changeOrderSchema } from "@/lib/validation";
 import { useAction } from "@/lib/use-action";
 import { supabase } from "@/lib/supabase";
@@ -18,6 +19,9 @@ export function ChangeOrderForm({
   currentDue,
   request,
   suggestedAmount = "",
+  taxBps = 0,
+  taxLabel = null,
+  suggestedTitle = "",
 }: {
   projectId: string;
   currency: string;
@@ -27,6 +31,10 @@ export function ChangeOrderForm({
   request: { id: string; description: string; label: string } | null;
   /** Pre-fills the fixed price, e.g. the agreed price of an extra revision round. */
   suggestedAmount?: string;
+  /** The project's tax (from the approved quote): change orders use the same basis. */
+  taxBps?: number | null;
+  taxLabel?: string | null;
+  suggestedTitle?: string;
 }) {
   const action = useAction();
   const fe = action.fieldErrors;
@@ -49,6 +57,8 @@ export function ChangeOrderForm({
   const [hours, setHours] = useState("");
   const [rate, setRate] = useState("");
   const [days, setDays] = useState("0");
+  const [tax, setTax] = useState(bpsToPercent(taxBps));
+  const label = (taxLabel || "GST").slice(0, 24);
 
   const price = (() => {
     if (type === "fixed") {
@@ -60,7 +70,9 @@ export function ChangeOrderForm({
     return h === null || r === null ? null : changeOrderAmount({ type: "hourly", hoursHundredths: h, rateMinor: r });
   })();
   const d = /^\d+$/.test(days) ? Number(days) : 0;
-  const pct = price === null ? null : increasePercent(originalMinor, price);
+  const bps = tax.trim() ? parsePercent(tax) : 0;
+  const totals = price === null || bps === null ? null : withTax(price, bps);
+  const pct = totals === null ? null : increasePercent(originalMinor, totals.total);
 
   return (
     <form onSubmit={onSubmit} className="space-y-6" noValidate>
@@ -81,7 +93,7 @@ export function ChangeOrderForm({
         <CardHeader title="What's changing" />
         <div className="space-y-5 p-5">
           <Field label="Title" htmlFor="title" error={fe.title}>
-            <Input id="title" name="title" placeholder="Business card design" aria-invalid={!!fe.title} />
+            <Input id="title" name="title" placeholder="Business card design" defaultValue={suggestedTitle} aria-invalid={!!fe.title} />
           </Field>
           <Field label="Description" htmlFor="description" error={fe.description} hint="What's included, so there's no ambiguity later.">
             <Textarea id="description" name="description" rows={4} defaultValue={request?.description ?? ""} />
@@ -133,6 +145,10 @@ export function ChangeOrderForm({
             ) : (
               <input type="hidden" name="amount" value="" />
             )}
+            <Field label={`${label} (%)`} htmlFor="tax" error={fe.tax} hint={taxBps ? "Same as the approved quote. Use 0 for none." : "Use 0 for none."}>
+              <Input id="tax" name="tax" inputMode="decimal" value={tax} onChange={(e) => setTax(e.target.value)} placeholder="0" className="num" />
+            </Field>
+            <input type="hidden" name="taxLabel" value={label} />
             <Field label="Additional days" htmlFor="additionalDays" error={fe.additionalDays}>
               <Input
                 id="additionalDays"
@@ -149,14 +165,22 @@ export function ChangeOrderForm({
           </div>
         </div>
 
-        <dl className="num grid grid-cols-2 gap-x-4 gap-y-2.5 border-t border-line bg-sunken/50 px-5 py-4 text-[13px] sm:grid-cols-4">
+        <dl className="num grid grid-cols-2 gap-x-4 gap-y-2.5 border-t border-line bg-sunken/50 px-5 py-4 text-[13px] sm:grid-cols-4" data-testid="co-totals">
           <div>
-            <dt className="text-muted">This change</dt>
-            <dd className="mt-0.5 text-base font-semibold">{price === null ? "—" : formatMoney(price, currency)}</dd>
+            <dt className="text-muted">Price</dt>
+            <dd className="mt-0.5 text-base font-semibold">{totals === null ? "—" : formatMoney(totals.subtotal, currency)}</dd>
+          </div>
+          <div>
+            <dt className="text-muted">{bps ? `${label} ${bpsToPercent(bps)}%` : label}</dt>
+            <dd className="mt-0.5 text-base font-semibold">{totals === null ? "—" : formatMoney(totals.tax, currency)}</dd>
+          </div>
+          <div>
+            <dt className="text-muted">Client pays</dt>
+            <dd className="mt-0.5 text-base font-semibold">{totals === null ? "—" : formatMoney(totals.total, currency)}</dd>
           </div>
           <div>
             <dt className="text-muted">New contract total</dt>
-            <dd className="mt-0.5 text-base font-semibold">{price === null ? "—" : formatMoney(contractMinor + price, currency)}</dd>
+            <dd className="mt-0.5 text-base font-semibold">{totals === null ? "—" : formatMoney(contractMinor + totals.total, currency)}</dd>
           </div>
           <div>
             <dt className="text-muted">vs. original budget</dt>

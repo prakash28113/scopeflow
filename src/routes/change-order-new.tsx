@@ -51,6 +51,9 @@ export default function NewChangeOrder() {
         currentDue={currentDueDate(p.due_date, p.extra_days)}
         request={request}
         suggestedAmount={suggestedAmount}
+        taxBps={p.tax_bps ?? 0}
+        taxLabel={p.tax_label ?? null}
+        suggestedTitle={rr ? (rr.kind === "revision" ? "Extra revision round" : rr.description.split(/[.\n]/)[0].slice(0, 80)) : ""}
       />
     </div>
   );

@@ -72,3 +72,28 @@ describe("pricing", () => {
     expect(increasePercent(0, 100)).toBeNull();
   });
 });
+
+import { withTax } from "@/lib/pricing";
+import { formatPrice } from "@/lib/plans";
+import { financialYear } from "@/lib/format";
+describe("Indian money formatting and GST maths", () => {
+  it("groups rupees in lakh and crore, other currencies in thousands", () => {
+    expect(formatMoney(12400000, "INR")).toBe("₹1,24,000.00");
+    expect(formatMoney(1234567800, "INR")).toBe("₹1,23,45,678.00");
+    expect(formatMoney(12400050, "INR")).toBe("₹1,24,000.50");
+    expect(formatMoney(12400000, "USD")).toBe("$124,000.00");
+    expect(formatPrice(49900, "INR")).toBe("₹499");
+    expect(formatPrice(9900000, "INR")).toContain("99,000");
+  });
+  it("adds GST to a change order price, rounded to the paisa", () => {
+    expect(withTax(1750000, 1800)).toEqual({ subtotal: 1750000, tax: 315000, total: 2065000 });
+    expect(withTax(333, 1800).total).toBe(393);
+    expect(withTax(1000, 0).total).toBe(1000);
+  });
+  it("names the Indian financial year (April to March)", () => {
+    // Midnight India time on 1 April starts the new year, even though it's still 31 March in UTC.
+    expect(financialYear(new Date("2026-03-31T18:30:00Z"))).toBe("2026-27");
+    expect(financialYear(new Date("2026-03-31T18:29:00Z"))).toBe("2025-26");
+    expect(financialYear(new Date("2027-03-31T12:00:00Z"))).toBe("2026-27");
+  });
+});

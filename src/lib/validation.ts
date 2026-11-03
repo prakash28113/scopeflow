@@ -255,6 +255,8 @@ export function changeOrderSchema(currency: string) {
       rate: z.string().trim(),
       additionalDays: z.coerce.number("Enter a number").int("Use whole days").min(0).max(365, "Maximum is 365 days"),
       revisionRequestId: z.union([z.uuid(), z.literal("")]),
+      tax: z.string().trim().default(""),
+      taxLabel: z.string().trim().max(24).default(""),
     })
     .superRefine((v, ctx) => {
       if (v.pricingType === "fixed") {
@@ -269,6 +271,7 @@ export function changeOrderSchema(currency: string) {
           ctx.addIssue({ code: "custom", path: ["rate"], message: "Enter a valid hourly rate" });
         }
       }
+      if (v.tax && parsePercent(v.tax) === null) ctx.addIssue({ code: "custom", path: ["tax"], message: "0–100, e.g. 18" });
     })
     .transform((v) => {
       const hundredths = v.pricingType === "hourly" ? parseHours(v.hours)! : null;
@@ -281,6 +284,8 @@ export function changeOrderSchema(currency: string) {
         hourly_rate_cents: v.pricingType === "hourly" ? parseAmount(v.rate, currency)! : null,
         additional_days: v.additionalDays,
         revision_request_id: v.revisionRequestId || null,
+        tax_bps: v.tax ? parsePercent(v.tax) : 0,
+        tax_label: v.taxLabel || null,
       };
     });
 }
@@ -335,4 +340,5 @@ export const clientSchema = z.object({
     .default("")
     .transform((v) => v.replace(/\s/g, "").toUpperCase())
     .refine((v) => v === "" || /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/.test(v), "Enter a valid 15-character GSTIN, or leave it empty"),
+  state_code: z.string().trim().default(""),
 });

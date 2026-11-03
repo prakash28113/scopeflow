@@ -1,4 +1,6 @@
 import { useState, type FormEvent, type ReactNode } from "react";
+import { GST_STATES_SORTED, SAC_SUGGESTIONS } from "@/lib/gst";
+import { financialYear } from "@/lib/format";
 import { useNavigate } from "react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import { z } from "zod";
@@ -39,7 +41,7 @@ function WorkspaceForm({ profile, onDone, submitLabel }: { profile: Profile; onD
         <Input id="businessName" name="businessName" defaultValue={profile.business_name ?? ""} autoComplete="organization" />
       </Field>
       <Field label="Default currency" htmlFor="currency" error={fe.currency} hint="You can change it per project.">
-        <Select id="currency" name="currency" defaultValue={profile.default_currency}>
+        <Select id="currency" name="currency" defaultValue={profile.onboarded_at ? profile.default_currency : guessCurrency(profile.default_currency)}>
           {CURRENCIES.map((c) => (
             <option key={c}>{c}</option>
           ))}
@@ -151,6 +153,23 @@ function UpiForm({ current }: { current: string }) {
   );
 }
 
+/** For a new account: the currency where the browser is (India-first), else the stored default. */
+function guessCurrency(fallback: string) {
+  try {
+    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone ?? "";
+    if (/^Asia\/(Kolkata|Calcutta)$/.test(tz)) return "INR";
+    if (tz === "Europe/London") return "GBP";
+    if (/^America\//.test(tz)) return "USD";
+    if (/^Australia\//.test(tz)) return "AUD";
+    if (/^Europe\//.test(tz)) return "EUR";
+    if (tz === "Asia/Dubai") return "AED";
+    if (tz === "Asia/Singapore") return "SGD";
+  } catch {
+    /* use the fallback */
+  }
+  return fallback || "INR";
+}
+
 const invoiceSchema = z.object({
   businessAddress: z.string().trim().max(500, "Keep the address under 500 characters"),
   gstin: z
@@ -163,9 +182,15 @@ const invoiceSchema = z.object({
     .trim()
     .transform((v) => v.toUpperCase())
     .refine((v) => v === "" || /^[A-Z0-9]{1,8}$/.test(v), "Use up to 8 letters or numbers"),
+  stateCode: z.string().trim(),
+  sacCode: z
+    .string()
+    .trim()
+    .transform((v) => v.replace(/\s/g, ""))
+    .refine((v) => v === "" || /^\d{4,8}$/.test(v), "Use 4 to 8 digits, like 998391"),
 });
 
-function InvoiceDetailsForm({ address, gstin, prefix }: { address: string; gstin: string; prefix: string }) {
+function InvoiceDetailsForm({ address, gstin, prefix, stateCode, sacCode }: { address: string; gstin: string; prefix: string; stateCode: string; sacCode: string }) {
   const qc = useQueryClient();
   const toast = useToast();
   const action = useAction();
@@ -173,7 +198,7 @@ function InvoiceDetailsForm({ address, gstin, prefix }: { address: string; gstin
     e.preventDefault();
     const ok = await action.run(invoiceSchema, Object.fromEntries(new FormData(e.currentTarget)), (d) =>
       supabase
-        .rpc("set_invoice_details", { p: { business_address: d.businessAddress, gstin: d.gstin, invoice_prefix: d.invoicePrefix } })
+        .rpc("set_invoice_details", { p: { business_address: d.businessAddress, gstin: d.gstin, invoice_prefix: d.invoicePrefix, state_code: d.stateCode, sac_code: d.sacCode } })
         .then((r) => ({ data: true, error: r.error })),
     );
     if (!ok) return;
@@ -190,8 +215,28 @@ function InvoiceDetailsForm({ address, gstin, prefix }: { address: string; gstin
         <Field label="GSTIN (optional)" htmlFor="gstin" error={action.fieldErrors.gstin} hint="Add it if you're GST-registered. Invoices with GST then say “Tax invoice”.">
           <Input id="gstin" name="gstin" defaultValue={gstin} autoCapitalize="characters" spellCheck={false} placeholder="36ABCDE1234F1Z5" />
         </Field>
-        <Field label="Invoice number prefix" htmlFor="invoicePrefix" error={action.fieldErrors.invoicePrefix} hint={`Invoices are numbered ${prefix || "INV"}-${new Date().getFullYear()}-001, -002…`}>
+        <Field label="Invoice number prefix" htmlFor="invoicePrefix" error={action.fieldErrors.invoicePrefix} hint={`Numbered per financial year: ${prefix || "INV"}-${financialYear()}-001, -002…`}>
           <Input id="invoicePrefix" name="invoicePrefix" defaultValue={prefix} autoCapitalize="characters" maxLength={8} />
+        </Field>
+        <Field label="Business state" htmlFor="stateCode" hint="Decides CGST + SGST (client in the same state) or IGST. Filled from your GSTIN if empty.">
+          <Select id="stateCode" name="stateCode" defaultValue={stateCode || gstin.slice(0, 2)}>
+            <option value="">Choose a state</option>
+            {GST_STATES_SORTED.map(([c, n]) => (
+              <option key={c} value={c}>
+                {n} ({c})
+              </option>
+            ))}
+          </Select>
+        </Field>
+        <Field label="Default SAC code" htmlFor="sacCode" error={action.fieldErrors.sacCode} hint="The service code printed on tax invoices. You can change it per invoice.">
+          <Input id="sacCode" name="sacCode" defaultValue={sacCode} inputMode="numeric" maxLength={8} placeholder="998391" list="sac-suggestions" className="num" />
+          <datalist id="sac-suggestions">
+            {SAC_SUGGESTIONS.map(([c, l]) => (
+              <option key={c} value={c}>
+                {l}
+              </option>
+            ))}
+          </datalist>
         </Field>
       </div>
       <SubmitButton variant="secondary" pending={action.pending}>
@@ -220,7 +265,13 @@ export function SettingsPage() {
           <UpiForm current={profile.data.upi_id ?? ""} />
         </SettingsSection>
         <SettingsSection title="Invoice details" description="Shown on every invoice you create. Changing them later never alters invoices you've already issued.">
-          <InvoiceDetailsForm address={profile.data.business_address ?? ""} gstin={profile.data.gstin ?? ""} prefix={profile.data.invoice_prefix ?? "INV"} />
+          <InvoiceDetailsForm
+            address={profile.data.business_address ?? ""}
+            gstin={profile.data.gstin ?? ""}
+            prefix={profile.data.invoice_prefix ?? "INV"}
+            stateCode={profile.data.state_code ?? ""}
+            sacCode={profile.data.sac_code ?? ""}
+          />
         </SettingsSection>
         <SettingsSection
           title="Password"

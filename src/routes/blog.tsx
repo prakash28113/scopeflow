@@ -158,7 +158,7 @@ export function BlogIndexPage() {
         ) : !first ? (
           <div className="mt-10 rounded-2xl border border-dashed border-line-strong bg-surface px-6 py-14 text-center">
             <p className="text-[16px] font-medium text-ink">{active ? "No posts in this category yet." : "The first posts are on their way."}</p>
-            <p className="mt-1 text-[14px] text-muted">New posts arrive every day.</p>
+            <p className="mt-1 text-[14px] text-muted">New posts are on the way.</p>
           </div>
         ) : (
           <>
