@@ -56,14 +56,15 @@ describe("defaults and names", () => {
     expect(await as(db, u, "select sac_code from profiles")).toEqual([{ sac_code: "998391" }]);
   });
 
-  it("spells the owner's surname Mummidisetty on posts and the profile", async () => {
+  it("keeps the owner's surname Mummidisetti on posts and the profile", async () => {
     const d = await createDb({ upTo: "20261115000000_gst_invoicing.sql" });
     await createUser(d, "prakashmummidisetti@gmail.com", "Prakash Mummidisetti");
     await d.query("insert into blog_posts (slug, title, description, category, body, status, author_name, published_at) values ('a-post', 'A post title here', 'A short summary of at least twenty characters.', 'strategies', 'Body text that is long enough to publish here.', 'published', 'Prakash Mummidisetti', now())");
     await d.query("update profiles set sac_code = null");
     await d.exec(readMigration("20261116000000_brand_growth.sql"));
-    expect((await d.query<Json>("select author_name from blog_posts")).rows).toEqual([{ author_name: "Prakash Mummidisetty" }]);
-    expect((await d.query<Json>("select full_name, sac_code from profiles")).rows).toEqual([{ full_name: "Prakash Mummidisetty", sac_code: "998314" }]);
+    await d.exec(readMigration("20261117000000_fix_owner_surname.sql"));
+    expect((await d.query<Json>("select author_name from blog_posts")).rows).toEqual([{ author_name: "Prakash Mummidisetti" }]);
+    expect((await d.query<Json>("select full_name, sac_code from profiles")).rows).toEqual([{ full_name: "Prakash Mummidisetti", sac_code: "998314" }]);
   });
 });
 
