@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { plainText, readingMinutes, renderMarkdown } from "@/lib/blog-content";
+import { imagePrefix, plainText, readingMinutes, renderMarkdown } from "@/lib/blog-content";
 
 describe("blog Markdown", () => {
   it("renders the supported formatting", () => {
@@ -61,6 +61,19 @@ Second line of the same paragraph.
       expect(html, a).not.toMatch(/\son\w+="/i);
     }
     expect(renderMarkdown("[click](javascript:alert(1))")).toBe("<p>click</p>");
+  });
+
+  it("shows only images uploaded to the blog's storage; others become links", () => {
+    const prefix = imagePrefix("https://abcdefghijklmnopqrst.supabase.co/");
+    const ok = `${prefix}2026/11/photo-1.webp`;
+    expect(renderMarkdown(`![A designer's desk](${ok})`, { imagePrefix: prefix })).toBe(`<figure><img src="${ok}" alt="A designer&#39;s desk" loading="lazy" decoding="async"></figure>`);
+    expect(renderMarkdown(`Text ![x](${ok}) more`, { imagePrefix: prefix })).toContain(`<img src="${ok}"`);
+    expect(renderMarkdown("![Chart](https://other.example/chart.png)", { imagePrefix: prefix })).toBe('<p><a href="https://other.example/chart.png" target="_blank" rel="noopener">Chart</a></p>');
+    expect(renderMarkdown(`![x](${ok})`)).not.toContain("<img"); // no prefix → no images
+    for (const bad of [`![x](${prefix}a.webp" onerror="alert(1))`, `![x"onerror="alert(1)](${ok})`, "![x](javascript:alert(1))"]) {
+      const html = renderMarkdown(bad, { imagePrefix: prefix });
+      expect(html, bad).not.toMatch(/\son\w+="|javascript:/);
+    }
   });
 
   it("estimates reading time and plain text", () => {

@@ -47,7 +47,7 @@ export function buildCsp(opts: HeaderOptions): string {
     "default-src 'self'",
     `script-src 'self' ${ANALYTICS_SCRIPT_ORIGIN}${t}${g(GOOGLE_GSI_SCRIPT)}${r(RAZORPAY.script)}`,
     `style-src 'self' 'unsafe-inline'${g(GOOGLE_GSI_STYLE)}`,
-    `img-src 'self' data:${r(RAZORPAY.img)}`,
+    `img-src 'self' data: ${supabase}${r(RAZORPAY.img)}`, // Supabase: blog images (public storage)
     "font-src 'self'",
     `connect-src 'self' ${supabase} ${ANALYTICS_BEACON_ORIGIN}${t}${g(GOOGLE_GSI)}${r(RAZORPAY.connect)}`,
     `frame-src ${frames.length ? frames.join(" ") : "'none'"}`,

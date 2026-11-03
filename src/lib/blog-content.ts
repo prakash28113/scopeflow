@@ -7,6 +7,9 @@
  *   ## Heading / ### Subheading     paragraphs (blank line between)     **bold**  *italic*  `code`
  *   [text](https://…)   - bullets   1. numbered   > quote   --- (line)   ``` code blocks ```
  *   | tables | with | pipes |  (first row is the header; a |---| line under it is optional)
+ *   ![description](image address)   images: only images uploaded to ScopeFlow's blog storage are shown;
+ *                                    any other image becomes a plain link (the site's security policy
+ *                                    wouldn't load it anyway).
  */
 
 export type BlogCategory = "strategies" | "success-stories" | "market-prices" | "tools" | "news";
@@ -28,9 +31,14 @@ export type BlogPost = {
   author_name: string;
   published_at: string;
   updated_at: string;
+  cover_image: string | null;
 };
-export const POST_COLUMNS = "slug, title, description, category, body, author_name, published_at, updated_at";
-export const LIST_COLUMNS = "slug, title, description, category, author_name, published_at, updated_at";
+export const POST_COLUMNS = "slug, title, description, category, body, author_name, published_at, updated_at, cover_image";
+export const LIST_COLUMNS = "slug, title, description, category, author_name, published_at, updated_at, cover_image";
+
+/** Where uploaded blog images live: <Supabase URL>/storage/v1/object/public/blog/… */
+export const imagePrefix = (supabaseUrl: string) => `${supabaseUrl.replace(/\/+$/, "")}/storage/v1/object/public/blog/`;
+export type RenderOptions = { imagePrefix?: string };
 
 export const readingMinutes = (body: string) => Math.max(1, Math.round(body.trim().split(/\s+/).length / 200));
 
@@ -49,11 +57,21 @@ function safeUrl(raw: string): string | null {
 }
 
 /** Inline formatting on already-escaped text. */
-function inline(escaped: string): string {
+function inline(escaped: string, opts: RenderOptions = {}): string {
   const codes: string[] = [];
   let s = escaped.replace(/`([^`\n]+)`/g, (_, c) => {
     codes.push(`<code>${c}</code>`);
     return `\u0000${codes.length - 1}\u0000`;
+  });
+  // Images first (before links): ![alt](url)
+  s = s.replace(/!\[([^\]\n]*)\]\(((?:[^()\s]|\([^()\s]*\))+)\)/g, (_, alt, href) => {
+    const url = href.replace(/&amp;/g, "&");
+    if (opts.imagePrefix && url.startsWith(opts.imagePrefix) && /^[\w./%-]+$/.test(url.slice(opts.imagePrefix.length))) {
+      codes.push(`<img src="${escapeHtml(url)}" alt="${alt}" loading="lazy" decoding="async">`);
+      return `\u0000${codes.length - 1}\u0000`;
+    }
+    const safe = safeUrl(url);
+    return safe ? `[${alt || "image"}](${href})` : alt;
   });
   s = s.replace(/\[([^\]\n]+)\]\(((?:[^()\s]|\([^()\s]*\))+)\)/g, (whole, text, href) => {
     // href is escaped text; unescape only &amp; for the URL check, keep it escaped in the attribute.
@@ -76,7 +94,7 @@ const cells = (line: string) =>
     .map((c) => c.trim());
 
 /** Markdown → safe HTML. */
-export function renderMarkdown(md: string): string {
+export function renderMarkdown(md: string, opts: RenderOptions = {}): string {
   const lines = md.replace(/\r\n?/g, "\n").split("\n");
   const out: string[] = [];
   let i = 0;
@@ -99,7 +117,7 @@ export function renderMarkdown(md: string): string {
     if (h) {
       // The post title is the page's only h1, so # and ## both become h2.
       const level = Math.min(4, Math.max(2, h[1].length));
-      out.push(`<h${level}>${inline(escapeHtml(h[2].replace(/\s+#+\s*$/, "")))}</h${level}>`);
+      out.push(`<h${level}>${inline(escapeHtml(h[2].replace(/\s+#+\s*$/, "")), opts)}</h${level}>`);
       i++;
       continue;
     }
@@ -111,7 +129,7 @@ export function renderMarkdown(md: string): string {
     if (/^>\s?/.test(line)) {
       const q: string[] = [];
       while (i < lines.length && /^>\s?/.test(lines[i])) q.push(lines[i++].replace(/^>\s?/, ""));
-      out.push(`<blockquote>${renderMarkdown(q.join("\n"))}</blockquote>`);
+      out.push(`<blockquote>${renderMarkdown(q.join("\n"), opts)}</blockquote>`);
       continue;
     }
     if (/^\s*\|.*\|\s*$/.test(line)) {
@@ -122,8 +140,8 @@ export function renderMarkdown(md: string): string {
       }
       const [head, ...body] = rows;
       out.push(
-        `<div class="table-wrap"><table><thead><tr>${head.map((c) => `<th>${inline(escapeHtml(c))}</th>`).join("")}</tr></thead><tbody>${body
-          .map((r) => `<tr>${r.map((c) => `<td>${inline(escapeHtml(c))}</td>`).join("")}</tr>`)
+        `<div class="table-wrap"><table><thead><tr>${head.map((c) => `<th>${inline(escapeHtml(c), opts)}</th>`).join("")}</tr></thead><tbody>${body
+          .map((r) => `<tr>${r.map((c) => `<td>${inline(escapeHtml(c), opts)}</td>`).join("")}</tr>`)
           .join("")}</tbody></table></div>`,
       );
       continue;
@@ -138,14 +156,16 @@ export function renderMarkdown(md: string): string {
         let item = lines[i++].replace(re, "");
         // Continuation lines (indented) belong to the item.
         while (i < lines.length && /^\s{2,}\S/.test(lines[i]) && !re.test(lines[i].trim())) item += " " + lines[i++].trim();
-        items.push(`<li>${inline(escapeHtml(item))}</li>`);
+        items.push(`<li>${inline(escapeHtml(item), opts)}</li>`);
       }
       out.push(ordered ? `<ol>${items.join("")}</ol>` : `<ul>${items.join("")}</ul>`);
       continue;
     }
     const para: string[] = [];
     while (i < lines.length && lines[i].trim() && (para.length === 0 || !isBlockStart(lines[i]))) para.push(lines[i++].trim());
-    out.push(`<p>${inline(escapeHtml(para.join(" ")))}</p>`);
+    // A paragraph that is only an image shows as a figure.
+    const p = inline(escapeHtml(para.join(" ")), opts);
+    out.push(/^<img [^>]+>$/.test(p) ? `<figure>${p}</figure>` : `<p>${p}</p>`);
   }
   return out.join("\n");
 }

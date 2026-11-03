@@ -15,6 +15,7 @@ import {
   categoryOf,
   escapeHtml,
   formatPostDate,
+  imagePrefix,
   readingMinutes,
   renderMarkdown,
   type BlogPost,
@@ -70,7 +71,7 @@ export function dehydrated(entries: [readonly unknown[], unknown][]) {
   };
 }
 
-type Page = { path: string; title: string; description: string; url: string; body: string; jsonLd: unknown; state: unknown; noindex?: boolean; ogType?: string };
+type Page = { path: string; title: string; description: string; url: string; body: string; jsonLd: unknown; state: unknown; noindex?: boolean; ogType?: string; image?: string | null };
 
 /** Fills the app shell (index.html) with the page. */
 export function fillShell(shell: string, p: Page): string {
@@ -85,6 +86,11 @@ export function fillShell(shell: string, p: Page): string {
   html = meta("property", "og:description", p.description, html);
   html = meta("property", "og:url", p.url, html);
   html = meta("property", "og:type", p.ogType ?? "website", html);
+  if (p.image) {
+    html = meta("property", "og:image", p.image, html);
+    // The site's default image size doesn't describe an uploaded photo.
+    html = html.replace(/\s*<meta property="og:image:(width|height|alt)" content="[^"]*"\s*\/?>/g, "");
+  }
   const head = [
     `<link rel="canonical" href="${escapeHtml(p.url)}" />`,
     `<link rel="alternate" type="application/rss+xml" title="ScopeFlow blog" href="${SITE_URL}/blog/rss.xml" />`,
@@ -103,7 +109,8 @@ const header = `<header class="border-b border-line bg-surface/80"><div class="m
 
 const card = (p: ListItem) => {
   const c = categoryOf(p.category);
-  return `<article><a href="/blog/${escapeHtml(p.slug)}"><p class="text-[12px] font-semibold uppercase tracking-[0.06em]" style="color:${c.tone}">${escapeHtml(c.label)}</p><h2 class="mt-1.5 text-[18px] font-semibold leading-snug text-ink">${escapeHtml(p.title)}</h2></a><p class="mt-2 text-[14px] text-ink-2">${escapeHtml(p.description)}</p><p class="mt-3 text-[13px] text-muted"><time datetime="${escapeHtml(p.published_at)}">${formatPostDate(p.published_at)}</time></p></article>`;
+  const img = p.cover_image ? `<img src="${escapeHtml(p.cover_image)}" alt="" loading="lazy" class="mb-4 aspect-[16/9] w-full rounded-xl object-cover">` : "";
+  return `<article><a href="/blog/${escapeHtml(p.slug)}">${img}<p class="text-[12px] font-semibold uppercase tracking-[0.06em]" style="color:${c.tone}">${escapeHtml(c.label)}</p><h2 class="mt-1.5 text-[18px] font-semibold leading-snug text-ink">${escapeHtml(p.title)}</h2></a><p class="mt-2 text-[14px] text-ink-2">${escapeHtml(p.description)}</p><p class="mt-3 text-[13px] text-muted"><time datetime="${escapeHtml(p.published_at)}">${formatPostDate(p.published_at)}</time></p></article>`;
 };
 
 const ORG = { "@type": "Organization", "@id": `${SITE_URL}/#organization`, name: SITE_NAME, url: `${SITE_URL}/`, logo: `${SITE_URL}/icon-512.png` };
@@ -136,10 +143,10 @@ export function listPage(posts: ListItem[]): Page {
   };
 }
 
-export function postPage(post: BlogPost, posts: ListItem[]): Page {
+export function postPage(post: BlogPost, posts: ListItem[], supabaseUrl = ""): Page {
   const c = categoryOf(post.category);
   const url = `${SITE_URL}/blog/${post.slug}`;
-  const body = `<div class="min-h-dvh bg-canvas">${header}<main><article class="mx-auto max-w-[720px] px-4 pb-6 pt-10 sm:px-6 sm:pt-14"><nav aria-label="Breadcrumb" class="text-[13px] text-muted"><a href="/blog">Blog</a> / <a href="/blog?category=${c.id}" style="color:${c.tone}">${escapeHtml(c.label)}</a></nav><h1 class="display mt-4 text-[34px] font-semibold leading-[1.08] text-ink sm:text-[46px]">${escapeHtml(post.title)}</h1><p class="mt-4 text-[18px] leading-relaxed text-ink-2">${escapeHtml(post.description)}</p><p class="mt-5 text-[14px] text-muted"><span class="font-medium text-ink">${escapeHtml(post.author_name)}</span> · <time datetime="${escapeHtml(post.published_at)}">${formatPostDate(post.published_at)}</time> · ${readingMinutes(post.body)} min read</p><div class="blog-prose mt-10">${renderMarkdown(post.body)}</div></article></main></div>`;
+  const body = `<div class="min-h-dvh bg-canvas">${header}<main><article class="mx-auto max-w-[720px] px-4 pb-6 pt-10 sm:px-6 sm:pt-14"><nav aria-label="Breadcrumb" class="text-[13px] text-muted"><a href="/blog">Blog</a> / <a href="/blog?category=${c.id}" style="color:${c.tone}">${escapeHtml(c.label)}</a></nav><h1 class="display mt-4 text-[34px] font-semibold leading-[1.08] text-ink sm:text-[46px]">${escapeHtml(post.title)}</h1><p class="mt-4 text-[18px] leading-relaxed text-ink-2">${escapeHtml(post.description)}</p><p class="mt-5 text-[14px] text-muted"><span class="font-medium text-ink">${escapeHtml(post.author_name)}</span> · <time datetime="${escapeHtml(post.published_at)}">${formatPostDate(post.published_at)}</time> · ${readingMinutes(post.body)} min read</p>${post.cover_image ? `<img src="${escapeHtml(post.cover_image)}" alt="${escapeHtml(post.title)}" class="mt-8 aspect-[5/2] w-full rounded-2xl object-cover">` : ""}<div class="blog-prose mt-10">${renderMarkdown(post.body, { imagePrefix: supabaseUrl ? imagePrefix(supabaseUrl) : undefined })}</div></article></main></div>`;
   return {
     path: `/blog/${post.slug}`,
     title: `${post.title} | ScopeFlow blog`,
@@ -147,6 +154,7 @@ export function postPage(post: BlogPost, posts: ListItem[]): Page {
     url,
     body,
     ogType: "article",
+    image: post.cover_image,
     state: dehydrated([
       [["blog", "post", post.slug], post],
       [["blog", "list"], posts],
@@ -166,7 +174,7 @@ export function postPage(post: BlogPost, posts: ListItem[]): Page {
           wordCount: post.body.trim().split(/\s+/).length,
           author: { "@type": "Person", name: post.author_name || OPERATOR_NAME },
           publisher: { "@id": ORG["@id"] },
-          image: OG_IMAGE,
+          image: post.cover_image || OG_IMAGE,
           url,
           mainEntityOfPage: url,
           inLanguage: "en-IN",
