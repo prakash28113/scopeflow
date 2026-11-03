@@ -1,7 +1,8 @@
 /**
  * ScopeFlow Worker. Intentionally tiny and secret-free:
- *  - static files and browser page navigations are served by static assets and never reach
- *    this script;
+ *  - every request except /assets/* comes here first (assets.run_worker_first): http and www
+ *    addresses get a 301 to https://scopeflow.in, unknown page addresses get the app shell with a
+ *    real 404 status (no "soft 404"), and everything else is handed to static assets unchanged;
  *  - `fetch` sees only requests to paths with no file that the platform didn't classify as a
  *    navigation (e.g. some in-app browsers, link previewers, older webviews). If they ask for
  *    HTML it serves the app shell with the same security headers as the static pages
@@ -11,6 +12,7 @@
  *  - `scheduled` pings Supabase twice a day so a free project isn't paused.
  */
 import { PORTAL_HEADERS, PRIVATE_PATHS, pageHeaders } from "../build/security-headers";
+import { isKnownPath } from "../src/lib/known-routes";
 import { blogRoute, fillShell, getPost, listPage, listPosts, notFoundPage, postPage, rss, sitemap } from "./blog";
 
 export interface Env {
@@ -80,6 +82,47 @@ export async function servePage(request: Request, env: Env): Promise<Response> {
   return new Response(request.method === "HEAD" ? null : s.html.body, { status: 200, headers: s.headers });
 }
 
+/** Hosts that are only ever the live site (local and preview addresses are left alone). */
+const LIVE_HOST = "scopeflow.in";
+
+/** 301 to https://scopeflow.in for http:// and www. addresses of the live site. */
+export function canonicalRedirect(request: Request): Response | null {
+  const url = new URL(request.url);
+  const host = url.hostname.toLowerCase();
+  if (host !== LIVE_HOST && host !== `www.${LIVE_HOST}`) return null;
+  if (url.protocol === "https:" && host === LIVE_HOST) return null;
+  return new Response(null, { status: 301, headers: { location: `https://${LIVE_HOST}${url.pathname}${url.search}`, "cache-control": "public, max-age=86400" } });
+}
+
+/** True for an address that looks like a page (no file extension, not a built asset). */
+const isPagePath = (pathname: string) => !pathname.startsWith("/assets/") && !/\.[a-z0-9]+$/i.test(pathname);
+
+/**
+ * Pages and files: static assets answer as before. An unknown page address gets the app shell
+ * (which shows "Page not found") with status 404, so search engines don't index it.
+ */
+export async function serveApp(request: Request, env: Env): Promise<Response> {
+  const url = new URL(request.url);
+  if (!env.ASSETS || (request.method !== "GET" && request.method !== "HEAD")) return servePage(request, env);
+  if (isPagePath(url.pathname) && !isKnownPath(url.pathname) && url.pathname !== SHELL_PROBE) {
+    if (!wantsPage(request)) return json({ error: "Not found" }, 404);
+    const s = await shell(request, env);
+    if (!s) return json({ error: "Not found" }, 404);
+    s.headers.set("Cache-Control", "no-cache");
+    s.headers.set("X-Robots-Tag", "noindex");
+    return new Response(request.method === "HEAD" ? null : s.html.body, { status: 404, headers: s.headers });
+  }
+  const res = await env.ASSETS.fetch(request);
+  // Requests the platform doesn't treat as a page visit (some in-app browsers, link previewers) get
+  // the shell; a missing file gets a plain 404.
+  if (res.status === 404) return isPagePath(url.pathname) ? servePage(request, env) : json({ error: "Not found" }, 404);
+  // A missing file (an image, a script…) answered with the app shell is really "not found".
+  if (!isPagePath(url.pathname) && !/\.html?$/i.test(url.pathname) && res.ok && (res.headers.get("content-type") ?? "").includes("text/html")) {
+    return json({ error: "Not found" }, 404);
+  }
+  return res;
+}
+
 type Fetcher = (input: string, init?: RequestInit) => Promise<Response>;
 
 /** Blog pages, feed and sitemap, rendered with the posts. Falls back to the plain shell if the database is unreachable. */
@@ -132,7 +175,7 @@ export async function serveBlog(request: Request, env: Env, f: Fetcher = fetch):
 
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
-    return (await serveBlog(request, env)) ?? servePage(request, env);
+    return canonicalRedirect(request) ?? (await serveBlog(request, env)) ?? serveApp(request, env);
   },
   async scheduled(_controller: unknown, env: Env, ctx: { waitUntil(p: Promise<unknown>): void }) {
     ctx.waitUntil(

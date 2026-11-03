@@ -37,7 +37,7 @@ function BlogHeader() {
               Write
             </Link>
           ) : null}
-          <Link to="/pricing" className={cx(buttonClass("ghost", "sm"), "hidden sm:inline-flex")}>
+          <Link to="/pricing" className="px-2 text-[14px] font-medium text-ink-2 hover:text-ink sm:px-3">
             Pricing
           </Link>
           {session ? (

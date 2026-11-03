@@ -17,10 +17,11 @@ async function rpc<T = Json>(role: Role, fn: string, args: unknown[] = []): Prom
   const placeholders = args.map((_, i) => `$${i + 1}`).join(", ");
   return (await as<{ r: T }>(db, role, `select public.${fn}(${placeholders}) as r`, args))[0].r;
 }
+// Published posts need their own title and summary, so the summary names the title.
 const post = (o: Json = {}) =>
   JSON.stringify({
     title: "How to price a logo project",
-    description: "A simple way to work out a fair price for logo work, with examples.",
+    description: `A simple way to work out a fair price for logo work, with examples: ${String(o.title ?? "How to price a logo project")}.`,
     category: "strategies",
     body: "## Start with time\n\nCount the hours.",
     publish: true,
@@ -50,8 +51,10 @@ describe("writing", () => {
   it("publishes with an address made from the title, and keeps it after edits", async () => {
     const r = await rpc<Json>(author, "save_blog_post", [null, post()]);
     expect(r).toMatchObject({ slug: "how-to-price-a-logo-project", status: "published" });
-    const again = await rpc<Json>(author, "save_blog_post", [null, post()]);
+    // A second post with the same title gets its own address (and can't be published under that title).
+    const again = await rpc<Json>(author, "save_blog_post", [null, post({ publish: false })]);
     expect(again.slug).toBe("how-to-price-a-logo-project-2");
+    await expect(rpc(author, "save_blog_post", [again.id, post()])).rejects.toThrow(/already has this title/);
     const edited = await rpc<Json>(author, "save_blog_post", [r.id, post({ title: "Pricing logo projects in 2026" })]);
     expect(edited.slug).toBe("how-to-price-a-logo-project"); // published → links keep working
     const [row] = await as<Json>(db, anon, "select title, author_name from blog_posts where slug = 'how-to-price-a-logo-project'");

@@ -105,7 +105,7 @@ export function fillShell(shell: string, p: Page): string {
   );
 }
 
-const header = `<header class="border-b border-line bg-surface/80"><div class="mx-auto flex h-16 max-w-6xl items-center justify-between gap-3 px-4 sm:px-6"><div class="flex items-center gap-3"><a href="/" aria-label="ScopeFlow home" class="text-[15px] font-semibold text-ink">ScopeFlow</a><span class="h-5 w-px bg-line" aria-hidden="true"></span><a href="/blog" class="text-[14px] font-semibold text-ink">Blog</a></div><nav class="flex items-center gap-2" aria-label="Blog"><a href="/pricing" class="hidden px-3 text-[14px] font-medium text-ink-2 sm:inline">Pricing</a><a href="/signup" class="rounded-lg bg-accent px-3 py-1.5 text-[13px] font-semibold text-white">Start free</a></nav></div></header>`;
+const header = `<header class="border-b border-line bg-surface/80"><div class="mx-auto flex h-16 max-w-6xl items-center justify-between gap-3 px-4 sm:px-6"><div class="flex items-center gap-3"><a href="/" aria-label="ScopeFlow home" class="text-[15px] font-semibold text-ink">ScopeFlow</a><span class="h-5 w-px bg-line" aria-hidden="true"></span><a href="/blog" class="text-[14px] font-semibold text-ink">Blog</a></div><nav class="flex items-center gap-2" aria-label="Blog"><a href="/pricing" class="px-2 text-[14px] font-medium text-ink-2 sm:px-3">Pricing</a><a href="/signup" class="rounded-lg bg-accent px-3 py-1.5 text-[13px] font-semibold text-white">Start free</a></nav></div></header>`;
 
 const card = (p: ListItem) => {
   const c = categoryOf(p.category);

@@ -14,6 +14,8 @@ begin;
 
 drop trigger if exists on_auth_user_created on auth.users;
 
+-- Brand & growth (if installed).
+drop function if exists public.set_signup_source, public._require_feature, public._has_feature, public._blog_unique_meta, public.admin_signup_sources cascade;
 -- GST and invoicing (if installed).
 drop function if exists public.add_payment, public.archive_client, public.delete_client, public._unarchive_client,
   public._today_india, public._financial_year, public._money, public._gst_state_name, public._clean_state,

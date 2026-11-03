@@ -551,6 +551,11 @@ export async function smokeTest({ fetch, wait = sleep, appUrl, supabaseUrl, publ
   if (!sitemap.ok || !(await sitemap.text()).includes("<urlset")) throw new Error("Live sitemap.xml is missing.");
   passed.push("Home page is prerendered and indexable; sitemap is live");
 
+  // Unknown addresses are real 404s (no "soft 404s" for search engines).
+  const missing = await fetch(appUrl + "/this-page-does-not-exist", { headers: { "Sec-Fetch-Mode": "navigate", Accept: "text/html" } });
+  if (missing.status !== 404) throw new Error(`Unknown pages should answer 404 (got ${missing.status}).`);
+  passed.push("Unknown pages answer 404, not the app with 200");
+
   const portal = await fetch(appUrl + "/p", { headers: { "Sec-Fetch-Mode": "navigate", Accept: "text/html" } });
   if (!/noindex/i.test(portal.headers.get("x-robots-tag") ?? "")) throw new Error("Client portal page is missing noindex.");
   passed.push("Client portal page is private (noindex, no-store)");

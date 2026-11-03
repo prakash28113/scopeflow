@@ -3,7 +3,8 @@
 //   PGlite (real Postgres 17) over the wire protocol -> real PostgREST 12 -> gateway at :54321
 //   plus a minimal GoTrue-compatible auth shim (password grant, /user, signup, refresh, logout,
 //   password recovery). Recovery "emails" are kept in memory and read by the walkthrough via
-//   GET /auth/v1/__test/recovery?email=… (local test stand-in only; never part of the app).
+//   GET /auth/v1/__test/recovery?email=… and GET /auth/v1/__test/plan?email=…&plan=… (local test
+//   stand-ins only; never part of the app).
 import { PGlite } from "@electric-sql/pglite";
 import { PGLiteSocketServer } from "@electric-sql/pglite-socket";
 import { createHmac, randomUUID } from "node:crypto";
@@ -198,6 +199,13 @@ async function auth(req, res, url) {
     const link = outbox.get(url.searchParams.get("email"));
     outbox.delete(url.searchParams.get("email"));
     return link ? json(res, 200, { link }) : json(res, 404, { msg: "no recovery email" });
+  }
+  // Local test stand-in only: put an account on a plan, like the SQL editor's admin_set_plan.
+  if (path === "/__test/plan" && req.method === "GET") {
+    const plan = url.searchParams.get("plan");
+    if (plan === "free") await q("select public.admin_set_plan($1, 'free', 'free', null, null, 'e2e')", [url.searchParams.get("email")]);
+    else await q("select public.admin_set_plan($1, $2, 'active', 'month', now() + interval '30 days', 'e2e')", [url.searchParams.get("email"), plan]);
+    return json(res, 200, {});
   }
   if (path === "/user" && req.method === "PUT") {
     const claims = verify((req.headers.authorization || "").replace(/^Bearer /, ""));

@@ -12,6 +12,7 @@ import { LogoFull } from "./brand";
 import { displayName, useAuth, useProfile } from "@/lib/auth";
 import { supabase } from "@/lib/supabase";
 import { feedbackMailto } from "@/lib/site";
+import { useFeature } from "@/lib/plans";
 
 /** Loading state for a whole page: the shape of a page (title, a row of figures, a panel), not a spinner. */
 export function PageSpinner() {
@@ -72,7 +73,7 @@ export function useUnreadCount() {
 
 // ------------------------------------------------------------------ navigation
 
-type NavItem = { to: string; label: string; icon: ReactNode; end?: boolean; count?: number };
+type NavItem = { to: string; label: string; icon: ReactNode; end?: boolean; count?: number; tag?: string };
 const I = (d: ReactNode) => (
   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden className="shrink-0">
     {d}
@@ -97,6 +98,8 @@ const ICONS = {
 };
 
 function useNavGroups(approvalsWaiting: number, blogAuthor: boolean): { label: string; items: NavItem[] }[] {
+  const analytics = useFeature("analytics");
+  const solo = analytics ? undefined : "Solo";
   return [
     {
       label: "Workspace",
@@ -117,8 +120,8 @@ function useNavGroups(approvalsWaiting: number, blogAuthor: boolean): { label: s
     {
       label: "Business",
       items: [
-        { to: "/analytics", label: "Analytics", icon: ICONS.analytics },
-        { to: "/expenses", label: "Expenses", icon: ICONS.expenses },
+        { to: "/analytics", label: "Analytics", icon: ICONS.analytics, tag: solo },
+        { to: "/expenses", label: "Expenses", icon: ICONS.expenses, tag: solo },
         ...(blogAuthor ? [{ to: "/blog/write", label: "Blog", icon: ICONS.blog }] : []),
       ],
     },
@@ -164,6 +167,7 @@ function NavContent({ onNavigate }: { onNavigate?: () => void }) {
                       {isActive ? <span className="absolute inset-y-2 left-0 w-[3px] rounded-r-full bg-accent" aria-hidden /> : null}
                       <span className={isActive ? "text-white" : "text-chrome-muted group-hover:text-chrome-text"}>{it.icon}</span>
                       <span className="flex-1">{it.label}</span>
+                      {it.tag ? <span className="rounded border border-white/15 px-1.5 text-[10px] font-medium leading-[16px] text-chrome-muted">{it.tag}</span> : null}
                       {it.count ? (
                         <span className="num rounded-full bg-accent px-1.5 text-[11px] font-semibold leading-[18px] text-white" aria-label={`${it.count} waiting`}>
                           {it.count}

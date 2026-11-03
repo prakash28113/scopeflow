@@ -1,5 +1,6 @@
 import { useState, type FormEvent, type ReactNode } from "react";
-import { GST_STATES_SORTED, SAC_SUGGESTIONS } from "@/lib/gst";
+import { takeSource } from "@/lib/signup-source";
+import { DEFAULT_SAC, GST_STATES_SORTED, SAC_SUGGESTIONS } from "@/lib/gst";
 import { financialYear } from "@/lib/format";
 import { useNavigate } from "react-router";
 import { useQueryClient } from "@tanstack/react-query";
@@ -26,6 +27,8 @@ function WorkspaceForm({ profile, onDone, submitLabel }: { profile: Profile; onD
       supabase.rpc("complete_onboarding", { p_full_name: d.fullName, p_business_name: d.businessName, p_currency: d.currency }).then((r) => ({ data: true, error: r.error })),
     );
     if (ok) {
+      const source = takeSource();
+      if (source) void supabase.rpc("set_signup_source", { p: source }).then(() => undefined, () => undefined);
       await qc.invalidateQueries({ queryKey: ["profile"] });
       onDone();
     }
@@ -228,8 +231,8 @@ function InvoiceDetailsForm({ address, gstin, prefix, stateCode, sacCode }: { ad
             ))}
           </Select>
         </Field>
-        <Field label="Default SAC code" htmlFor="sacCode" error={action.fieldErrors.sacCode} hint="The service code printed on tax invoices. You can change it per invoice.">
-          <Input id="sacCode" name="sacCode" defaultValue={sacCode} inputMode="numeric" maxLength={8} placeholder="998391" list="sac-suggestions" className="num" />
+        <Field label="Default SAC code" htmlFor="sacCode" error={action.fieldErrors.sacCode} hint="The service code printed on tax invoices (998314 is IT design and development). You can change it per invoice.">
+          <Input id="sacCode" name="sacCode" defaultValue={sacCode} inputMode="numeric" maxLength={8} placeholder={DEFAULT_SAC} list="sac-suggestions" className="num" />
           <datalist id="sac-suggestions">
             {SAC_SUGGESTIONS.map(([c, l]) => (
               <option key={c} value={c}>
