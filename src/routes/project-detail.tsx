@@ -38,8 +38,8 @@ import { supabase } from "@/lib/supabase";
 import { call } from "@/lib/use-action";
 import { LINK_VALIDITY_DAYS, portalUrl } from "@/lib/portal-link";
 import { formatMoney } from "@/lib/money";
-import { formatDate, formatDateTime, pluralize, shortHash } from "@/lib/format";
-import { currentDueDate, projectTotals, received } from "@/lib/pricing";
+import { formatDate, formatDateTime, formatTime, pluralize, shortHash } from "@/lib/format";
+import { currentDueDate, paymentTax, projectTotals, received } from "@/lib/pricing";
 import type { ChangeOrder, RevisionRequest, ScopeDecision, ScopeSnapshot, ShareLinkStatus } from "@/lib/types";
 import NotFound from "./not-found";
 
@@ -52,6 +52,8 @@ export default function ProjectPage() {
   const toast = useToast();
   const [newLink, setNewLink] = useState<NewLink>(null);
   const [linkDays, setLinkDays] = useState<number>(30);
+  // "Invoice the full amount": the new payment's invoice form opens by itself.
+  const [invoiceFor, setInvoiceFor] = useState<string | null>(null);
   const profile = useProfile();
 
   if (q.isLoading) return <PageSpinner />;
@@ -444,7 +446,7 @@ export default function ProjectPage() {
               <dd className="text-right font-semibold">{fmt(money.contract)}</dd>
               <dt className="text-muted">Received</dt>
               <dd className="text-right text-positive">{fmt(money.paid)}</dd>
-              <dt className="text-muted">Outstanding</dt>
+              <dt className="text-muted">Contract unpaid</dt>
               <dd className="text-right">{fmt(money.outstanding)}</dd>
               {spent ? (
                 <>
@@ -483,7 +485,17 @@ export default function ProjectPage() {
                       </div>
                       <div className="flex shrink-0 items-center gap-2">
                         {m.status === "paid" ? <Tag tone="positive">Paid</Tag> : null}
-                        <p className="num text-[13px] font-medium">{fmt(Number(m.amount_cents))}</p>
+                        <div className="text-right">
+                          <p className="num text-[13px] font-medium">{fmt(Number(m.amount_cents))}</p>
+                          {(() => {
+                            const t = paymentTax(m, p, changeOrders);
+                            return t ? (
+                              <p className="num text-[11px] text-muted" data-testid="payment-tax">
+                                incl. {t.label} {fmt(t.cents)}
+                              </p>
+                            ) : null;
+                          })()}
+                        </div>
                       </div>
                     </div>
                     {payments.some((x) => x.milestone_id === m.id) ? (
@@ -523,6 +535,7 @@ export default function ProjectPage() {
                       <div className="mt-2">
                         <CreateInvoice
                           milestoneId={m.id}
+                          defaultOpen={invoiceFor === m.id}
                           // The tax the client agreed to for this payment: the change order's, or the quote's.
                           taxBps={(m.change_order_id ? changeOrders.find((c) => c.id === m.change_order_id)?.tax_bps : p.tax_bps) ?? null}
                           taxLabel={(m.change_order_id ? changeOrders.find((c) => c.id === m.change_order_id)?.tax_label : p.tax_label) ?? null}
@@ -553,7 +566,7 @@ export default function ProjectPage() {
               <div className="border-t border-line px-5 py-3" data-testid="uncovered">
                 <p className="num text-[12px] text-warning">{fmt(money.unscheduled)} of the contract isn&apos;t covered by a payment yet.</p>
                 {approved && p.status !== "cancelled" ? (
-                  <AddPayment projectId={p.id} currency={p.currency} uncovered={money.unscheduled} full={p.milestones.length === 0} onDone={(msg) => act(() => Promise.resolve({ data: null, error: null }), msg)} />
+                  <AddPayment projectId={p.id} currency={p.currency} uncovered={money.unscheduled} full={p.milestones.length === 0} onDone={(msg, id) => { if (id) setInvoiceFor(id); return act(() => Promise.resolve({ data: null, error: null }), msg); }} />
                 ) : null}
               </div>
             ) : null}
@@ -942,7 +955,7 @@ function ProjectTimeline({ activity }: { activity: { id: string; event: string; 
                     <p className="text-ink-2">{a.summary}</p>
                     <p className="text-[12px] text-muted">
                       {a.actor === "client" ? "Client · " : ""}
-                      {new Date(a.created_at).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })}
+                      {formatTime(a.created_at)}
                     </p>
                   </li>
                 ))}

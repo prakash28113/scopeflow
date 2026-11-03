@@ -8,7 +8,9 @@ import { PageSpinner } from "@/components/app-shell";
 import { useProfile } from "@/lib/auth";
 import { useDashboard } from "@/lib/queries";
 import { formatMoney } from "@/lib/money";
-import { formatDate, formatDateTime, STATUS_LABEL } from "@/lib/format";
+import { formatDate, formatDateTime, formatToday, STATUS_LABEL } from "@/lib/format";
+import { useMyPlan } from "@/lib/plans";
+import { contractUnpaid, OUTSTANDING_LABEL } from "@/lib/outstanding";
 import { localToday, upcomingItems, whenLabel } from "@/lib/upcoming";
 import { lastMonths, monthLabel, monthOf } from "@/lib/analytics";
 import type { ProjectStatus } from "@/lib/types";
@@ -29,6 +31,7 @@ export default function Dashboard() {
   const qc = useQueryClient();
   const profile = useProfile();
   const q = useDashboard();
+  const plan = useMyPlan();
   if (q.isLoading) return <PageSpinner />;
   if (q.isError || !q.data) return <Alert>Couldn't load your projects. Please refresh.</Alert>;
   const { projects, changeOrders, revisions, activity, payments } = q.data;
@@ -40,7 +43,7 @@ export default function Dashboard() {
   const live = projects.filter((p) => p.status === "active" || p.status === "completed");
   const paidOf = (p: (typeof projects)[number]) => p.milestones.reduce((s, m) => s + received(m), 0);
   const contractOf = (p: (typeof projects)[number]) => Number(p.budget_cents) + Number(p.approved_extras_cents);
-  const outstanding = sumByCurrency(live.map((p) => ({ currency: p.currency, amount: contractOf(p) - paidOf(p) })));
+  const outstanding = sumByCurrency(live.map((p) => ({ currency: p.currency, amount: contractUnpaid(p) })));
   const collected = sumByCurrency(live.map((p) => ({ currency: p.currency, amount: paidOf(p) })));
   const firstName = (profile.data?.full_name ?? "").split(" ")[0];
   const pendingCount = awaitingScope.length + changeOrders.length;
@@ -48,7 +51,7 @@ export default function Dashboard() {
   const overduePayments = upcoming.filter((u) => u.kind === "payment" && u.daysAway < 0).length;
   const outOfScope = revisions.filter((r) => !r.in_scope).length;
   const sorted = [...projects].sort((a, b) => PRIORITY[a.status] - PRIORITY[b.status] || b.updated_at.localeCompare(a.updated_at));
-  const dateLine = new Date().toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "long" });
+  const dateLine = formatToday();
 
   return (
     <>
@@ -77,13 +80,24 @@ export default function Dashboard() {
       ) : (
         <>
           <Figures label="Key figures">
-            <Figure label="Active projects" tone="accent" value={String(projects.filter((p) => p.status === "active").length)} note={`${open.length} open in total`} />
+            <Figure
+              label="In progress"
+              tone="accent"
+              testid="kpi-in-progress"
+              value={String(projects.filter((p) => p.status === "active").length)}
+              note={
+                plan.data?.limits.active_projects != null
+                  ? `${plan.data.usage.active_projects} of ${plan.data.limits.active_projects} active on your plan (drafts count)`
+                  : `${open.length} open in total`
+              }
+            />
             <Figure label="Waiting for approval" tone="warning" value={String(pendingCount)} note={pendingCount ? "Scopes and change orders with clients" : "Nothing waiting"} />
             <Figure
-              label="Outstanding"
+              label={OUTSTANDING_LABEL.contract}
+              testid="kpi-contract-unpaid"
               tone={overduePayments ? "danger" : "neutral"}
               value={outstanding.map(([c, v]) => formatMoney(v, c))}
-              note={overduePayments ? `${overduePayments} payment${overduePayments === 1 ? "" : "s"} overdue` : "Still to be paid on live projects"}
+              note={overduePayments ? `${overduePayments} payment${overduePayments === 1 ? "" : "s"} overdue` : "Contract total minus received, on live projects"}
               noteTone={overduePayments ? "danger" : undefined}
             />
             <Figure label="Collected" tone="positive" value={collected.map(([c, v]) => formatMoney(v, c))} note="Received on live projects" />

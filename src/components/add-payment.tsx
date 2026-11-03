@@ -23,7 +23,8 @@ export function AddPayment({
   currency: string;
   /** Contract total minus every scheduled payment, in minor units. */
   uncovered: number;
-  onDone: (message: string) => Promise<unknown>;
+  /** Called with the new payment's id, so its invoice form can open. */
+  onDone: (message: string, milestoneId?: string) => Promise<unknown>;
 }) {
   const [open, setOpen] = useState(false);
   const [pending, setPending] = useState(false);
@@ -38,7 +39,7 @@ export function AddPayment({
     );
     setPending(false);
     if (!r.ok) return setError(r.message);
-    await onDone(`Full payment of ${formatMoney(uncovered, currency)} added. Create its invoice below.`);
+    await onDone(`Full payment of ${formatMoney(uncovered, currency)} added. Check the details and create the invoice.`, r.data as string);
   }
 
   if (!open)

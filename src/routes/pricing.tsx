@@ -1,12 +1,15 @@
 import { useState } from "react";
 import { Link } from "react-router";
-import { Alert, Logo, buttonClass } from "@/components/ui";
+import { Alert } from "@/components/ui";
 import { BetaBadge, SiteFooter } from "@/components/site-footer";
 import { FeatureMatrix, IntervalToggle, PlanCards } from "@/components/plans";
 import { PageSpinner } from "@/components/app-shell";
 import { usePlans, type Interval } from "@/lib/plans";
 import { useAuth } from "@/lib/auth";
 import { PRICING_FAQ as FAQ } from "@/lib/faq";
+import { PublicHeader } from "@/components/public-header";
+import { anyOnSale } from "@/lib/sale";
+import { BILLING_ENABLED } from "@/lib/billing";
 import { useSeo } from "@/lib/seo";
 
 export default function PricingPage() {
@@ -17,28 +20,7 @@ export default function PricingPage() {
 
   return (
     <div className="min-h-dvh">
-      <header className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4 sm:px-6">
-        <Link to="/" aria-label="ScopeFlow home" className="flex items-center gap-2">
-          <Logo className="text-[15px]" />
-          <BetaBadge />
-        </Link>
-        <nav className="flex items-center gap-2">
-          {session ? (
-            <Link to="/plan" className={buttonClass("primary", "sm")}>
-              Your plan
-            </Link>
-          ) : (
-            <>
-              <Link to="/login" className={buttonClass("ghost", "sm")}>
-                Sign in
-              </Link>
-              <Link to="/signup" className={buttonClass("primary", "sm")}>
-                Start free
-              </Link>
-            </>
-          )}
-        </nav>
-      </header>
+      <PublicHeader badge={<BetaBadge />} signIn={!session} action={session ? { to: "/plan", label: "Your plan" } : undefined} />
       <main className="mx-auto max-w-6xl px-4 sm:px-6">
         <section className="mx-auto max-w-2xl pb-10 pt-12 text-center sm:pt-20">
           <h1 className="text-[34px] font-semibold leading-[1.1] tracking-[-0.03em] text-balance sm:text-[46px]">
@@ -58,7 +40,7 @@ export default function PricingPage() {
           <>
             <PlanCards plans={plans.data} interval={interval} />
             <p className="mx-auto mt-6 max-w-2xl text-center text-[13px] text-muted">
-              {plans.data.some((p) => p.purchasable)
+              {anyOnSale(plans.data, BILLING_ENABLED)
                 ? "Prices in Indian rupees, billed monthly or yearly until you cancel. Payments are handled by Razorpay (UPI, cards, netbanking). Plans marked “Not on sale yet” are in early access."
                 : "Prices in Indian rupees. Paid plans are in early access: join the list from your account, and nothing is charged until they launch."}{" "}
               <Link to="/refunds" className="underline hover:text-ink">Refunds and cancellation</Link>.

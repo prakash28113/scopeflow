@@ -1,6 +1,8 @@
 import { Link } from "react-router";
+import { BILLING_ENABLED } from "@/lib/billing";
+import { planSale, type Sale } from "@/lib/sale";
 import { Button, Meter, buttonClass, cx } from "./ui";
-import { limitText, priceLabel, type Interval, type Plan, type PlanId, type PlanLimit } from "@/lib/plans";
+import { limitText, priceLabel, usePlans, type Interval, type Plan, type PlanId, type PlanLimit } from "@/lib/plans";
 
 export function IntervalToggle({ value, onChange }: { value: Interval; onChange: (v: Interval) => void }) {
   const opt = (v: Interval, label: string) => (
@@ -40,7 +42,10 @@ export function PlanCards({
   onBuy,
   buying,
   testMode,
+  sale = (p: Plan) => planSale(p, BILLING_ENABLED),
 }: {
+  /** Is the plan on sale (public claim) — the shared answer from planSale. Signed out: build flag + catalogue. */
+  sale?: (plan: Plan) => Sale;
   plans: Plan[];
   interval: Interval;
   current?: PlanId;
@@ -61,6 +66,7 @@ export function PlanCards({
         const recommended = p.id === "solo";
         const isCurrent = current === p.id;
         const buyable = Boolean(onBuy && canBuy?.(p));
+        const onSale = sale(p).onSale;
         return (
           <section
             key={p.id}
@@ -101,7 +107,7 @@ export function PlanCards({
                 <Button className="w-full" variant={recommended ? "primary" : "secondary"} disabled={Boolean(buying)} onClick={() => onBuy!(p.id)}>
                   {buying === p.id ? "Opening payment…" : `Upgrade to ${p.name}`}
                 </Button>
-              ) : !onJoin && p.purchasable ? (
+              ) : !onJoin && onSale ? (
                 <Link to="/signup" className={cx(buttonClass(recommended ? "primary" : "secondary"), "w-full")}>
                   Start free, upgrade anytime
                 </Link>
@@ -116,7 +122,7 @@ export function PlanCards({
                   Start free, join early access
                 </Link>
               )}
-              {p.id === "free" || isCurrent ? null : buyable || p.purchasable ? (
+              {p.id === "free" || isCurrent ? null : buyable || onSale ? (
                 <p className="mt-2 text-center text-[11px] text-muted">
                   {buyable && testMode ? "Test mode: no real money moves." : "Paid securely through Razorpay. Cancel anytime."}
                 </p>
@@ -216,7 +222,10 @@ export function PlanLimitCard({ limit }: { limit: PlanLimit }) {
       <div className="mt-3 max-w-xs">
         <UsageMeter label={what[0].toUpperCase() + what.slice(1)} used={limit.used} limit={limit.limit} />
       </div>
-      <p className="mt-3 text-[13px] text-ink-2">Your existing projects and client links keep working. Nothing is locked or deleted.</p>
+      {limit.kind === "active_projects" ? (
+        <p className="mt-3 text-[13px] text-ink-2">Drafts and projects waiting for approval count as active, as well as projects in progress.</p>
+      ) : null}
+      <p className="mt-3 text-[13px] text-ink-2">Your existing projects and client links keep working. Nothing is deleted.</p>
       <div className="mt-4 flex flex-wrap gap-2">
         <Link to="/plan" className={buttonClass("primary", "sm")}>
           See plans
@@ -231,6 +240,10 @@ export function PlanLimitCard({ limit }: { limit: PlanLimit }) {
 
 /** A paid feature on Free: visible, locked, with one way to upgrade. */
 export function FeatureLock({ title, body, price, compact = false }: { title: string; body: string; price: string; compact?: boolean }) {
+  // Same answer as the pricing page: "Upgrade" only while Solo is actually on sale.
+  const plans = usePlans();
+  const solo = plans.data?.find((p) => p.id === "solo");
+  const onSale = solo ? planSale(solo, BILLING_ENABLED).onSale : false;
   return (
     <div
       className={cx("rounded-[14px] border border-accent-line bg-accent-soft/60", compact ? "flex flex-wrap items-center justify-between gap-3 px-4 py-3" : "px-5 py-6 text-center")}
@@ -246,7 +259,7 @@ export function FeatureLock({ title, body, price, compact = false }: { title: st
         </p>
       </div>
       <Link to="/plan" className={cx(buttonClass("primary", compact ? "sm" : "md"), !compact && "mt-4")}>
-        Upgrade to Solo
+        {onSale ? "Upgrade to Solo" : "Join early access"}
       </Link>
     </div>
   );

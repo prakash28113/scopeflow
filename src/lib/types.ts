@@ -17,6 +17,8 @@ export type QuotePricing = {
 export type Project = {
   id: string;
   owner_id: string;
+  /** QT-2026-27-001: given when the quote is first sent, the same for every version. */
+  quote_number?: string | null;
   client_id: string;
   title: string;
   summary: string | null;

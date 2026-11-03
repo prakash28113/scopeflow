@@ -12,7 +12,7 @@ import { useToast } from "@/components/toast";
 import { useProfile, type Profile } from "@/lib/auth";
 import { supabase } from "@/lib/supabase";
 import { useAction } from "@/lib/use-action";
-import { CURRENCIES } from "@/lib/money";
+import { CURRENCIES, guessCurrency } from "@/lib/money";
 import { UPI_ID } from "@/lib/upi";
 import { GSTIN } from "@/lib/invoice";
 import { PASSWORD_RESET_EMAIL } from "@/lib/site";
@@ -157,22 +157,6 @@ function UpiForm({ current }: { current: string }) {
 }
 
 /** For a new account: the currency where the browser is (India-first), else the stored default. */
-function guessCurrency(fallback: string) {
-  try {
-    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone ?? "";
-    if (/^Asia\/(Kolkata|Calcutta)$/.test(tz)) return "INR";
-    if (tz === "Europe/London") return "GBP";
-    if (/^America\//.test(tz)) return "USD";
-    if (/^Australia\//.test(tz)) return "AUD";
-    if (/^Europe\//.test(tz)) return "EUR";
-    if (tz === "Asia/Dubai") return "AED";
-    if (tz === "Asia/Singapore") return "SGD";
-  } catch {
-    /* use the fallback */
-  }
-  return fallback || "INR";
-}
-
 const invoiceSchema = z.object({
   businessAddress: z.string().trim().max(500, "Keep the address under 500 characters"),
   gstin: z

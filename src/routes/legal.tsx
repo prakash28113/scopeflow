@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { Link } from "react-router";
-import { Logo } from "@/components/ui";
+import { PublicHeader } from "@/components/public-header";
 import { BetaBadge, SiteFooter } from "@/components/site-footer";
 import { LEGAL_UPDATED, OPERATOR_NAME, SUPPORT_EMAIL, supportMailto } from "@/lib/site";
 import { useSeo } from "@/lib/seo";
@@ -8,12 +8,7 @@ import { useSeo } from "@/lib/seo";
 function LegalLayout({ title, children }: { title: string; children: ReactNode }) {
   return (
     <div className="min-h-dvh">
-      <header className="mx-auto flex h-16 max-w-3xl items-center gap-2 px-4 sm:px-6">
-        <Link to="/" aria-label="ScopeFlow home">
-          <Logo className="text-[15px]" />
-        </Link>
-        <BetaBadge />
-      </header>
+      <PublicHeader badge={<BetaBadge />} />
       <main className="mx-auto max-w-3xl px-4 pb-8 pt-8 sm:px-6">
         <h1 className="text-[32px] font-semibold tracking-[-0.03em]">{title}</h1>
         <p className="mt-2 text-[13px] text-muted">Last updated {LEGAL_UPDATED}</p>

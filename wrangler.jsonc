@@ -12,10 +12,11 @@
     "directory": "./dist",
     "binding": "ASSETS",
     "not_found_handling": "single-page-application",
-    // The Worker sees every request except built assets: https/www redirects, real 404s for unknown
-    // pages, and blog pages rendered with the posts (worker/blog.ts). Everything else goes straight
-    // back to static assets.
-    "run_worker_first": ["/*", "!/assets/*"]
+    // The Worker sees every request: https/www redirects, real 404s for unknown pages and missing
+    // files (including old /assets/* chunks, which would otherwise get the app shell cached for a
+    // year), and blog pages rendered with the posts (worker/blog.ts). Everything else is handed
+    // straight back to static assets unchanged.
+    "run_worker_first": ["/*"]
   },
   // Twice-daily keep-alive so the free Supabase project isn't paused for inactivity.
   "triggers": { "crons": ["17 3,15 * * *"] },

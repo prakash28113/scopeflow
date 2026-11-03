@@ -2,7 +2,7 @@ import "@fontsource-variable/bricolage-grotesque/opsz.css";
 import { useEffect, useState, type CSSProperties, type PointerEvent, type ReactNode } from "react";
 import { Link } from "react-router";
 import { buttonClass, cx } from "@/components/ui";
-import { LogoMark, LogoFull } from "@/components/brand";
+import { PublicHeader } from "@/components/public-header";
 import { SiteFooter } from "@/components/site-footer";
 import { HOME_FAQ as QA } from "@/lib/faq";
 import { useSeo } from "@/lib/seo";
@@ -106,34 +106,10 @@ function Nav() {
     return () => window.removeEventListener("scroll", on);
   }, []);
   return (
-    <header className={cx("sticky top-0 z-40 transition-colors duration-300", scrolled ? "border-b border-white/[0.07] bg-[#090c12]/80 backdrop-blur-xl" : "border-b border-transparent")}>
-      <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4 sm:px-6">
-        <Link to="/" aria-label="ScopeFlow home" className="inline-flex items-center gap-2">
-          <LogoMark tone="white" className="h-7 w-auto sm:hidden" />
-          <LogoFull tone="white" className="hidden h-8 w-auto sm:block" />
-        </Link>
-        <nav className="flex items-center gap-1 sm:gap-2" aria-label="Main">
-          <a href="#product" className="hidden rounded-lg px-3 py-2 text-[14px] font-medium text-[var(--lp-muted)] hover:text-white md:block">
-            Product
-          </a>
-          <a href="#how" className="hidden rounded-lg px-3 py-2 text-[14px] font-medium text-[var(--lp-muted)] hover:text-white md:block">
-            How it works
-          </a>
-          <Link to="/pricing" className="rounded-lg px-2 py-2 text-[14px] font-medium text-[var(--lp-muted)] hover:text-white sm:px-3">
-            Pricing
-          </Link>
-          <Link to="/blog" className="rounded-lg px-2 py-2 text-[14px] font-medium text-[var(--lp-muted)] hover:text-white sm:px-3">
-            Blog
-          </Link>
-          <Link to="/login" className="whitespace-nowrap rounded-lg px-2 py-2 text-[14px] sm:px-3 font-medium text-[var(--lp-muted)] hover:text-white">
-            Sign in
-          </Link>
-          <Link to="/signup" className={cx(buttonClass("primary", "sm"), "lp-btn-glow rounded-lg")}>
-            Start free
-          </Link>
-        </nav>
-      </div>
-    </header>
+    <PublicHeader
+      tone="dark"
+      className={cx("sticky top-0 z-40 transition-colors duration-300", scrolled ? "border-b border-white/[0.07] bg-[#090c12]/80 backdrop-blur-xl" : "border-b border-transparent")}
+    />
   );
 }
 

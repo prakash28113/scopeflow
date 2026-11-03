@@ -64,7 +64,7 @@ export default function NewProject() {
             limit: m.limits.active_projects!,
             used: m.usage.active_projects,
             plan: m.effective_plan,
-            message: `Your Free plan includes ${m.limits.active_projects} active projects, and you have ${m.usage.active_projects}. Complete or cancel a project, or see plans to get more.`,
+            message: `Your Free plan includes ${m.limits.active_projects} active projects (drafts and projects waiting for approval count), and you have ${m.usage.active_projects}. Complete or cancel a project, delete a draft, or see plans to get more.`,
           }}
         />
       ) : (

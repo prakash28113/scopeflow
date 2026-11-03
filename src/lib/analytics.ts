@@ -1,3 +1,4 @@
+import { dueOn } from "./outstanding";
 /** Monthly analytics: pure helpers (tested in tests/unit/analytics.test.ts). All money in minor units. */
 
 /** A payment milestone (what's owed). paid_cents = received so far. */
@@ -59,7 +60,8 @@ export function change(now: number, before: number): number | null {
 }
 
 /** Still owed on a payment milestone (part payments reduce it). */
-export const remaining = (p: PaymentFact) => (p.status === "paid" ? 0 : Math.max(0, Number(p.amount_cents) - Number(p.paid_cents ?? 0)));
+/** What's left on a scheduled payment (shared definition: src/lib/outstanding.ts). */
+export const remaining = (p: PaymentFact) => dueOn(p);
 
 /** Unpaid payments on live projects: total, and the overdue part (due before today). */
 export function receivables(payments: PaymentFact[], currency: string, today: string) {

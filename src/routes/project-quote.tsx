@@ -9,6 +9,11 @@ import { formatDate } from "@/lib/format";
 import { formatMoney } from "@/lib/money";
 import { shortHash } from "@/lib/format";
 import NotFound from "./not-found";
+import { Party } from "@/components/invoice-document";
+import type { InvoiceParty } from "@/lib/invoice";
+import { stateName, stateOf } from "@/lib/gst";
+
+const stateLabel = (code: string | null) => (code ? `${stateName(code)} (${code})` : undefined);
 
 /** A clean, printable quote. Uses the latest version sent to the client, or the current draft. */
 export default function ProjectQuotePage() {
@@ -39,6 +44,22 @@ export default function ProjectQuotePage() {
         pricing: pricingFrom(p.deliverables, p.discount_bps, p.tax_bps, p.tax_label),
       };
   const from = profile.data ? profile.data.business_name || displayName(profile.data) : "";
+  const seller: InvoiceParty = {
+    name: from,
+    person: profile.data?.business_name ? (profile.data.full_name ?? undefined) : undefined,
+    email: profile.data?.email,
+    address: profile.data?.business_address ?? undefined,
+    gstin: profile.data?.gstin ?? undefined,
+    state: stateLabel(stateOf(profile.data)),
+  };
+  const buyer: InvoiceParty = {
+    name: d.client.name,
+    company: d.client.company ?? undefined,
+    email: p.clients.email,
+    address: p.clients.billing_address ?? undefined,
+    gstin: p.clients.gstin ?? undefined,
+    state: stateLabel(stateOf(p.clients)),
+  };
   const fmt = (n: number) => formatMoney(Number(n), d.currency);
 
   return (
@@ -49,23 +70,24 @@ export default function ProjectQuotePage() {
         </Link>
         <div className="flex gap-2">
           <PrintButton label="Print" size="md" />
-          <DownloadPdfButton name={`Quote ${d.title}`} size="md" variant="primary" />
+          <DownloadPdfButton name={`Quote ${p.quote_number ? `${p.quote_number} ` : ""}${d.title}`} size="md" variant="primary" />
         </div>
       </div>
       <article data-print-scope className="rounded-[var(--radius-card)] border border-line bg-surface p-6 sm:p-10">
-        <header className="flex flex-wrap items-start justify-between gap-6 border-b border-line pb-6">
-          <div>
-            <p className="text-[12px] font-semibold uppercase tracking-[0.08em] text-accent">Quote</p>
-            <h1 className="display mt-1 text-[26px] font-semibold leading-tight">{d.title}</h1>
-            <p className="mt-1 text-[13px] text-muted">
-              {sent ? `Version ${sent.version} · ${formatDate(sent.created_at)} · ref ${shortHash(sent.content_hash)}` : `Draft · ${formatDate(new Date().toISOString())}`}
+        <header className="border-b border-line pb-6">
+          <p className="text-[12px] font-semibold uppercase tracking-[0.08em] text-accent">Quote</p>
+          {p.quote_number ? (
+            <p className="num mt-1 text-[15px] font-semibold" data-testid="quote-number">
+              {p.quote_number}
             </p>
-          </div>
-          <div className="text-right text-[13px]">
-            <p className="font-semibold">{from}</p>
-            <p className="mt-3 text-muted">Prepared for</p>
-            <p className="font-medium">{d.client.company || d.client.name}</p>
-            {d.client.company ? <p className="text-muted">{d.client.name}</p> : null}
+          ) : null}
+          <h1 className="display mt-1 text-[26px] font-semibold leading-tight">{d.title}</h1>
+          <p className="mt-1 text-[13px] text-muted">
+            {sent ? `Version ${sent.version} · ${formatDate(sent.created_at)} · ref ${shortHash(sent.content_hash)}` : `Draft · ${formatDate(new Date().toISOString())} · the quote number is given when you send it`}
+          </p>
+          <div className="mt-5 grid gap-6 sm:grid-cols-2" data-testid="quote-parties">
+            <Party label="From" p={seller} />
+            <Party label="Prepared for" p={buyer} />
           </div>
         </header>
 

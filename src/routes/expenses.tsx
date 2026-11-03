@@ -74,6 +74,22 @@ export default function ExpensesPage() {
   const delta = change(total, prevTotal);
   const fmt = (n: number) => formatMoney(n, currency);
 
+  // Free, nothing logged: a clear locked state (no empty month picker or ₹0 figures).
+  if (!allowed && expenses.length === 0)
+    return (
+      <>
+        <PageHeader title="Expenses" description="Log what you spend for work, so your profit is real. Only you can see this." />
+        <div className="relative">
+          <SamplePreview />
+          <div className="absolute inset-0 flex items-center justify-center p-4">
+            <div className="w-full max-w-lg">
+              <FeatureLock title="Expenses are a Solo feature" body="Log what you spend for work, link it to projects and see your real profit." price={price} />
+            </div>
+          </div>
+        </div>
+      </>
+    );
+
   return (
     <>
       <PageHeader
@@ -165,5 +181,38 @@ export default function ExpensesPage() {
         today={today}
       />
     </>
+  );
+}
+
+/** A blurred example of the expense log, behind the Free plan's lock. Decorative only. */
+function SamplePreview() {
+  const rows: [string, string, string][] = [
+    ["Figma subscription", "Software & subscriptions", "₹1,200.00"],
+    ["Stock photos for Chai & Co.", "Assets", "₹850.00"],
+    ["Co-working day pass", "Workspace", "₹500.00"],
+    ["Font licence", "Assets", "₹2,400.00"],
+  ];
+  return (
+    <div aria-hidden className="pointer-events-none select-none rounded-[var(--radius-card)] border border-line bg-surface opacity-60 blur-[3px]" data-testid="expenses-sample">
+      <div className="grid grid-cols-3 gap-3 border-b border-line p-5">
+        {["Spent this month", "Linked to projects", "Biggest category"].map((l) => (
+          <div key={l}>
+            <p className="text-[12px] text-muted">{l}</p>
+            <p className="mt-1 h-6 w-24 rounded bg-sunken" />
+          </div>
+        ))}
+      </div>
+      <ul className="divide-y divide-line">
+        {rows.map(([d, c, a]) => (
+          <li key={d} className="flex justify-between px-5 py-3 text-[13px]">
+            <span>
+              <span className="block font-medium">{d}</span>
+              <span className="text-[12px] text-muted">{c}</span>
+            </span>
+            <span className="num">{a}</span>
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 }

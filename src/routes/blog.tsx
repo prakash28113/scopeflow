@@ -1,7 +1,8 @@
 import { useMemo, type CSSProperties } from "react";
 import { Link, useParams, useSearchParams } from "react-router";
-import { buttonClass, cx, Logo } from "@/components/ui";
+import { buttonClass, cx } from "@/components/ui";
 import { SiteFooter } from "@/components/site-footer";
+import { PublicHeader } from "@/components/public-header";
 import { useAuth } from "@/lib/auth";
 import { BLOG_IMAGE_PREFIX, useBlogList, useBlogPost, useIsBlogAuthor, type BlogListItem } from "@/lib/blog";
 import { CATEGORIES, categoryOf, formatPostDate, readingMinutes, renderMarkdown, type BlogCategory } from "@/lib/blog-content";
@@ -20,38 +21,17 @@ function BlogHeader() {
   const { session } = useAuth();
   const author = useIsBlogAuthor(Boolean(session));
   return (
-    <header className="border-b border-line bg-surface/80 backdrop-blur">
-      <div className="mx-auto flex h-16 max-w-6xl items-center justify-between gap-3 px-4 sm:px-6">
-        <div className="flex items-center gap-3">
-          <Link to="/" aria-label="ScopeFlow home">
-            <Logo className="text-[15px]" />
+    <PublicHeader
+      signIn={!session}
+      action={session ? { to: "/dashboard", label: "Open ScopeFlow" } : undefined}
+      extra={
+        author.data ? (
+          <Link to="/blog/write" className={buttonClass("ghost", "sm")}>
+            Write
           </Link>
-          <span className="h-5 w-px bg-line" aria-hidden />
-          <Link to="/blog" className="text-[14px] font-semibold text-ink">
-            Blog
-          </Link>
-        </div>
-        <nav className="flex items-center gap-1 sm:gap-2" aria-label="Blog">
-          {author.data ? (
-            <Link to="/blog/write" className={buttonClass("ghost", "sm")}>
-              Write
-            </Link>
-          ) : null}
-          <Link to="/pricing" className="px-2 text-[14px] font-medium text-ink-2 hover:text-ink sm:px-3">
-            Pricing
-          </Link>
-          {session ? (
-            <Link to="/dashboard" className={buttonClass("primary", "sm")}>
-              Open ScopeFlow
-            </Link>
-          ) : (
-            <Link to="/signup" className={buttonClass("primary", "sm")}>
-              Start free
-            </Link>
-          )}
-        </nav>
-      </div>
-    </header>
+        ) : null
+      }
+    />
   );
 }
 

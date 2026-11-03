@@ -1,7 +1,10 @@
 /**
  * One-tap PDF: draws a document exactly as it looks on screen (at A4 width, even on a phone) and
- * saves it as a PDF file. Everything happens in the browser; nothing is uploaded.
- * Libraries (MIT, loaded only when someone taps Download): html-to-image, jsPDF.
+ * saves it as a PDF file, with an invisible text layer on top so the invoice number, GSTIN and
+ * amounts can be searched, selected and copied (like a scanned page after OCR). Everything happens
+ * in the browser; nothing is uploaded.
+ * Libraries (MIT, loaded only when someone taps Download): html-to-image, jsPDF. Text-layer font:
+ * a small DejaVu Sans subset with the ₹ sign (public/fonts/pdf-text.ttf, free licence alongside).
  */
 
 /** A4 at 96 dpi: the width documents are laid out at for the PDF. */
@@ -37,6 +40,73 @@ export function pageSlices(total: number, max: number, breaks: number[]): [numbe
     start = end;
   }
   return out;
+}
+
+/** One line of text as laid out on the page, in CSS px from the document's top-left. */
+export type TextRun = { x: number; top: number; height: number; size: number; text: string };
+/** A line of text placed on a PDF page, in points. */
+export type PlacedRun = { page: number; x: number; y: number; size: number; text: string };
+
+/**
+ * The document's visible text, one run per line fragment. Words that sit on the same line of the
+ * same text node are joined, so a search for "INV-2026-27-001" or "₹41,300.00" finds it.
+ */
+export function textRuns(root: HTMLElement): TextRun[] {
+  const origin = root.getBoundingClientRect();
+  const out: TextRun[] = [];
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+  const range = document.createRange();
+  for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+    const text = n.textContent ?? "";
+    if (!text.trim()) continue;
+    const el = n.parentElement;
+    if (!el) continue;
+    const style = getComputedStyle(el);
+    if (style.visibility === "hidden" || style.display === "none") continue;
+    const size = parseFloat(style.fontSize) || 13;
+    let line: TextRun | null = null;
+    for (const m of text.matchAll(/\S+/g)) {
+      range.setStart(n, m.index!);
+      range.setEnd(n, m.index! + m[0].length);
+      const r = range.getBoundingClientRect();
+      if (!r.width && !r.height) continue;
+      const top = r.top - origin.top;
+      if (line && Math.abs(line.top - top) < size * 0.5) {
+        line.text += ` ${m[0]}`;
+      } else {
+        if (line) out.push(line);
+        line = { x: r.left - origin.left, top, height: r.height, size, text: m[0] };
+      }
+    }
+    if (line) out.push(line);
+  }
+  return out;
+}
+
+/** Puts each run on the page that holds it, converted to points (y = baseline). */
+export function placeRuns(runs: TextRun[], slices: [number, number][], ptPerCss: number, margin = MARGIN): PlacedRun[] {
+  const out: PlacedRun[] = [];
+  for (const r of runs) {
+    const mid = r.top + r.height / 2;
+    const page = slices.findIndex(([from, to]) => mid >= from && mid < to);
+    if (page < 0) continue;
+    const [from] = slices[page];
+    out.push({ page, x: margin + r.x * ptPerCss, y: margin + (r.top + r.height * 0.8 - from) * ptPerCss, size: r.size * ptPerCss, text: r.text });
+  }
+  return out;
+}
+
+async function textFont(): Promise<string | null> {
+  try {
+    const res = await fetch("/fonts/pdf-text.ttf");
+    if (!res.ok) return null;
+    const bytes = new Uint8Array(await res.arrayBuffer());
+    let bin = "";
+    for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+    return btoa(bin);
+  } catch {
+    return null;
+  }
 }
 
 /** "Invoice RS-2026-001" → "Invoice-RS-2026-001.pdf" (safe on every system). */
@@ -99,15 +169,25 @@ export async function downloadPdf(source: HTMLElement, name: string): Promise<vo
   try {
     await document.fonts?.ready;
     const breaks = safeBreaks(doc);
+    const runs = textRuns(doc);
     const height = Math.ceil(doc.getBoundingClientRect().height);
-    const scale = 2;
-    const canvas = await toCanvas(doc, { pixelRatio: scale, backgroundColor: "#ffffff", width: PAGE_CSS_WIDTH, height, fontEmbedCSS: await inlineFontCss() });
+    // 1.75× keeps print-sharp text while the file stays small (the text layer carries the words).
+    const scale = 1.75;
+    const [canvas, font] = await Promise.all([
+      inlineFontCss().then((css) => toCanvas(doc, { pixelRatio: scale, backgroundColor: "#ffffff", width: PAGE_CSS_WIDTH, height, fontEmbedCSS: css })),
+      textFont(),
+    ]);
 
     const pdf = new jsPDF({ unit: "pt", format: "a4", compress: true });
     const contentW = A4.w - MARGIN * 2;
     const ptPerCss = contentW / PAGE_CSS_WIDTH;
     const maxCss = Math.floor((A4.h - MARGIN * 2) / ptPerCss);
     const slices = pageSlices(height, maxCss, breaks);
+    const placed = font ? placeRuns(runs, slices, ptPerCss) : [];
+    if (font) {
+      pdf.addFileToVFS("pdf-text.ttf", font);
+      pdf.addFont("pdf-text.ttf", "PdfText", "normal");
+    }
     slices.forEach(([from, to], i) => {
       const part = document.createElement("canvas");
       part.width = canvas.width;
@@ -117,7 +197,16 @@ export async function downloadPdf(source: HTMLElement, name: string): Promise<vo
       ctx.fillRect(0, 0, part.width, part.height);
       ctx.drawImage(canvas, 0, Math.round(from * scale), canvas.width, part.height, 0, 0, part.width, part.height);
       if (i > 0) pdf.addPage();
-      pdf.addImage(part.toDataURL("image/jpeg", 0.92), "JPEG", MARGIN, MARGIN, contentW, (to - from) * ptPerCss, undefined, "FAST");
+      pdf.addImage(part.toDataURL("image/jpeg", 0.85), "JPEG", MARGIN, MARGIN, contentW, (to - from) * ptPerCss, undefined, "FAST");
+      // The words, invisible, exactly over the picture of them: searchable and copyable.
+      if (font) {
+        pdf.setFont("PdfText", "normal");
+        for (const r of placed.filter((x) => x.page === i)) {
+          pdf.setFontSize(r.size);
+          pdf.text(r.text, r.x, r.y, { renderingMode: "invisible" });
+        }
+        pdf.setFont("helvetica", "normal");
+      }
       if (slices.length > 1) {
         pdf.setFontSize(8);
         pdf.setTextColor(140);

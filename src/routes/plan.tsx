@@ -12,6 +12,7 @@ import { formatMoney } from "@/lib/money";
 import { STATUS_TEXT, useInvoices, useMyPlan, usePlans, type Interval, type Plan, type PlanId } from "@/lib/plans";
 import { ActionButton } from "@/components/form-bits";
 import { BILLING_ENABLED, buyPlan, cancelPlan, useBillingStatus } from "@/lib/billing";
+import { planSale } from "@/lib/sale";
 
 export default function PlanPage() {
   const plans = usePlans();
@@ -25,16 +26,19 @@ export default function PlanPage() {
   const [activating, setActivating] = useState(false);
   const billing = useBillingStatus();
 
-  if (plans.isLoading || mine.isLoading) return <PageSpinner />;
+  // Wait for the billing check too, so a plan never shows "on sale" and "early access" at once.
+  if (plans.isLoading || mine.isLoading || (BILLING_ENABLED && billing.isLoading)) return <PageSpinner />;
   if (plans.isError || mine.isError || !plans.data || !mine.data) return <Alert>Couldn't load your plan. Please refresh.</Alert>;
   const m = mine.data;
   const plan = plans.data.find((p) => p.id === m.plan)!;
   const effective = plans.data.find((p) => p.id === m.effective_plan)!;
   const paid = m.plan !== "free";
-  const b = billing.data;
+  // If the billing check failed, nothing is offered for sale on this screen.
+  const b = billing.isError ? { enabled: false, mode: null, tester: false } : billing.data;
   const testMode = b?.mode === "test";
-  // On sale (live), or the owner's own test accounts in test mode. The server checks again.
-  const canBuy = (p: Plan) => Boolean(b?.enabled) && p.id !== "free" && effective.id === "free" && (testMode ? b!.tester : p.purchasable);
+  // One answer for every screen (src/lib/sale.ts). The server checks again at checkout.
+  const sale = (p: Plan) => planSale(p, BILLING_ENABLED, b ?? { enabled: false, mode: null, tester: false });
+  const canBuy = (p: Plan) => effective.id === "free" && sale(p).buyable;
   // A paid subscription renews on a date; a plan without one (complimentary) has nothing to cancel.
   const subscribed = BILLING_ENABLED && paid && (m.status === "active" || m.status === "past_due") && Boolean(m.current_period_end);
 
@@ -156,7 +160,7 @@ export default function PlanPage() {
         <Card>
           <CardHeader title="Usage" description={`${effective.name} plan limits`} />
           <div className="space-y-4 px-5 py-4">
-            <UsageMeter label="Active projects" used={m.usage.active_projects} limit={m.limits.active_projects} />
+            <UsageMeter label="Active projects (incl. drafts)" used={m.usage.active_projects} limit={m.limits.active_projects} />
             <UsageMeter label="Clients" used={m.usage.clients} limit={m.limits.clients} />
             <p className="text-[12px] text-muted">Active = draft, waiting for approval, changes requested, or in progress.</p>
           </div>
@@ -193,6 +197,7 @@ export default function PlanPage() {
           onJoin={join}
           joining={joining}
           canBuy={canBuy}
+          sale={sale}
           onBuy={buy}
           buying={buying}
           testMode={testMode}

@@ -22,7 +22,10 @@ export function CreateInvoice({
   hasGstin,
   hasUpi,
   currency,
+  defaultOpen = false,
 }: {
+  /** Open the form straight away (e.g. right after "Invoice the full amount"). */
+  defaultOpen?: boolean;
   milestoneId: string;
   taxBps: number | null;
   taxLabel: string | null;
@@ -34,7 +37,7 @@ export function CreateInvoice({
   currency?: string;
 }) {
   const navigate = useNavigate();
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(defaultOpen);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [rate, setRate] = useState(taxBps ? percent(taxBps) : "0");
