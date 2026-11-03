@@ -1,8 +1,9 @@
 /**
  * ScopeFlow Worker. Intentionally tiny and secret-free:
- *  - every request except /assets/* comes here first (assets.run_worker_first): http and www
- *    addresses get a 301 to https://scopeflow.in, unknown page addresses get the app shell with a
- *    real 404 status (no "soft 404"), and everything else is handed to static assets unchanged;
+ *  - every request comes here first (assets.run_worker_first): http and www addresses get a 301
+ *    to https://scopeflow.in, unknown page addresses get the app shell with a real 404 status (no
+ *    "soft 404"), missing files (e.g. an old /assets/ chunk) get a plain 404 that isn't cached, and
+ *    everything else is handed to static assets unchanged;
  *  - `fetch` sees only requests to paths with no file that the platform didn't classify as a
  *    navigation (e.g. some in-app browsers, link previewers, older webviews). If they ask for
  *    HTML it serves the app shell with the same security headers as the static pages

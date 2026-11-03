@@ -51,6 +51,12 @@ async function pdfDownload(p, button, nameRe) {
   writeFileSync(`${OUT}${download.suggestedFilename()}`, bytes); // kept with the screenshots for review
   return bytes;
 }
+/** The PDF's text layer (where poppler's pdftotext is installed; otherwise null and text checks are skipped). */
+async function pdfText(bytes) {
+  const { spawnSync } = await import("node:child_process");
+  const r = spawnSync("pdftotext", ["-", "-"], { input: bytes });
+  return r.status === 0 ? r.stdout.toString() : null;
+}
 const IN_14_DAYS = (() => { const d = new Date(Date.now() + 14 * 86_400_000); d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); return d.toISOString().slice(0, 10); })();
 const longDate = (iso) => new Intl.DateTimeFormat("en", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" }).format(new Date(`${iso}T00:00:00Z`));
 /** Confirms the in-app dialog that destructive actions open. */
@@ -94,6 +100,27 @@ try {
     await lp.evaluate(() => window.scrollTo(0, 0));
     await shot(lp, "00-landing-mobile");
     await lp.close();
+  }
+  {
+    // The full wordmark, Pricing and Start free on one row from 320px up, on every public header.
+    for (const width of [320, 360, 375, 412]) {
+      const ctx = await newCtx({ viewport: { width, height: 760 }, isMobile: true, hasTouch: true });
+      const pg = await ctx.newPage();
+      for (const path of ["/", "/pricing", "/terms", "/blog"]) {
+        await pg.goto(BASE + path);
+        const header = pg.getByTestId("public-header").first();
+        await header.waitFor();
+        const logo = await header.getByRole("link", { name: "ScopeFlow home" }).locator("svg").first().boundingBox();
+        assert.ok(logo && logo.width > 90, `${path} at ${width}px shows the wordmark (logo ${logo?.width}px wide)`);
+        for (const name of ["Pricing", "Start free"]) assert.ok(await header.getByRole("link", { name, exact: true }).isVisible(), `${path} at ${width}px shows ${name}`);
+        const boxes = await Promise.all(["Pricing", "Start free"].map((name) => header.getByRole("link", { name, exact: true }).boundingBox()));
+        assert.ok(Math.abs(boxes[0].y - boxes[1].y) < 12 && boxes[1].x + boxes[1].width <= width, `${path} at ${width}px: one row, inside the screen`);
+        assert.ok(logo.x + logo.width + 6 <= boxes[0].x, `${path} at ${width}px: the wordmark doesn't touch Pricing`);
+        assert.equal(await pg.evaluate(() => document.documentElement.scrollWidth > window.innerWidth), false, `${path} at ${width}px scrolls sideways`);
+      }
+      if (width === 320) await shot(pg, "00-header-320", false);
+      await ctx.close();
+    }
   }
   await f.getByRole("link", { name: "Privacy" }).click();
   await f.getByRole("heading", { name: "Privacy Policy" }).waitFor();
@@ -153,8 +180,26 @@ try {
       assert.match(res.headers.get("content-security-policy") ?? "", /default-src 'self'/);
       assert.ok((await res.text()).includes('<div id="root"></div>'), `${path} gets the app shell`);
     }
-    // Static files are still served as before.
+    // Static files are still served as before; a missing built asset is a plain 404 that isn't cached.
     assert.equal((await fetch(`${BASE}/icon.svg`)).status, 200);
+    const favicon = await fetch(`${BASE}/favicon.ico`);
+    assert.equal(favicon.status, 200);
+    assert.match(favicon.headers.get("content-type") ?? "", /icon/);
+    const oldChunk = await fetch(`${BASE}/assets/nope.js`);
+    assert.equal(oldChunk.status, 404);
+    assert.doesNotMatch(oldChunk.headers.get("cache-control") ?? "", /immutable/);
+    const realChunk = (await raw("/")).match(/\/assets\/index-[\w-]+\.js/)[0];
+    const chunk = await fetch(BASE + realChunk);
+    assert.equal(chunk.status, 200);
+    assert.match(chunk.headers.get("cache-control") ?? "", /immutable/);
+    // Paid plans aren't on sale here: no claim of live payment on the pricing page.
+    assert.ok(!(await raw("/pricing")).includes("Paid securely through Razorpay"), "no live-payment claim while nothing is on sale");
+    for (const path of ["/", "/pricing"]) assert.ok(!(await raw(path)).includes("free for everyone during the beta"), `${path} FAQ matches the plans`);
+    // One header everywhere: site links on the pricing and legal pages too.
+    for (const path of ["/pricing", "/terms"]) {
+      const header = (await raw(path)).match(/<header[\s\S]*?<\/header>/)[0];
+      assert.ok(header.includes('href="/blog"') && header.includes('href="/#product"'), `${path} header has the site links`);
+    }
     assert.equal((await fetch(`${BASE}/missing-file.png`)).status, 404);
     // Plan prices in rupees in the pricing page's structured data.
     const pricingLd = (await raw("/pricing")).match(/<script type="application\/ld\+json">(.+?)<\/script>/)[1];
@@ -609,7 +654,14 @@ try {
   assert.match(text, /Thank you, Dana!/);
   await doc.getByRole("img", { name: /UPI QR code to pay RS-/ }).waitFor();
   await f.getByRole("button", { name: "Print", exact: true }).waitFor();
-  await pdfDownload(f, f.getByRole("button", { name: "Download PDF" }), new RegExp(`^Invoice-RS-${year}-001\\.pdf$`));
+  {
+    const pdf = await pdfDownload(f, f.getByRole("button", { name: "Download PDF" }), new RegExp(`^Invoice-RS-${year}-001\\.pdf$`));
+    // Searchable, copyable text (not just a picture).
+    const words = await pdfText(pdf);
+    if (words !== null) {
+      for (const t of [`RS-${year}-001`, "36ABCDE1234F1Z5", "₹206.50", "998391", "Telangana (36)"]) assert.ok(words.includes(t), `invoice PDF text has ${t}`);
+    }
+  }
   await shot(f, "29-invoice");
   // The payment now links to its invoice instead of offering a second one.
   await f.goto(menuUrl);
@@ -633,6 +685,19 @@ try {
   await c.reload();
   await c.getByText("Payment schedule").first().waitFor();
   assert.equal(await c.getByTestId("portal-invoices").count(), 0);
+
+  // The sent quote has its number (per financial year) and both parties' details.
+  await f.goto(`${menuUrl}/quote`);
+  assert.equal(await f.getByTestId("quote-number").innerText(), `QT-${year}-002`); // the brand identity quote was first
+  const parties = await f.getByTestId("quote-parties").innerText();
+  assert.match(parties, /GSTIN: 36ABCDE1234F1Z5/);
+  assert.match(parties, /12 MG Road/);
+  assert.match(parties, /Prepared for[\s\S]*Dana Whitfield/i);
+  {
+    const words = await pdfText(await pdfDownload(f, f.getByRole("button", { name: "Download PDF" }), new RegExp(`^Quote-QT-${year}-002-Menu-card-for-Northwind\\.pdf$`)));
+    if (words !== null) for (const t of [`QT-${year}-002`, "36ABCDE1234F1Z5", "₹413.00"]) assert.ok(words.includes(t), `quote PDF text has ${t}`);
+  }
+  await shot(f, "29b-quote-numbered");
 
   step("progress & timeline: mark deliverables, client sees progress, timeline filters");
   await f.goto(menuUrl);
@@ -660,7 +725,8 @@ try {
   const lock = f.getByTestId("feature-lock");
   await lock.getByText("Analytics is a Solo feature").waitFor();
   await lock.getByText("Available on Solo, ₹499/month.").waitFor();
-  assert.equal(await lock.getByRole("link", { name: "Upgrade to Solo" }).getAttribute("href"), "/plan");
+  // Paid plans aren't on sale in this test setup, so the lock offers early access (same answer as /pricing).
+  assert.equal(await lock.getByRole("link", { name: "Join early access" }).getAttribute("href"), "/plan");
   assert.equal(await f.getByTestId("kpi-received").count(), 0);
   await f.getByRole("navigation", { name: "Main" }).getByRole("link", { name: /Analytics\s*Solo/ }).waitFor();
   await shot(f, "46-analytics-locked", false);

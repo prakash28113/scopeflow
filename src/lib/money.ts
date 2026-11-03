@@ -46,3 +46,20 @@ export function formatMoney(minor: number, currency: string): string {
     maximumFractionDigits: digits,
   }).format(minor / 10 ** digits);
 }
+
+/** Currency to preselect at onboarding, from the device's time zone (India → INR; unknown → INR). */
+export function guessCurrency(fallback = "", timeZone?: string): string {
+  try {
+    const tz = timeZone ?? Intl.DateTimeFormat().resolvedOptions().timeZone ?? "";
+    if (/^Asia\/(Kolkata|Calcutta)$/.test(tz)) return "INR";
+    if (tz === "Europe/London") return "GBP";
+    if (/^America\//.test(tz)) return "USD";
+    if (/^Australia\//.test(tz)) return "AUD";
+    if (/^Europe\//.test(tz)) return "EUR";
+    if (tz === "Asia/Dubai") return "AED";
+    if (tz === "Asia/Singapore") return "SGD";
+  } catch {
+    /* use the fallback */
+  }
+  return fallback || "INR";
+}

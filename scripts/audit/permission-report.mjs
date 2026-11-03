@@ -68,6 +68,7 @@ const guard = (f) =>
   : f.name === "admin_set_plan" || f.name === "admin_signup_sources" ? "no API role — Supabase SQL editor only"
   : f.name === "_create_subscription" ? "profile trigger only (Free plan for new accounts)"
   : f.name === "_handle_new_user" ? "sign-up trigger only (beta allowlist)"
+  : f.name === "_number_quote" ? "quote-sent trigger only (gives the quote its number)"
   : f.definer ? "**REVIEW**" : "internal helper (not callable from the API)";
 p("## Functions");
 p();

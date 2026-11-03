@@ -5,7 +5,8 @@ import { amountInWords, invoiceTitle, taxRows, type InvoiceDoc, type InvoicePart
 import { upiPayUrl } from "@/lib/upi";
 import { cx } from "./ui";
 
-function Party({ label, p }: { label: string; p: InvoiceParty }) {
+/** A seller or buyer block (shared by invoices and quotes). */
+export function Party({ label, p }: { label: string; p: InvoiceParty }) {
   return (
     <div className="min-w-0 text-[13px] leading-relaxed">
       <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-muted">{label}</p>

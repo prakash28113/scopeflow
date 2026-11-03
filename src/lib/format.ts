@@ -1,19 +1,23 @@
 import type { ProjectStatus } from "./types";
 
+/** ScopeFlow's business time zone: invoices are dated in it, and moments are shown in it. */
+export const APP_TIME_ZONE = "Asia/Kolkata";
+
 /**
  * Calendar dates (YYYY-MM-DD: due dates, milestones) are shown exactly as agreed, in any time zone.
- * Moments (timestamps: approved, paid) are shown as the date in the viewer's own time zone.
+ * Moments (timestamps: approved, paid, voided) are shown in India time by default, so they match the
+ * invoice dates whatever time zone the device is set to.
  */
-export function formatDate(iso: string | null | undefined, timeZone?: string): string {
+export function formatDate(iso: string | null | undefined, timeZone: string = APP_TIME_ZONE): string {
   if (!iso) return "—";
   const opts: Intl.DateTimeFormatOptions = { day: "numeric", month: "short", year: "numeric" };
   if (/^\d{4}-\d{2}-\d{2}$/.test(iso)) return new Intl.DateTimeFormat("en", { ...opts, timeZone: "UTC" }).format(new Date(`${iso}T00:00:00Z`));
-  return new Intl.DateTimeFormat("en", { ...opts, ...(timeZone ? { timeZone } : {}) }).format(new Date(iso));
+  return new Intl.DateTimeFormat("en", { ...opts, timeZone }).format(new Date(iso));
 }
 
-export function formatDateTime(iso: string, timeZone?: string): string {
+export function formatDateTime(iso: string, timeZone: string = APP_TIME_ZONE): string {
   return new Intl.DateTimeFormat("en", {
-    ...(timeZone ? { timeZone } : {}),
+    timeZone,
     day: "numeric",
     month: "short",
     year: "numeric",
@@ -31,6 +35,16 @@ export const STATUS_LABEL: Record<ProjectStatus, string> = {
   completed: "Completed",
   cancelled: "Cancelled",
 };
+
+/** A moment's time of day ("6:54 PM"), in India time by default. */
+export function formatTime(iso: string, timeZone: string = APP_TIME_ZONE): string {
+  return new Intl.DateTimeFormat("en", { timeZone, hour: "numeric", minute: "2-digit" }).format(new Date(iso));
+}
+
+/** Today's date for a greeting ("Wednesday, 4 November"), in India time by default. */
+export function formatToday(now = new Date(), timeZone: string = APP_TIME_ZONE): string {
+  return new Intl.DateTimeFormat("en-IN", { timeZone, weekday: "long", day: "numeric", month: "long" }).format(now);
+}
 
 export function shortHash(hash: string) {
   return `${hash.slice(0, 4)} ${hash.slice(4, 8)} ${hash.slice(8, 12)}`.toUpperCase();

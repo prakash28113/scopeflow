@@ -128,7 +128,7 @@ export default function ProjectRecordPage() {
             <dd className="font-semibold">{fmt(money.contract)}</dd>
             <dt className="text-muted">Received</dt>
             <dd>{fmt(money.paid)}</dd>
-            <dt className="text-muted">Outstanding</dt>
+            <dt className="text-muted">Contract unpaid</dt>
             <dd>{fmt(money.outstanding)}</dd>
           </dl>
         </Section>

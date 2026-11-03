@@ -35,7 +35,7 @@ const BILLING_SERVICE = [
 ];
 const BACK_OFFICE = ["admin_set_plan", "admin_signup_sources", "process_billing_event", ...BILLING_SERVICE];
 const AUTHENTICATED_FUNCTIONS = [...FREELANCER_FUNCTIONS, ...ANON_FUNCTIONS].sort();
-const SECURITY_DEFINER = [...FREELANCER_FUNCTIONS, ...PORTAL_FUNCTIONS, ...BACK_OFFICE, "health", "_handle_new_user", "_create_subscription"].sort();
+const SECURITY_DEFINER = [...FREELANCER_FUNCTIONS, ...PORTAL_FUNCTIONS, ...BACK_OFFICE, "health", "_handle_new_user", "_create_subscription", "_number_quote"].sort();
 
 const OWNER_READABLE = [
   "profiles", "clients", "projects", "deliverables", "scope_snapshots", "scope_decisions", "revision_requests",

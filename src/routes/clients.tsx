@@ -4,6 +4,7 @@ import { methodLabel } from "@/lib/payments";
 import { invoiceStatus } from "@/lib/invoice";
 import { localToday } from "@/lib/upcoming";
 import { received } from "@/lib/pricing";
+import { OUTSTANDING_LABEL } from "@/lib/outstanding";
 import { Link, useNavigate, useParams } from "react-router";
 import { z } from "zod";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -63,7 +64,8 @@ function money(projects: ClientProject[]) {
     t.paid += p.milestones.reduce((s, m) => s + received(m), 0);
     by.set(p.currency, t);
   }
-  return [...by.entries()].map(([currency, t]) => ({ currency, ...t, outstanding: t.contracted - t.paid }));
+  // Same definition as the dashboard (src/lib/outstanding.ts): contract minus received.
+  return [...by.entries()].map(([currency, t]) => ({ currency, ...t, outstanding: Math.max(0, t.contracted - t.paid) }));
 }
 
 /** The client list (shared with prefetching, so opening Clients is instant). */
@@ -137,7 +139,7 @@ export function ClientsPage() {
             <div className="hidden grid-cols-[minmax(0,1fr)_150px_200px] gap-4 border-b border-line bg-canvas/60 px-5 py-2.5 text-[12px] font-medium text-muted md:grid">
               <span>Client</span>
               <span>Projects</span>
-              <span className="text-right">Outstanding</span>
+              <span className="text-right">{OUTSTANDING_LABEL.contract}</span>
             </div>
             <ul className="divide-y divide-line" data-testid="clients-list">
               {shown.map((c) => {
@@ -387,7 +389,7 @@ export function ClientPage() {
                   <div key={t.currency} className="space-y-1">
                     <div className="flex justify-between"><dt className="text-muted">Contracted</dt><dd>{formatMoney(t.contracted, t.currency)}</dd></div>
                     <div className="flex justify-between"><dt className="text-muted">Received</dt><dd className="text-positive">{formatMoney(t.paid, t.currency)}</dd></div>
-                    <div className="flex justify-between font-semibold"><dt>Outstanding</dt><dd>{formatMoney(t.outstanding, t.currency)}</dd></div>
+                    <div className="flex justify-between font-semibold"><dt>{OUTSTANDING_LABEL.contract}</dt><dd>{formatMoney(t.outstanding, t.currency)}</dd></div>
                     <div className="flex justify-between"><dt className="text-muted">Average project</dt><dd>{formatMoney(Math.round(t.contracted / t.count), t.currency)}</dd></div>
                   </div>
                 ))}

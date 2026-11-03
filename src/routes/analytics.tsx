@@ -1,3 +1,4 @@
+import { OUTSTANDING_LABEL } from "@/lib/outstanding";
 import { FeatureLock } from "@/components/plans";
 import { useFeature, useSoloPrice } from "@/lib/plans";
 import { useState, type FormEvent } from "react";
@@ -465,10 +466,10 @@ function Analytics() {
         <Card>
           <CardHeader
             title="Money owed to you"
-            description="Unpaid payments on approved projects."
+            description="Scheduled payments on approved projects that aren't fully paid yet. Contract amounts not yet scheduled as a payment aren't included."
           />
           <dl className="num grid grid-cols-2 gap-x-4 gap-y-2 border-b border-line px-5 py-4 text-[13px]">
-            <dt className="text-muted">Outstanding</dt>
+            <dt className="text-muted">{OUTSTANDING_LABEL.scheduled}</dt>
             <dd
               className="text-right font-semibold"
               data-testid="owed-outstanding"

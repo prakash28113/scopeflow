@@ -14,6 +14,8 @@ begin;
 
 drop trigger if exists on_auth_user_created on auth.users;
 
+-- Quote numbers (if installed).
+drop function if exists public._number_quote, public._next_quote_number cascade;
 -- Brand & growth (if installed).
 drop function if exists public.set_signup_source, public._require_feature, public._has_feature, public._blog_unique_meta, public.admin_signup_sources cascade;
 -- GST and invoicing (if installed).

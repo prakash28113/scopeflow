@@ -81,3 +81,27 @@ export function withTax(subtotalMinor: number, taxBps: number) {
   const tax = Math.round((subtotalMinor * taxBps) / 10000);
   return { subtotal: subtotalMinor, tax, total: subtotalMinor + tax };
 }
+
+/** The tax inside a tax-inclusive amount, split the way invoices do (taxable = total × 10000 ÷ (10000 + rate)). */
+export function taxInside(totalMinor: number, taxBps: number) {
+  if (!taxBps || taxBps <= 0) return 0;
+  return totalMinor - Math.round((totalMinor * 10000) / (10000 + taxBps));
+}
+
+/** GST shown on a payment line: the change order's own tax, or the quote's rate for quote payments. */
+export function paymentTax(
+  m: { amount_cents: number; change_order_id?: string | null },
+  project: { tax_bps?: number | null; tax_label?: string | null },
+  changeOrders: { id: string; tax_cents?: number | null; tax_label?: string | null; amount_cents: number }[],
+): { label: string; cents: number } | null {
+  if (m.change_order_id) {
+    const co = changeOrders.find((c) => c.id === m.change_order_id);
+    const cents = Number(co?.tax_cents ?? 0);
+    if (!co || cents <= 0) return null;
+    // A change order's payment is the whole change order; if it was split, take its share.
+    const share = Number(co.amount_cents) === Number(m.amount_cents) ? cents : Math.round((cents * Number(m.amount_cents)) / Number(co.amount_cents));
+    return { label: co.tax_label || "GST", cents: share };
+  }
+  const cents = taxInside(Number(m.amount_cents), Number(project.tax_bps ?? 0));
+  return cents > 0 ? { label: project.tax_label || "GST", cents } : null;
+}

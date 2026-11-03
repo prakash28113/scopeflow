@@ -1,10 +1,15 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import type { Session } from "@supabase/supabase-js";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { supabase } from "./supabase";
 
 type AuthState = { session: Session | null; loading: boolean };
 const AuthContext = createContext<AuthState>({ session: null, loading: true });
+
+/** Signing in or out never shows one account's cached data (names, projects, plan) to the next. */
+export function clearOnAccountChange(event: string, qc: Pick<QueryClient, "clear">) {
+  if (event === "SIGNED_OUT" || event === "SIGNED_IN") qc.clear();
+}
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<AuthState>({ session: null, loading: true });
@@ -13,7 +18,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     supabase.auth.getSession().then(({ data }) => setState({ session: data.session, loading: false }));
     const { data } = supabase.auth.onAuthStateChange((event, session) => {
       setState({ session, loading: false });
-      if (event === "SIGNED_OUT" || event === "SIGNED_IN") qc.clear();
+      clearOnAccountChange(event, qc);
     });
     return () => data.subscription.unsubscribe();
   }, [qc]);
