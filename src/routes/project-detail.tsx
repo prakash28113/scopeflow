@@ -553,7 +553,7 @@ export default function ProjectPage() {
               <div className="border-t border-line px-5 py-3" data-testid="uncovered">
                 <p className="num text-[12px] text-warning">{fmt(money.unscheduled)} of the contract isn&apos;t covered by a payment yet.</p>
                 {approved && p.status !== "cancelled" ? (
-                  <AddPayment projectId={p.id} currency={p.currency} uncovered={money.unscheduled} onDone={(msg) => act(() => Promise.resolve({ data: null, error: null }), msg)} />
+                  <AddPayment projectId={p.id} currency={p.currency} uncovered={money.unscheduled} full={p.milestones.length === 0} onDone={(msg) => act(() => Promise.resolve({ data: null, error: null }), msg)} />
                 ) : null}
               </div>
             ) : null}

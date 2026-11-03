@@ -32,10 +32,13 @@ export function supplyOf(seller: string | null, buyer: string | null) {
   return { place, split: Boolean(seller && place === seller) };
 }
 
+/** New accounts start with this SAC (IT design and development services); change it in Settings. */
+export const DEFAULT_SAC = "998314";
+
 /** Common SAC codes for freelance work (the freelancer can enter any other). */
 export const SAC_SUGGESTIONS: [code: string, label: string][] = [
-  ["998391", "Specialty design services (graphic, logo, interior…)"],
   ["998314", "IT design and development (websites, apps)"],
+  ["998391", "Specialty design services (graphic, logo, interior…)"],
   ["998361", "Advertising services"],
   ["998399", "Other professional and technical services"],
   ["998222", "Business consulting"],

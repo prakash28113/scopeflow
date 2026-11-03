@@ -29,9 +29,29 @@ export type MyPlan = {
   cancel_at_period_end: boolean;
   grace_until: string | null;
   limits: { active_projects: number | null; clients: number | null; team_members: number };
+  /** Paid features: analytics (with expenses) and exports (approval-record PDF). */
+  features?: Record<PlanFeature, boolean>;
   usage: { active_projects: number; clients: number };
   early_access: { plan: PlanId; billing_interval: Interval; created_at: string } | null;
 };
+
+export type PlanFeature = "analytics" | "exports";
+
+/**
+ * Whether the signed-in account's plan includes a feature. While loading (or against a database that
+ * doesn't report features yet) it answers true, so nothing flashes locked; the database enforces it anyway.
+ */
+export function useFeature(feature: PlanFeature): boolean {
+  const q = useMyPlan();
+  return q.data?.features?.[feature] ?? true;
+}
+
+/** "₹499/month": the Solo monthly price from the catalogue, for upgrade prompts. */
+export function useSoloPrice(): string {
+  const q = usePlans();
+  const solo = q.data?.find((p) => p.id === "solo");
+  return solo ? `${formatPrice(solo.monthly_price_cents, solo.currency)}/month` : "₹499/month";
+}
 
 export type Invoice = { id: string; amount_cents: number; currency: string; status: string; paid_at: string | null; provider_invoice_id: string };
 

@@ -69,10 +69,11 @@ const hosts = [...new Set([...js.matchAll(/https:\/\/([a-z0-9.-]+\.[a-z]{2,})/gi
 // checkout.razorpay.com is Razorpay Checkout for paid plans: loaded only when someone starts a payment,
 // and only in builds with payments switched on (src/lib/billing.ts). No SDK is installed; payment fees only.
 // scopeflow.in is this site's own address, used for canonical links and structured data (src/lib/seo.ts).
+// www.instagram.com is ScopeFlow's Instagram page, a plain link in the site footer (never loaded or embedded).
 // wa.me is WhatsApp's free share link: opened only when the freelancer taps "Send on WhatsApp", never called by the app.
 // cdnjs.cloudflare.com is inside jsPDF's optional "open in a new window with PDFObject" output mode, which ScopeFlow never
 // uses (it only calls pdf.save()); the site's CSP would block it anyway.
-const INFORMATIONAL = /^(checkout\.razorpay\.com|scopeflow\.in|cdnjs\.cloudflare\.com|accounts\.google\.com|wa\.me|json-schema\.org|react\.dev|reactjs\.org|reactrouter\.com|github\.com|supabase\.com|www\.w3\.org|developer\.mozilla\.org|zod\.dev|tanstack\.com|challenges\.cloudflare\.com|.*\.supabase\.(co|in))$/;
+const INFORMATIONAL = /^(checkout\.razorpay\.com|scopeflow\.in|cdnjs\.cloudflare\.com|accounts\.google\.com|wa\.me|www\.instagram\.com|json-schema\.org|react\.dev|reactjs\.org|reactrouter\.com|github\.com|supabase\.com|www\.w3\.org|developer\.mozilla\.org|zod\.dev|tanstack\.com|challenges\.cloudflare\.com|.*\.supabase\.(co|in))$/;
 const unexpected = hosts.filter((h) => !INFORMATIONAL.test(h) && h !== "auditproject.supabase.co");
 for (const h of unexpected) problems.push(`bundle references unexpected external host: ${h}`);
 

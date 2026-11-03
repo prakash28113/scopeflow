@@ -8,7 +8,7 @@
  */
 // Pure data (no React, relative imports only): the Worker imports this module too.
 import { HOME_FAQ, PRICING_FAQ } from "./faq";
-import { OPERATOR_NAME } from "./operator";
+import { INSTAGRAM_URL, OPERATOR_CITY, OPERATOR_NAME, SUPPORT_EMAIL } from "./operator";
 
 export const SITE_URL = "https://scopeflow.in";
 export const SITE_NAME = "ScopeFlow";
@@ -28,9 +28,9 @@ export type PageSeo = {
 
 export const PUBLIC_PAGES: Record<PublicPath, PageSeo> = {
   "/": {
-    title: "ScopeFlow: scope, client approvals and GST invoices for freelancers",
+    title: "ScopeFlow: get paid for every “just one small change”",
     description:
-      "ScopeFlow keeps every client job on record: quotes, client approval by link, revisions, change orders, GST invoices with UPI and payments. Free to start.",
+      "ScopeFlow: get paid for every “just one small change”. Quotes, client approval, scope checks, change orders and GST invoices for Indian freelancers.",
     file: "home.html",
     changefreq: "weekly",
     priority: "1.0",
@@ -73,6 +73,35 @@ export const PUBLIC_PAGES: Record<PublicPath, PageSeo> = {
   },
 };
 
+/** Plan prices for structured data, in rupees (the database catalogue holds the same amounts). */
+export const PLAN_PRICES = [
+  { plan: "Free", month: 0, year: 0, description: "2 active projects and 5 clients" },
+  { plan: "Solo", month: 499, year: 4999, description: "Unlimited projects and clients, analytics, expenses and approval record PDF" },
+  { plan: "Studio", month: 999, year: 9999, description: "Everything in Solo, for small studios" },
+] as const;
+
+function planOffers(): Record<string, unknown>[] {
+  return PLAN_PRICES.flatMap((p): Record<string, unknown>[] =>
+    p.month === 0
+      ? [{ "@type": "Offer", name: `${p.plan} plan`, price: "0", priceCurrency: "INR", description: p.description, url: `${SITE_URL}/pricing` }]
+      : (["month", "year"] as const).map((i) => ({
+          "@type": "Offer",
+          name: `${p.plan} plan, ${i === "month" ? "monthly" : "yearly"}`,
+          price: String(p[i]),
+          priceCurrency: "INR",
+          description: p.description,
+          url: `${SITE_URL}/pricing`,
+          priceSpecification: {
+            "@type": "UnitPriceSpecification",
+            price: String(p[i]),
+            priceCurrency: "INR",
+            billingDuration: 1,
+            unitCode: i === "month" ? "MON" : "ANN",
+          },
+        })),
+  );
+}
+
 export const canonicalUrl = (path: string) => SITE_URL + (path === "/" ? "/" : path);
 
 const ORG_ID = `${SITE_URL}/#organization`;
@@ -94,6 +123,9 @@ export function structuredData(path: PublicPath): Record<string, unknown> {
     url: `${SITE_URL}/`,
     logo: { "@type": "ImageObject", url: `${SITE_URL}/icon-512.png`, width: 512, height: 512 },
     founder: { "@type": "Person", name: OPERATOR_NAME },
+    email: SUPPORT_EMAIL,
+    sameAs: [INSTAGRAM_URL],
+    address: { "@type": "PostalAddress", addressLocality: OPERATOR_CITY, addressRegion: "Telangana", addressCountry: "IN" },
   };
   const website = {
     "@type": "WebSite",
@@ -125,7 +157,7 @@ export function structuredData(path: PublicPath): Record<string, unknown> {
         description: page.description,
         image: OG_IMAGE,
         publisher: { "@id": ORG_ID },
-        offers: { "@type": "Offer", price: "0", priceCurrency: "INR", description: "Free plan: 2 active projects and 5 clients" },
+        offers: planOffers(),
         featureList: [
           "Scope of work with deliverables, revision limits and dates",
           "Client approval through a private link, no client account needed",
@@ -139,6 +171,15 @@ export function structuredData(path: PublicPath): Record<string, unknown> {
       faq(HOME_FAQ),
     );
   }
-  if (path === "/pricing") graph.push(faq(PRICING_FAQ));
+  if (path === "/pricing") {
+    graph.push({
+      "@type": "Product",
+      name: `${SITE_NAME} plans`,
+      description: page.description,
+      brand: { "@id": ORG_ID },
+      offers: planOffers(),
+    });
+    graph.push(faq(PRICING_FAQ));
+  }
   return { "@context": "https://schema.org", "@graph": graph };
 }

@@ -39,7 +39,7 @@ export function PrivacyPage() {
       <section>
         <p>
           ScopeFlow helps freelancers and studios agree project scope with their clients. This policy explains what we store, why, and
-          the choices you have. ScopeFlow is run by Prakash Mummidisetti, an independent developer in India, and is in beta with a free plan. Questions: <Contact />.
+          the choices you have. ScopeFlow is run by {OPERATOR_NAME}, an independent developer in Hyderabad, India, and is in beta with a free plan. Questions: <Contact />.
         </p>
       </section>
       <section>
@@ -54,13 +54,14 @@ export function PrivacyPage() {
             the name they enter, any comment, the time, and their IP address and browser type. This is the evidence of who approved what,
             and it can&apos;t be edited afterwards.
           </li>
+          <li><strong>How you found us:</strong> if you arrived from a link with campaign tags (utm_source, utm_medium, utm_campaign) or from another website, your browser keeps that for up to 30 days, and it&apos;s saved with your account when you sign up. We use it only to count which channels bring sign-ups.</li>
           <li><strong>Abuse protection:</strong> a one-way hash of visitors&apos; IP addresses to limit excessive requests. These counters are deleted within a day.</li>
         </ul>
       </section>
       <section>
         <h2>What we don&apos;t do</h2>
         <ul>
-          <li>No advertising, tracking or analytics cookies. Your browser only keeps your sign-in session.</li>
+          <li>No advertising, tracking or analytics cookies. Your browser only keeps your sign-in session and, if you came from a campaign link or another site, where you came from (above).</li>
           <li>We count visits with Cloudflare Web Analytics, which uses no cookies, doesn&apos;t follow you across other websites and doesn&apos;t identify you.</li>
           <li>We don&apos;t sell or share your data, and we don&apos;t email your clients. You share client links yourself.</li>
           <li>We never see or store your card, UPI or bank details. If you buy a paid plan, you pay in Razorpay&apos;s own payment window.</li>

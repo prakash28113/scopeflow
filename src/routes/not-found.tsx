@@ -1,6 +1,7 @@
 import { Link, isRouteErrorResponse, useRouteError } from "react-router";
 import { buttonClass } from "@/components/ui";
 import { useNoIndex, useTitle } from "@/lib/title";
+import { useAuth } from "@/lib/auth";
 
 function Message({ title, body }: { title: string; body: string }) {
   useTitle(title);
@@ -9,8 +10,30 @@ function Message({ title, body }: { title: string; body: string }) {
     <div className="flex min-h-[60dvh] flex-col items-center justify-center px-4 text-center">
       <h1 className="text-xl font-semibold">{title}</h1>
       <p className="mt-2 max-w-sm text-sm text-muted">{body}</p>
+      <Links />
+    </div>
+  );
+}
+
+/** Signed in: back to the dashboard. Visitors: the home page, blog and pricing. */
+function Links() {
+  const { session } = useAuth();
+  if (session)
+    return (
       <Link to="/dashboard" className={`${buttonClass("secondary")} mt-6`}>
         Go to dashboard
+      </Link>
+    );
+  return (
+    <div className="mt-6 flex flex-wrap justify-center gap-2">
+      <Link to="/" className={buttonClass("primary")}>
+        Go to home
+      </Link>
+      <Link to="/blog" className={buttonClass("secondary")}>
+        Read the blog
+      </Link>
+      <Link to="/pricing" className={buttonClass("ghost")}>
+        Pricing
       </Link>
     </div>
   );

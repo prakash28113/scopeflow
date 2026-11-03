@@ -12,8 +12,10 @@
     "directory": "./dist",
     "binding": "ASSETS",
     "not_found_handling": "single-page-application",
-    // Blog pages are rendered by the Worker with the posts from the database (worker/blog.ts).
-    "run_worker_first": ["/blog", "/blog/*", "/sitemap.xml"]
+    // The Worker sees every request except built assets: https/www redirects, real 404s for unknown
+    // pages, and blog pages rendered with the posts (worker/blog.ts). Everything else goes straight
+    // back to static assets.
+    "run_worker_first": ["/*", "!/assets/*"]
   },
   // Twice-daily keep-alive so the free Supabase project isn't paused for inactivity.
   "triggers": { "crons": ["17 3,15 * * *"] },

@@ -9,6 +9,10 @@ import { AuthProvider } from "./lib/auth";
 import { ToastProvider } from "./components/toast";
 import { configured } from "./lib/supabase";
 import { routes } from "./routes/tree";
+import { captureSource } from "./lib/signup-source";
+
+// Where this visitor came from (UTM tags / another site), kept 30 days in this browser for sign-up stats.
+captureSource(location.href, document.referrer);
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { retry: 1, staleTime: 60_000, gcTime: 30 * 60_000, refetchOnWindowFocus: true } },

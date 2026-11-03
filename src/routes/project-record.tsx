@@ -14,6 +14,8 @@ import { methodLabel } from "@/lib/payments";
 import { describeUserAgent } from "@/lib/user-agent";
 import { splitLines } from "@/lib/validation";
 import NotFound from "./not-found";
+import { FeatureLock } from "@/components/plans";
+import { useFeature, useSoloPrice } from "@/lib/plans";
 
 type Evidence = { user_agent: string | null; ip_address: string | null };
 type FullDecision = { id: string; snapshot_id: string; decision: "approved" | "rejected"; comment: string | null; client_name: string; content_hash: string; created_at: string } & Evidence;
@@ -43,6 +45,8 @@ export default function ProjectRecordPage() {
   const { id } = useParams();
   const q = useProject(id);
   const profile = useProfile();
+  const canExport = useFeature("exports");
+  const price = useSoloPrice();
   const extra = useQuery({
     queryKey: ["project-record", id],
     enabled: Boolean(id),
@@ -79,12 +83,20 @@ export default function ProjectRecordPage() {
         <Link to={`/projects/${p.id}`} className="text-[13px] text-muted hover:text-ink">
           ← {p.title}
         </Link>
-        <div className="flex gap-2">
-          <PrintButton label="Print" size="md" />
-          <DownloadPdfButton name={`Project record ${p.title}`} size="md" variant="primary" />
-        </div>
+        {canExport ? (
+          <div className="flex gap-2">
+            <PrintButton label="Print" size="md" />
+            <DownloadPdfButton name={`Project record ${p.title}`} size="md" variant="primary" />
+          </div>
+        ) : null}
       </div>
-      <article data-print-scope data-testid="project-record" className="rounded-[var(--radius-card)] border border-line bg-surface p-6 sm:p-10">
+      {canExport ? null : (
+        <div className="mb-4 print:hidden">
+          <FeatureLock compact title="PDF export is a Solo feature" body="Download or print this record as proof of everything agreed." price={price} />
+        </div>
+      )}
+      {canExport ? null : <p className="hidden print:block">PDF export of the project record is available on ScopeFlow Solo.</p>}
+      <article data-print-scope data-testid="project-record" className={cx("rounded-[var(--radius-card)] border border-line bg-surface p-6 sm:p-10", !canExport && "print:hidden")}>
         <header className="border-b border-line pb-6">
           <p className="text-[12px] font-semibold uppercase tracking-[0.08em] text-accent">Project record</p>
           <h1 className="display mt-1 text-[26px] font-semibold leading-tight">{p.title}</h1>

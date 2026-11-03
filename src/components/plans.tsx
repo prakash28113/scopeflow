@@ -24,8 +24,8 @@ export function IntervalToggle({ value, onChange }: { value: Interval; onChange:
 
 /** What each plan offers, honestly: features that aren't built yet say "Coming". */
 const HIGHLIGHTS: Record<PlanId, string[]> = {
-  free: ["Scope agreements, approvals, revision tracking", "Change orders, quotes and GST invoices", "Payments, expenses and analytics (free during the beta)"],
-  solo: ["Everything in Free", "Unlimited projects and clients", "Full template library"],
+  free: ["Scope agreements, approvals, revision tracking", "Change orders, quotes and GST invoices", "Payment tracking and reminders"],
+  solo: ["Everything in Free", "Unlimited projects and clients", "Analytics, expenses and profit", "Approval record PDF export"],
   studio: ["Everything in Solo", "Up to 3 team members — coming", "White-label client portal — coming"],
 };
 
@@ -144,9 +144,10 @@ const ROWS: { label: string; cells: [Cell, Cell, Cell]; soon?: boolean }[] = [
   { label: "Payments: part payments, dates and methods (recorded manually)", cells: ["✓", "✓", "✓"] },
   { label: "Deliverable progress and project timeline", cells: ["✓", "✓", "✓"] },
   { label: "Upcoming deadlines and payments", cells: ["✓", "✓", "✓"] },
-  { label: "Expense log and monthly analytics (profit, trends, top clients)", cells: ["✓ in beta", "✓", "✓"] },
+  { label: "Expense log and analytics (profit, trends, top clients)", cells: ["—", "✓", "✓"] },
   { label: "Agreement templates", cells: ["Starter set", "Full library", "Full library"] },
-  { label: "Approval record: printable proof of everything agreed", cells: ["✓ in beta", "✓", "✓"] },
+  { label: "Approval record: proof of everything agreed", cells: ["✓", "✓", "✓"] },
+  { label: "Approval record PDF export", cells: ["—", "✓", "✓"] },
   { label: "Team members and roles", cells: ["—", "—", "Up to 3"], soon: true },
   { label: "White-label client portal", cells: ["—", "—", "✓"], soon: true },
 ];
@@ -225,5 +226,37 @@ export function PlanLimitCard({ limit }: { limit: PlanLimit }) {
         </Link>
       </div>
     </div>
+  );
+}
+
+/** A paid feature on Free: visible, locked, with one way to upgrade. */
+export function FeatureLock({ title, body, price, compact = false }: { title: string; body: string; price: string; compact?: boolean }) {
+  return (
+    <div
+      className={cx("rounded-[14px] border border-accent-line bg-accent-soft/60", compact ? "flex flex-wrap items-center justify-between gap-3 px-4 py-3" : "px-5 py-6 text-center")}
+      data-testid="feature-lock"
+    >
+      <div className={compact ? "min-w-0" : undefined}>
+        <p className={cx("flex items-center gap-1.5 font-semibold text-ink", compact ? "text-[14px]" : "justify-center text-[16px]")}>
+          <LockIcon />
+          {title}
+        </p>
+        <p className={cx("text-ink-2", compact ? "mt-0.5 text-[13px]" : "mx-auto mt-1.5 max-w-md text-[14px] leading-relaxed")}>
+          {body} <span className="font-medium text-ink">Available on Solo, {price}.</span>
+        </p>
+      </div>
+      <Link to="/plan" className={cx(buttonClass("primary", compact ? "sm" : "md"), !compact && "mt-4")}>
+        Upgrade to Solo
+      </Link>
+    </div>
+  );
+}
+
+function LockIcon() {
+  return (
+    <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden className="shrink-0 text-accent">
+      <rect x="3" y="7" width="10" height="7" rx="1.5" />
+      <path d="M5.5 7V5a2.5 2.5 0 0 1 5 0v2" />
+    </svg>
   );
 }

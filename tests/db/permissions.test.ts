@@ -20,7 +20,7 @@ const FREELANCER_FUNCTIONS = [
   "complete_onboarding", "save_project", "delete_draft_project", "rotate_share_link", "revoke_share_link",
   "send_scope", "recall_scope", "resolve_revision", "create_change_order", "withdraw_change_order",
   "complete_change_order_work", "set_milestone_paid", "complete_project", "cancel_project",
-  "unread_notification_count", "mark_notifications_seen", "my_plan", "join_early_access", "update_client", "set_payment_details", "set_invoice_details", "update_client_billing", "create_invoice", "void_invoice", "set_deliverable_progress", "add_expense", "delete_expense", "record_payment", "delete_payment", "add_follow_up", "set_follow_up_done", "delete_follow_up", "log_client_request", "create_client", "save_template", "delete_template",
+  "unread_notification_count", "mark_notifications_seen", "my_plan", "join_early_access", "update_client", "set_payment_details", "set_invoice_details", "update_client_billing", "create_invoice", "void_invoice", "set_deliverable_progress", "add_expense", "delete_expense", "set_signup_source", "record_payment", "delete_payment", "add_follow_up", "set_follow_up_done", "delete_follow_up", "log_client_request", "create_client", "save_template", "delete_template",
   "add_payment", "archive_client", "delete_client",
   "is_blog_author", "blog_my_posts", "save_blog_post", "delete_blog_post", "create_blog_key", "blog_my_keys", "revoke_blog_key",
 ];
@@ -33,7 +33,7 @@ const BILLING_SERVICE = [
   // The "blog" Edge Function, after hashing the publishing key it received.
   "blog_publish_with_key",
 ];
-const BACK_OFFICE = ["admin_set_plan", "process_billing_event", ...BILLING_SERVICE];
+const BACK_OFFICE = ["admin_set_plan", "admin_signup_sources", "process_billing_event", ...BILLING_SERVICE];
 const AUTHENTICATED_FUNCTIONS = [...FREELANCER_FUNCTIONS, ...ANON_FUNCTIONS].sort();
 const SECURITY_DEFINER = [...FREELANCER_FUNCTIONS, ...PORTAL_FUNCTIONS, ...BACK_OFFICE, "health", "_handle_new_user", "_create_subscription"].sort();
 
@@ -163,7 +163,7 @@ describe("functions", () => {
         [name],
       );
       expect([r.anon, r.auth], name).toEqual([false, false]);
-      expect(r.svc, name).toBe(name !== "admin_set_plan");
+      expect(r.svc, name).toBe(!name.startsWith("admin_"));
     }
   });
 

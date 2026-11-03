@@ -61,7 +61,13 @@ try {
   // ---------------------------------------------------------- freelancer onboarding
   step("landing + sign up (no email confirmation)");
   await f.goto(BASE);
-  await f.getByRole("heading", { name: "Every client job, on the record." }).waitFor();
+  await f.getByRole("heading", { name: "Get paid for every “just one small change”." }).waitFor();
+  assert.equal(await f.getByTestId("hero-subline").innerText(), "Every client job, on the record.");
+  // Footer: who built it, how to reach us.
+  assert.equal(await f.getByTestId("built-by").innerText(), "Built in Hyderabad by Prakash Mummidisetty");
+  assert.equal(await f.getByRole("link", { name: "Instagram" }).getAttribute("href"), "https://www.instagram.com/scope_flow_official/");
+  await f.getByRole("link", { name: "support@scopeflow.in" }).waitFor();
+  await f.getByText("Fresh guides for Indian freelancers every week").waitFor();
   await f.getByRole("link", { name: "Start free" }).first().waitFor();
   assert.equal(await f.locator(".lp-row").count(), 7); // the example job record
   // The app preview is a picture of the product: built from the app's components, not focusable.
@@ -72,7 +78,9 @@ try {
     // The home page on a phone: readable, nothing sideways.
     const lp = await phone.newPage();
     await lp.goto(BASE);
-    await lp.getByRole("heading", { name: "Every client job, on the record." }).waitFor();
+    await lp.getByRole("heading", { name: "Get paid for every “just one small change”." }).waitFor();
+    // Pricing stays in the header on a phone.
+    assert.ok(await lp.getByRole("navigation", { name: "Main" }).getByRole("link", { name: "Pricing" }).isVisible(), "Pricing link visible on a phone");
     assert.equal(await lp.evaluate(() => document.documentElement.scrollWidth > window.innerWidth || window.innerWidth > 390), false, "home page scrolls sideways on a phone");
     await lp.waitForTimeout(3500); // let the record finish writing in
     // Sections appear as they scroll into view: scroll through once, like a visitor would.
@@ -108,13 +116,13 @@ try {
 
   step("search engines: public pages arrive prerendered, with their own title, canonical address and structured data");
   {
-    const raw = async (path) => {
+    const raw = async (path, status = 200) => {
       const res = await fetch(BASE + path, { headers: { Accept: "text/html", "Sec-Fetch-Mode": "navigate" } });
-      assert.equal(res.status, 200, `${path} status`);
+      assert.equal(res.status, status, `${path} status`);
       return res.text();
     };
     const pages = {
-      "/": ["Every client job, on the record.", "Does ScopeFlow take payments?"],
+      "/": ["Get paid for every “just one small change”.", "Every client job, on the record.", "Does ScopeFlow take payments?", "Built in Hyderabad by Prakash Mummidisetty"],
       "/pricing": ["Simple pricing.", "₹499"], // plans fetched at build time
       "/refunds": ["Refund and cancellation policy", "within 7 days"],
       "/contact": ["Contact us", "Hyderabad, Telangana"],
@@ -136,7 +144,21 @@ try {
       assert.ok(ld["@graph"].some((n) => n["@type"] === "Organization" && n.name === "ScopeFlow"), `${path} structured data`);
     }
     // The app's pages and unknown addresses get the plain shell, never the home page's content.
-    for (const path of ["/dashboard", "/p", "/no-such-page"]) assert.ok((await raw(path)).includes('<div id="root"></div>'), `${path} gets the app shell`);
+    for (const path of ["/dashboard", "/p"]) assert.ok((await raw(path)).includes('<div id="root"></div>'), `${path} gets the app shell`);
+    // Unknown addresses: a real 404 (not a "soft 404"), still the app's helpful page, never indexed.
+    for (const path of ["/no-such-page", "/projects/a/b/c", "/blog/a/b"]) {
+      const res = await fetch(BASE + path, { headers: { Accept: "text/html", "Sec-Fetch-Mode": "navigate" } });
+      assert.equal(res.status, 404, `${path} status`);
+      assert.equal(res.headers.get("x-robots-tag"), "noindex");
+      assert.match(res.headers.get("content-security-policy") ?? "", /default-src 'self'/);
+      assert.ok((await res.text()).includes('<div id="root"></div>'), `${path} gets the app shell`);
+    }
+    // Static files are still served as before.
+    assert.equal((await fetch(`${BASE}/icon.svg`)).status, 200);
+    assert.equal((await fetch(`${BASE}/missing-file.png`)).status, 404);
+    // Plan prices in rupees in the pricing page's structured data.
+    const pricingLd = (await raw("/pricing")).match(/<script type="application\/ld\+json">(.+?)<\/script>/)[1];
+    assert.ok(pricingLd.includes('"priceCurrency":"INR"') && !pricingLd.includes("USD"), "pricing offers in INR");
     const sitemap = await (await fetch(`${BASE}/sitemap.xml`)).text();
     for (const path of Object.keys(pages)) assert.ok(sitemap.includes(`<loc>https://scopeflow.in${path === "/" ? "/" : path}</loc>`), `sitemap lists ${path}`);
     assert.match(await (await fetch(`${BASE}/robots.txt`)).text(), /Sitemap: https:\/\/scopeflow\.in\/sitemap\.xml/);
@@ -163,6 +185,10 @@ try {
     assert.equal(await hp.locator('link[rel="canonical"]').getAttribute("href"), "https://scopeflow.in/pricing");
     await hp.goto(`${BASE}/no-such-page`);
     await hp.getByRole("heading", { name: "Page not found" }).waitFor();
+    await hp.getByRole("link", { name: "Go to home" }).waitFor(); // visitors get the home page, blog and pricing
+    await hp.getByRole("link", { name: "Read the blog" }).waitFor();
+    // The browser reports the page's own 404 status in the console; that's expected here.
+    for (let i = hErrors.length - 1; i >= 0; i--) if (/status of 404/.test(hErrors[i])) hErrors.splice(i, 1);
     assert.equal(await hp.locator('meta[name="robots"]').getAttribute("content"), "noindex");
     assert.deepEqual(hErrors, [], "no hydration or console errors on the public pages");
     await hp.close();
@@ -629,6 +655,25 @@ try {
   await c.getByText("Delivered", { exact: true }).first().waitFor();
   await c.getByText("In progress", { exact: true }).first().waitFor();
 
+  step("paid features on Free: analytics locked, expenses and the record PDF behind Solo, with one way to upgrade");
+  await f.goto(`${BASE}/analytics`);
+  const lock = f.getByTestId("feature-lock");
+  await lock.getByText("Analytics is a Solo feature").waitFor();
+  await lock.getByText("Available on Solo, ₹499/month.").waitFor();
+  assert.equal(await lock.getByRole("link", { name: "Upgrade to Solo" }).getAttribute("href"), "/plan");
+  assert.equal(await f.getByTestId("kpi-received").count(), 0);
+  await f.getByRole("navigation", { name: "Main" }).getByRole("link", { name: /Analytics\s*Solo/ }).waitFor();
+  await shot(f, "46-analytics-locked", false);
+  await f.goto(`${BASE}/expenses`);
+  await f.getByTestId("feature-lock").getByText("Expenses are a Solo feature").waitFor();
+  assert.equal(await f.getByTestId("expense-form").count(), 0, "no adding on Free");
+  await f.goto(`${projectUrl}/record`);
+  await f.getByTestId("project-record").waitFor();
+  await f.getByTestId("feature-lock").getByText("PDF export is a Solo feature").waitFor();
+  assert.equal(await f.getByRole("button", { name: "Download PDF" }).count(), 0);
+  // Upgrade (stand-in for a Razorpay purchase, which the paid-plans step covers end to end).
+  await fetch(`http://127.0.0.1:54321/auth/v1/__test/plan?email=priya@studio.test&plan=solo`);
+
   step("analytics: this month's received, expenses and profit, chart and table, expense log");
   await f.goto(`${BASE}/analytics`);
   await f.getByRole("heading", { name: "Analytics" }).waitFor();
@@ -756,6 +801,9 @@ try {
   const recordPdf = await pdfDownload(f, f.getByRole("button", { name: "Download PDF" }), /^Project-record-Brand-identity-for-Northwind-Coffee\.pdf$/);
   assert.ok((recordPdf.toString("latin1").match(/\/Type \/Page\b/g) ?? []).length >= 2, "record PDF has more than one page");
   await shot(f, "35-approval-record");
+
+  // Back on Free: past expenses stay visible, read-only.
+  await fetch(`http://127.0.0.1:54321/auth/v1/__test/plan?email=priya@studio.test&plan=free`);
 
   step("outside requests, due dates, adding clients: log a WhatsApp request, the client sees it; add a client and start a project for them");
   await f.goto(projectUrl);

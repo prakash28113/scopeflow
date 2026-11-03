@@ -14,6 +14,9 @@ cleanup() {
   # Stop the stand-in's children (PostgREST) too, so a failed run never leaves ports busy.
   [[ -n "${STACK_PID:-}" ]] && { pkill -P "$STACK_PID" 2>/dev/null; kill "$STACK_PID" 2>/dev/null; } || true
   [[ -n "${WRANGLER_PID:-}" ]] && kill "$WRANGLER_PID" 2>/dev/null || true
+  # npx leaves wrangler and workerd running; a stale server on :3000 would answer the next run.
+  pkill -f "wrangler dev --port 3000" 2>/dev/null || true
+  pkill -f "socket-addr=entry=127.0.0.1:3000" 2>/dev/null || true
 }
 trap cleanup EXIT
 

@@ -65,7 +65,7 @@ const guard = (f) =>
   : f.name === "blog_publish_with_key" ? "service role only — blog Edge Function, after hashing the publishing key"
   : f.name === "process_razorpay_event" ? "service role only — billing Edge Function, after verifying Razorpay's signature"
   : /^billing_/.test(f.name) && !f.anon_x && !f.auth_x ? "service role only — billing Edge Function, after verifying the user's session"
-  : f.name === "admin_set_plan" ? "no API role — Supabase SQL editor only"
+  : f.name === "admin_set_plan" || f.name === "admin_signup_sources" ? "no API role — Supabase SQL editor only"
   : f.name === "_create_subscription" ? "profile trigger only (Free plan for new accounts)"
   : f.name === "_handle_new_user" ? "sign-up trigger only (beta allowlist)"
   : f.definer ? "**REVIEW**" : "internal helper (not callable from the API)";

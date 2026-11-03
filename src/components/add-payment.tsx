@@ -14,8 +14,11 @@ export function AddPayment({
   projectId,
   currency,
   uncovered,
+  full = false,
   onDone,
 }: {
+  /** No payments scheduled at all: one tap adds the whole contract as a single payment to invoice. */
+  full?: boolean;
   projectId: string;
   currency: string;
   /** Contract total minus every scheduled payment, in minor units. */
@@ -27,11 +30,30 @@ export function AddPayment({
   const [error, setError] = useState<string | null>(null);
   const today = localToday();
 
+  async function addFull() {
+    setPending(true);
+    setError(null);
+    const r = await call(() =>
+      supabase.rpc("add_payment", { p_project_id: projectId, p: { title: "Full payment", amount_cents: uncovered, due_date: addDays(today, 7) } }),
+    );
+    setPending(false);
+    if (!r.ok) return setError(r.message);
+    await onDone(`Full payment of ${formatMoney(uncovered, currency)} added. Create its invoice below.`);
+  }
+
   if (!open)
     return (
-      <Button type="button" size="sm" variant="secondary" className="mt-2" onClick={() => setOpen(true)}>
-        Add payment to invoice it
-      </Button>
+      <div className="mt-2 flex flex-wrap gap-2">
+        {error ? <div className="w-full"><Alert>{error}</Alert></div> : null}
+        {full ? (
+          <Button type="button" size="sm" onClick={addFull} disabled={pending}>
+            {pending ? "Adding…" : `Invoice the full amount (${formatMoney(uncovered, currency)})`}
+          </Button>
+        ) : null}
+        <Button type="button" size="sm" variant="secondary" onClick={() => setOpen(true)}>
+          {full ? "Split into payments" : "Add payment to invoice it"}
+        </Button>
+      </div>
     );
 
   async function onSubmit(e: FormEvent<HTMLFormElement>) {
