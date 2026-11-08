@@ -14,11 +14,17 @@
  * secrets) are copied into the "billing" Edge Function's secrets, the function is deployed, and paid
  * plans are put on sale only with live keys (test keys: only BILLING_TESTERS can buy).
  *
+ * AI suggestions (optional): the deploy adds the Workers AI binding (free daily allowance, no key)
+ * and sets AI_ACCESS from the repository *variable* of the same name ("" = off, "all", or a comma
+ * list of account emails). GEMINI_API_KEY (secret, optional) is copied into the Worker's secrets as
+ * the fallback provider. The binding stays out of wrangler.jsonc so local and CI runs need no
+ * Cloudflare login.
+ *
  * Never prints secrets. Never uses the database password or any service-role key (the Edge Function
  * receives its own from Supabase at run time).
  */
 import { execFileSync } from "node:child_process";
-import { appendFileSync, readFileSync, readdirSync } from "node:fs";
+import { appendFileSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { randomBytes } from "node:crypto";
@@ -28,7 +34,7 @@ const SUPABASE_API = "https://api.supabase.com/v1";
 const CF_API = "https://api.cloudflare.com/client/v4";
 
 /** Expected results of the post-migration security check (see DEPLOYMENT.md §2). */
-export const EXPECTED = { tables: 30, without_rls: 0, public_functions: 5, signup_trigger: 1 };
+export const EXPECTED = { tables: 31, without_rls: 0, public_functions: 5, signup_trigger: 1 };
 /** Keeps sign-ups closed when no invited emails are configured. */
 export const CLOSED_SENTINEL = "invites-closed@scopeflow.invalid";
 const EMAIL = /^[a-z0-9._%+-]+@[a-z0-9-]+(\.[a-z0-9-]+)*\.[a-z]{2,}$/;
@@ -39,6 +45,47 @@ export const VERIFY_SQL = `select
  (select count(*)::int from pg_class where relnamespace = 'public'::regnamespace and relkind = 'r' and not relrowsecurity) as without_rls,
  (select count(*)::int from pg_proc where pronamespace = 'public'::regnamespace and has_function_privilege('anon', oid, 'EXECUTE')) as public_functions,
  (select count(*)::int from pg_trigger where tgrelid = 'auth.users'::regclass and tgname = 'on_auth_user_created') as signup_trigger`;
+
+/** Strips line and block comments from JSONC without touching strings (URLs keep their slashes). */
+export function stripJsonComments(text) {
+  let out = "";
+  for (let i = 0, inStr = false; i < text.length; i++) {
+    const c = text[i];
+    if (inStr) {
+      out += c;
+      if (c === "\\") out += text[++i] ?? "";
+      else if (c === '"') inStr = false;
+    } else if (c === '"') {
+      inStr = true;
+      out += c;
+    } else if (c === "/" && text[i + 1] === "/") {
+      while (i < text.length && text[i] !== "\n") i++;
+      out += "\n";
+    } else if (c === "/" && text[i + 1] === "*") {
+      i = text.indexOf("*/", i + 2);
+      if (i < 0) break;
+      i++;
+    } else out += c;
+  }
+  return out.replace(/,(\s*[}\]])/g, "$1");
+}
+
+/** The deploy-time Worker config: wrangler.jsonc plus the Workers AI binding. */
+export function deployConfig(jsoncText, { ai = true } = {}) {
+  const cfg = JSON.parse(stripJsonComments(jsoncText));
+  if (ai) cfg.ai = { binding: "AI" };
+  return JSON.stringify(cfg, null, 2);
+}
+
+/** Who may use AI: "" (off), "all", or comma-separated emails. Anything else is rejected. */
+export function aiAccess(value) {
+  const v = String(value ?? "").trim().toLowerCase();
+  if (!v || v === "off") return "";
+  if (v === "all") return "all";
+  const list = v.split(/[\s,;]+/).filter(Boolean);
+  for (const e of list) if (!EMAIL.test(e)) throw new Error(`AI_ACCESS must be "all", empty, or account emails; "${e}" isn't an email.`);
+  return list.join(",");
+}
 
 /** Parses invite emails from a file or variable: commas/whitespace separated, '#' comments allowed. */
 export const OPEN_SIGNUPS = "*";
@@ -217,7 +264,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
  *   migrations: [{ name, body }], allowlistFile: string, wait(ms)
  */
 export async function run(deps) {
-  const { env, fetch, exec, log, summary, migrations, allowlistFile, wait = sleep } = deps;
+  const { env, fetch, exec, log, summary, migrations, allowlistFile, wait = sleep, writeConfig = writeFileSync } = deps;
   const report = [];
   const ok = (m) => { report.push(`- ✅ ${m}`); log(`✓ ${m}`); };
   const finish = (status, extra = []) => {
@@ -505,12 +552,25 @@ revoke all on all tables in schema scopeflow_admin from public, anon, authentica
   ok("Built the app and passed the pre-deploy check");
 
   const domainArgs = domains.flatMap((d) => ["--domain", d]);
-  const out = exec("npx", ["wrangler", "deploy", "--var", `SUPABASE_URL:${supabaseUrl}`, "--var", `SUPABASE_ANON_KEY:${publishable}`, "--var", `TURNSTILE_ENABLED:${env.VITE_TURNSTILE_SITE_KEY ? "true" : "false"}`, "--var", `GOOGLE_SIGNIN_ENABLED:${googleSignInEnabled() ? "true" : "false"}`, "--var", `BILLING_ENABLED:${billingOn ? "true" : "false"}`, ...domainArgs], {
+  const access = aiAccess(env.AI_ACCESS);
+  const deployCfg = ".wrangler-deploy.json";
+  writeConfig(join(ROOT, deployCfg), deployConfig(readFileSync(join(ROOT, "wrangler.jsonc"), "utf8")));
+  const aiArgs = ["--var", `AI_ACCESS:${access}`, ...(env.AI_MODEL ? ["--var", `AI_MODEL:${env.AI_MODEL}`] : [])];
+  const out = exec("npx", ["wrangler", "deploy", "--config", deployCfg, "--var", `SUPABASE_URL:${supabaseUrl}`, "--var", `SUPABASE_ANON_KEY:${publishable}`, "--var", `TURNSTILE_ENABLED:${env.VITE_TURNSTILE_SITE_KEY ? "true" : "false"}`, "--var", `GOOGLE_SIGNIN_ENABLED:${googleSignInEnabled() ? "true" : "false"}`, "--var", `BILLING_ENABLED:${billingOn ? "true" : "false"}`, ...aiArgs, ...domainArgs], {
     env: { ...buildEnv, CLOUDFLARE_API_TOKEN: cfToken, CLOUDFLARE_ACCOUNT_ID: accountId, WRANGLER_SEND_METRICS: "false" },
   });
   const workersUrl = (String(out).match(/https:\/\/scopeflow\.[a-z0-9-]+\.workers\.dev/) ?? [`https://scopeflow.${subdomain}.workers.dev`])[0];
   // The custom domain (when configured) is the address people use; workers.dev keeps working for old links.
   const appUrl = domains.length ? `https://${domains[0]}` : workersUrl;
+  if (env.GEMINI_API_KEY) {
+    exec("npx", ["wrangler", "secret", "put", "GEMINI_API_KEY", "--config", deployCfg], {
+      input: String(env.GEMINI_API_KEY).trim(),
+      stdio: ["pipe", "pipe", "inherit"],
+      env: { ...buildEnv, CLOUDFLARE_API_TOKEN: cfToken, CLOUDFLARE_ACCOUNT_ID: accountId, WRANGLER_SEND_METRICS: "false" },
+    });
+    ok("AI fallback: Gemini key copied into the Worker's secrets");
+  }
+  ok(access ? `AI suggestions on for: ${access === "all" ? "everyone" : `${access.split(",").length} account(s)`} (Workers AI${env.GEMINI_API_KEY ? ", Gemini fallback" : ""})` : "AI suggestions off (set the AI_ACCESS repository variable to turn them on)");
   ok(`Deployed to Cloudflare Workers Free: ${appUrl}${domains.length ? ` (also ${domains.slice(1).map((d) => `https://${d}`).concat(workersUrl).join(", ")})` : ""}`);
 
   if (setSiteUrl) await setSiteUrl(appUrl, [...domains.map((d) => `https://${d}`), workersUrl]);

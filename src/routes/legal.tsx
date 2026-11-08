@@ -71,6 +71,18 @@ export function PrivacyPage() {
         </p>
       </section>
       <section>
+        <h2>AI suggestions</h2>
+        <p>
+          AI suggestions are optional, and you see them only while they&apos;re switched on for your account. When you use one
+          (&ldquo;Describe the project&rdquo;, &ldquo;Check against the scope&rdquo; or &ldquo;Ask about&hellip;&rdquo;), the text you type and the details of the
+          project it&apos;s about are sent to Cloudflare Workers AI to write the suggestion. Cloudflare doesn&apos;t use this content to train
+          models and doesn&apos;t keep it after answering. If Cloudflare&apos;s free daily capacity runs out, the request may be sent to Google&apos;s
+          Gemini API instead; Google&apos;s free service may use requests to improve its products. ScopeFlow keeps only a record that a
+          suggestion was asked for (which kind, which project, whether it worked), not what you typed or what came back. Suggestions
+          change nothing by themselves: you decide what to use, and your client sees only what you save and send.
+        </p>
+      </section>
+      <section>
         <h2>Your clients&apos; information</h2>
         <p>
           You decide what client information to add and are responsible for having a reason to share it with us. If your client asks

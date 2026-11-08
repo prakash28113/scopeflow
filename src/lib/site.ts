@@ -9,7 +9,7 @@ export const GOOGLE_CLIENT_ID: string = (import.meta.env.VITE_GOOGLE_CLIENT_ID a
 /** Public site facts shown on the landing page, legal pages and sign-in help. */
 export { INSTAGRAM_URL, OPERATOR_CITY, OPERATOR_NAME, SUPPORT_EMAIL } from "./operator";
 import { SUPPORT_EMAIL } from "./operator";
-export const LEGAL_UPDATED = "3 November 2026";
+export const LEGAL_UPDATED = "8 November 2026";
 export const supportMailto = (subject: string) => `mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent(subject)}`;
 
 /** "Send feedback": opens the user's own email app with a short prompt. Only the page path is included, never project data. */
