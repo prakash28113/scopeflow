@@ -5,6 +5,8 @@ import { intentProps } from "@/lib/prefetch";
 import { currentDueDate, received } from "@/lib/pricing";
 import { Alert, Card, CardHeader, EmptyState, Figure, Figures, LinkButton, Meter, PageHeader, StatusBadge, cx } from "@/components/ui";
 import { PageSpinner } from "@/components/app-shell";
+import { AiAssistant } from "@/components/ai-assistant";
+import { useAiStatus } from "@/lib/ai";
 import { useProfile } from "@/lib/auth";
 import { useDashboard } from "@/lib/queries";
 import { formatMoney } from "@/lib/money";
@@ -32,6 +34,7 @@ export default function Dashboard() {
   const profile = useProfile();
   const q = useDashboard();
   const plan = useMyPlan();
+  const aiOn = useAiStatus().data?.enabled === true;
   if (q.isLoading) return <PageSpinner />;
   if (q.isError || !q.data) return <Alert>Couldn't load your projects. Please refresh.</Alert>;
   const { projects, changeOrders, revisions, activity, payments } = q.data;
@@ -68,6 +71,12 @@ export default function Dashboard() {
           </>
         }
       />
+
+      {aiOn && projects.length ? (
+        <div className="mb-6">
+          <AiAssistant title="Ask about your work…" suggestions={["Show me all pending client approvals", "Who owes me money?", "What should I do next?", "Which projects are at risk of running late?"]} />
+        </div>
+      ) : null}
 
       {projects.length === 0 ? (
         <Card>

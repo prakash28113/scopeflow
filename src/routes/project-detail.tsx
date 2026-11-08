@@ -30,6 +30,9 @@ import { localToday } from "@/lib/upcoming";
 import { RecordPayment } from "@/components/record-payment";
 import { AddFollowUp } from "@/components/reminders";
 import { LogRequest, sourceLabel } from "@/components/log-request";
+import { AiImpact } from "@/components/ai-impact";
+import { AiAssistant } from "@/components/ai-assistant";
+import { useAiStatus } from "@/lib/ai";
 import { methodLabel } from "@/lib/payments";
 import { PROGRESS, progressSummary, type Progress } from "@/lib/progress";
 import { useProfile } from "@/lib/auth";
@@ -55,6 +58,7 @@ export default function ProjectPage() {
   // "Invoice the full amount": the new payment's invoice form opens by itself.
   const [invoiceFor, setInvoiceFor] = useState<string | null>(null);
   const profile = useProfile();
+  const aiOn = useAiStatus().data?.enabled === true;
 
   if (q.isLoading) return <PageSpinner />;
   if (q.isError) return <Alert>Couldn't load this project. Please refresh.</Alert>;
@@ -152,6 +156,16 @@ export default function ProjectPage() {
 
       <NextStep p={p} latest={latest} decision={latestDecision} revisions={revisions} changeOrders={changeOrders} />
 
+      {aiOn ? (
+        <div className="mb-6">
+          <AiAssistant
+            projectId={pid}
+            title="Ask about this project…"
+            suggestions={approved ? ["Summarize the status", "What's waiting on me?", "Draft a payment reminder", "Compare the original scope with the requests"] : ["What's missing from this scope?", "Summarize it for my client", "What could make this project slip?"]}
+          />
+        </div>
+      ) : null}
+
       <JumpLinks
         links={[
           { href: "#scope", label: "Scope" },
@@ -238,12 +252,15 @@ export default function ProjectPage() {
               <CardHeader title="Revision & change requests" description="Each request is checked against the approved scope, whether the client used their link or you logged it." />
               {p.status === "active" ? (
                 <div className="border-b border-line px-5 py-3">
-                  <LogRequest
-                    projectId={pid}
-                    deliverables={p.deliverables.map((d) => ({ id: d.id, title: d.title }))}
-                    minDate={p.approved_at ? p.approved_at.slice(0, 10) : ""}
-                    onDone={(msg) => act(() => Promise.resolve({ data: null, error: null }), msg)}
-                  />
+                  <div className="flex flex-wrap items-start gap-2">
+                    <LogRequest
+                      projectId={pid}
+                      deliverables={p.deliverables.map((d) => ({ id: d.id, title: d.title }))}
+                      minDate={p.approved_at ? p.approved_at.slice(0, 10) : ""}
+                      onDone={(msg) => act(() => Promise.resolve({ data: null, error: null }), msg)}
+                    />
+                    {aiOn ? <AiImpact projectId={pid} currency={p.currency} buttonLabel="What if they ask for more?" /> : null}
+                  </div>
                 </div>
               ) : null}
               {revisions.length === 0 ? (
@@ -283,6 +300,7 @@ export default function ProjectPage() {
                                   : "Propose change order"}
                               </LinkButton>
                             ) : null}
+                            {aiOn ? <AiImpact projectId={pid} currency={p.currency} request={{ id: r.id, description: r.description }} /> : null}
                             <NoteAction
                               label={r.in_scope ? "Mark done" : "Do it anyway"}
                               placeholder="Optional note for the client"

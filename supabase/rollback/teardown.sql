@@ -14,6 +14,9 @@ begin;
 
 drop trigger if exists on_auth_user_created on auth.users;
 
+-- AI suggestions (if installed).
+drop table if exists public.ai_requests cascade;
+drop function if exists public.ai_finish, public.ai_begin, public.ai_remaining, public._ai_daily_limit cascade;
 -- Quote numbers (if installed).
 drop function if exists public._number_quote, public._next_quote_number cascade;
 -- Brand & growth (if installed).

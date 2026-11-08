@@ -22,6 +22,7 @@ export function ChangeOrderForm({
   taxBps = 0,
   taxLabel = null,
   suggestedTitle = "",
+  suggestedDescription,
 }: {
   projectId: string;
   currency: string;
@@ -35,6 +36,8 @@ export function ChangeOrderForm({
   taxBps?: number | null;
   taxLabel?: string | null;
   suggestedTitle?: string;
+  /** From an AI impact check: the freelancer reviews it before sending. */
+  suggestedDescription?: string;
 }) {
   const action = useAction();
   const fe = action.fieldErrors;
@@ -96,7 +99,7 @@ export function ChangeOrderForm({
             <Input id="title" name="title" placeholder="Business card design" defaultValue={suggestedTitle} aria-invalid={!!fe.title} />
           </Field>
           <Field label="Description" htmlFor="description" error={fe.description} hint="What's included, so there's no ambiguity later.">
-            <Textarea id="description" name="description" rows={4} defaultValue={request?.description ?? ""} />
+            <Textarea id="description" name="description" rows={4} defaultValue={suggestedDescription ?? request?.description ?? ""} />
           </Field>
         </div>
       </Card>

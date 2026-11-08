@@ -15,6 +15,9 @@ import { supabase } from "@/lib/supabase";
 import { useToast } from "@/components/toast";
 import { checkScope } from "@/lib/scope-check";
 import { PlanLimitCard } from "@/components/plans";
+import { AiScopeDraft } from "@/components/ai-scope-draft";
+import { useAiStatus } from "@/lib/ai";
+import { draftToForm } from "@/lib/ai-apply";
 
 export type FormDeliverable = {
   title: string;
@@ -37,6 +40,7 @@ export function ProjectForm({ projectId, initial, showTemplates = false }: { pro
   const [v, setV] = useState<FormValues>(initial);
   const [applied, setApplied] = useState<string | null>(null);
   const plan = useMyPlan(showTemplates);
+  const ai = useAiStatus();
   const fullLibrary = Boolean(plan.data && plan.data.effective_plan !== "free");
   function applyTemplate(t: Template) {
     setV((p) => ({
@@ -117,6 +121,17 @@ export function ProjectForm({ projectId, initial, showTemplates = false }: { pro
   return (
     <form onSubmit={onSubmit} className="space-y-6" noValidate>
       {action.limit ? <PlanLimitCard limit={action.limit} /> : action.error ? <Alert>{action.error}</Alert> : null}
+
+      {showTemplates && ai.data?.enabled ? (
+        <AiScopeDraft
+          currency={v.currency}
+          remaining={ai.data.remaining}
+          onApply={(draft, sel) => {
+            setV((p) => draftToForm(draft, sel, p));
+            setApplied(null);
+          }}
+        />
+      ) : null}
 
       {showTemplates ? (
         <Card>

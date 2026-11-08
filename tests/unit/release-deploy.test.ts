@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 // @ts-expect-error — plain ESM script
-import { run, publicSupabaseConfig, signupsOpen, parseEmails, parseDomains, billingConfig, purchasableSql, blogAuthors, blogAuthorsSql, complimentaryPlans } from "../../scripts/ci/release.mjs";
+import { aiAccess, deployConfig, run, publicSupabaseConfig, signupsOpen, parseEmails, parseDomains, billingConfig, purchasableSql, blogAuthors, blogAuthorsSql, complimentaryPlans } from "../../scripts/ci/release.mjs";
 
 const REF = "abcdefghijklmnopqrst";
 const SUPA = `https://${REF}.supabase.co`;
@@ -25,7 +25,7 @@ function world(opts: { subdomain?: string | null; leak?: boolean; badCsp?: boole
         const q = String(body.query);
         if (q.startsWith("select name from scopeflow_admin")) return json(201, [{ name: "20261031000000_scopeflow_schema.sql" }]);
         if (q.startsWith("select\n (select count(*)::int from pg_tables"))
-          return json(201, [{ tables: 30, without_rls: 0, public_functions: 5, signup_trigger: 1 }]);
+          return json(201, [{ tables: 31, without_rls: 0, public_functions: 5, signup_trigger: 1 }]);
         return json(201, []);
       }
       if (u.pathname.endsWith("/config/auth")) return opts.authForbidden ? json(403, { message: "Missing required permission(s): auth_config_write" }) : json(200, {});
@@ -64,9 +64,10 @@ function world(opts: { subdomain?: string | null; leak?: boolean; badCsp?: boole
     if (url.startsWith(`${SUPA}/rest/v1/projects`)) return opts.leak ? json(200, [{ id: "p1" }]) : json(401, { code: "42501" });
     return json(404, { message: `unmocked ${method} ${url}` });
   };
-  const execs: { cmd: string; args: string[]; env: Record<string, string> }[] = [];
-  const exec = (cmd: string, args: string[], o: { env: Record<string, string> }) => {
-    execs.push({ cmd, args, env: o.env });
+  const execs: { cmd: string; args: string[]; env: Record<string, string>; input?: string }[] = [];
+  const written: { path: string; body: string }[] = [];
+  const exec = (cmd: string, args: string[], o: { env: Record<string, string>; input?: string }) => {
+    execs.push({ cmd, args, env: o.env, input: o.input });
     if (args[0] === "wrangler") return `Uploaded scopeflow\nDeployed scopeflow triggers\n  ${APP}\n`;
     return "";
   };
@@ -80,8 +81,9 @@ function world(opts: { subdomain?: string | null; leak?: boolean; badCsp?: boole
     migrations: [{ name: "20261031000000_scopeflow_schema.sql", body: "select 1;" }],
     allowlistFile: "owner@example.com",
     wait: async () => {},
+    writeConfig: (path: string, body: string) => written.push({ path, body }),
   });
-  return { calls, execs, deps, summary: () => summary };
+  return { calls, execs, deps, written, summary: () => summary };
 }
 
 const BOTH = { SUPABASE_ACCESS_TOKEN: "sbp_secret_value", CLOUDFLARE_API_TOKEN: "cf_secret_value" };
@@ -103,7 +105,14 @@ describe("release automation — deploy and live checks", () => {
     expect(build.env.VITE_SUPABASE_PUBLISHABLE_KEY).toBe("sb_publishable_live123");
     expect(w.execs.map((e) => e.args[0])).toEqual(["run", "scripts/predeploy-check.mjs", "wrangler"]);
     const deploy = w.execs.find((e) => e.args[0] === "wrangler")!;
-    expect(deploy.args).toEqual(["wrangler", "deploy", "--var", `SUPABASE_URL:${SUPA}`, "--var", "SUPABASE_ANON_KEY:sb_publishable_live123", "--var", "TURNSTILE_ENABLED:false", "--var", "GOOGLE_SIGNIN_ENABLED:false", "--var", "BILLING_ENABLED:false"]);
+    expect(deploy.args).toEqual(["wrangler", "deploy", "--config", ".wrangler-deploy.json", "--var", `SUPABASE_URL:${SUPA}`, "--var", "SUPABASE_ANON_KEY:sb_publishable_live123", "--var", "TURNSTILE_ENABLED:false", "--var", "GOOGLE_SIGNIN_ENABLED:false", "--var", "BILLING_ENABLED:false", "--var", "AI_ACCESS:"]);
+    // The deploy config is wrangler.jsonc plus the Workers AI binding; AI stays off for users without AI_ACCESS.
+    const cfg = JSON.parse(w.written[0].body);
+    expect(w.written[0].path.endsWith(".wrangler-deploy.json")).toBe(true);
+    expect(cfg.ai).toEqual({ binding: "AI" });
+    expect(cfg.main).toBe("worker/index.ts");
+    expect(cfg.assets.run_worker_first).toEqual(["/*"]);
+    expect(w.summary()).toMatch(/AI suggestions off/);
     expect(deploy.env.CLOUDFLARE_ACCOUNT_ID).toBe("acc0");
     // No Razorpay keys: nothing on sale, no billing function, checkout hidden. The blog API is always deployed.
     expect(build.env.VITE_BILLING_PROVIDER).toBe("");
@@ -308,5 +317,29 @@ describe("complimentary plans", () => {
     expect(complimentaryPlans("{}")).toEqual([]);
     expect(() => complimentaryPlans(JSON.stringify({ complimentaryPlans: [{ email: "me@example.com", plan: "free" }] }))).toThrow(/Invalid complimentary/);
     expect(() => complimentaryPlans(JSON.stringify({ complimentaryPlans: [{ email: "x'; drop table plans; --", plan: "studio" }] }))).toThrow();
+  });
+});
+
+describe("release automation — AI suggestions", () => {
+  it("turns AI on for the listed accounts and copies the optional Gemini key without printing it", async () => {
+    const w = world();
+    expect(await run(w.deps({ ...BOTH, AI_ACCESS: "Owner@Example.com", GEMINI_API_KEY: "AIza_secret_value" }))).toBe("deployed");
+    const deploy = w.execs.find((e) => e.args[0] === "wrangler" && e.args[1] === "deploy")!;
+    expect(deploy.args).toContain("AI_ACCESS:owner@example.com");
+    const secret = w.execs.find((e) => e.args.join(" ") === "wrangler secret put GEMINI_API_KEY --config .wrangler-deploy.json")!;
+    expect(secret.input).toBe("AIza_secret_value");
+    for (const e of w.execs) expect(JSON.stringify(e.args)).not.toContain("AIza_secret_value");
+    expect(w.summary()).not.toContain("AIza_secret_value");
+    expect(w.summary()).toMatch(/AI suggestions on for: 1 account\(s\) \(Workers AI, Gemini fallback\)/);
+  });
+
+  it("validates AI_ACCESS and keeps comments out of the deploy config", () => {
+    expect(aiAccess("")).toBe("");
+    expect(aiAccess(" ALL ")).toBe("all");
+    expect(aiAccess("a@b.co, c@d.in")).toBe("a@b.co,c@d.in");
+    expect(() => aiAccess("everyone")).toThrow(/AI_ACCESS/);
+    const cfg = JSON.parse(deployConfig(`{\n // c\n "a": "https://x.y/z", /* b */ "b": [1,],\n}`));
+    expect(cfg).toEqual({ a: "https://x.y/z", b: [1], ai: { binding: "AI" } });
+    expect(JSON.parse(deployConfig(`{"a":1}`, { ai: false }))).toEqual({ a: 1 });
   });
 });

@@ -1,4 +1,4 @@
-import { Link, Navigate, useParams, useSearchParams } from "react-router";
+import { Link, Navigate, useLocation, useParams, useSearchParams } from "react-router";
 import { Alert, PageHeader } from "@/components/ui";
 import { PageSpinner } from "@/components/app-shell";
 import { useProject } from "@/lib/queries";
@@ -11,6 +11,7 @@ export default function NewChangeOrder() {
   const { id } = useParams();
   const [params] = useSearchParams();
   const q = useProject(id);
+  const ai = aiDraftFrom(useLocation().state);
   if (q.isLoading) return <PageSpinner />;
   if (q.isError) return <Alert>Couldn't load this project. Please refresh.</Alert>;
   if (!q.data) return <NotFound />;
@@ -27,8 +28,9 @@ export default function NewChangeOrder() {
       }
     : null;
   // An extra revision round has an agreed price in the approved scope: start from it.
-  const suggestedAmount =
-    rr?.kind === "revision" && p.extra_revision_cents !== null && p.extra_revision_cents !== undefined
+  const suggestedAmount = ai?.amount
+    ? ai.amount
+    : rr?.kind === "revision" && p.extra_revision_cents !== null && p.extra_revision_cents !== undefined
       ? toInputAmount(Number(p.extra_revision_cents), p.currency)
       : "";
 
@@ -53,8 +55,19 @@ export default function NewChangeOrder() {
         suggestedAmount={suggestedAmount}
         taxBps={p.tax_bps ?? 0}
         taxLabel={p.tax_label ?? null}
-        suggestedTitle={rr ? (rr.kind === "revision" ? "Extra revision round" : rr.description.split(/[.\n]/)[0].slice(0, 80)) : ""}
+        suggestedTitle={ai?.title || (rr ? (rr.kind === "revision" ? "Extra revision round" : rr.description.split(/[.\n]/)[0].slice(0, 80)) : "")}
+        suggestedDescription={ai?.description || undefined}
       />
+      {ai ? <p className="mt-3 text-[12px] text-muted">Filled in from the scope check. Check the price and details before you send it.</p> : null}
     </div>
   );
+}
+
+/** A change-order suggestion passed from the scope check (navigation state is untrusted input). */
+function aiDraftFrom(state: unknown): { title: string; description: string; amount: string } | null {
+  const d = (state as { aiDraft?: Record<string, unknown> } | null)?.aiDraft;
+  if (!d || typeof d !== "object") return null;
+  const str = (v: unknown, max: number) => (typeof v === "string" ? v.slice(0, max) : "");
+  const amount = str(d.amount, 20);
+  return { title: str(d.title, 160), description: str(d.description, 2000), amount: /^\d+(\.\d{1,2})?$/.test(amount) ? amount : "" };
 }

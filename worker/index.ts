@@ -10,13 +10,17 @@
  *    (the client portal stays noindex/no-store); anything else gets a JSON 404;
  *  - blog pages (/blog, /blog/<post>, /blog/rss.xml, /sitemap.xml) always come here first
  *    (assets.run_worker_first) and are rendered with the posts from the database (worker/blog.ts);
+ *  - /api/ai/* are the AI suggestion endpoints (worker/ai/handler.ts). They hold no secrets of their
+ *    own: Workers AI is a binding, the optional Gemini key is a Worker secret, and every database
+ *    read uses the signed-in user's token;
  *  - `scheduled` pings Supabase twice a day so a free project isn't paused.
  */
 import { PORTAL_HEADERS, PRIVATE_PATHS, pageHeaders } from "../build/security-headers";
 import { isKnownPath } from "../src/lib/known-routes";
+import { serveAi, type AiEnv } from "./ai/handler";
 import { blogRoute, fillShell, getPost, listPage, listPosts, notFoundPage, postPage, rss, sitemap } from "./blog";
 
-export interface Env {
+export interface Env extends AiEnv {
   SUPABASE_URL: string;
   SUPABASE_ANON_KEY: string;
   TURNSTILE_ENABLED?: string;
@@ -176,7 +180,7 @@ export async function serveBlog(request: Request, env: Env, f: Fetcher = fetch):
 
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
-    return canonicalRedirect(request) ?? (await serveBlog(request, env)) ?? serveApp(request, env);
+    return canonicalRedirect(request) ?? (await serveAi(request, env)) ?? (await serveBlog(request, env)) ?? serveApp(request, env);
   },
   async scheduled(_controller: unknown, env: Env, ctx: { waitUntil(p: Promise<unknown>): void }) {
     ctx.waitUntil(

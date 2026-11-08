@@ -260,6 +260,36 @@ try {
   await f.getByRole("button", { name: "Continue" }).click();
   await f.waitForURL("**/projects/new?welcome=1");
 
+  // ---------------------------------------------------------- AI: describe → suggested scope (mock provider)
+  step("AI scope suggestion: describe, review, untick, use in the form (nothing saved)");
+  const aiPanel = f.getByTestId("ai-scope-draft");
+  await aiPanel.waitFor();
+  assert.equal(await aiPanel.getByRole("button", { name: "Suggest a scope" }).isDisabled(), true);
+  await f.getByLabel("What are you making, for whom, and for how much?").fill("Brand kit for Chai & Co.: logo ₹25,000, palette, menu card. Budget 40k.");
+  await aiPanel.getByRole("button", { name: "Suggest a scope" }).click();
+  const review = f.getByTestId("ai-draft-review");
+  await review.waitFor();
+  await review.getByText("Brand kit for Chai & Co.").waitFor();
+  // The invented price on the palette (mock says 99,999) never reaches the screen; it's asked for instead.
+  assert.equal(await review.getByText(/99,999/).count(), 0);
+  await f.getByTestId("ai-questions").getByText("What is the price for “Colour palette and type”?").waitFor();
+  await aiPanel.getByText(/29 suggestions left today/).waitFor();
+  await review.getByLabel(/Photography/).uncheck();
+  await shot(f, "03a-ai-suggestion");
+  await review.getByRole("button", { name: "Use in the form" }).click();
+  await review.getByText("Added to the form below.").waitFor();
+  assert.equal(await f.getByLabel("Project title").inputValue(), "Brand kit for Chai & Co.");
+  assert.equal(await f.getByLabel("Client name").inputValue(), "Chai & Co.");
+  assert.equal(await f.getByLabel("Deliverable 1", { exact: true }).inputValue(), "Primary logo");
+  assert.equal(await f.getByLabel("Agreed budget").inputValue(), "40000");
+  assert.equal(await f.getByLabel("Not included").inputValue(), "Printing costs\nCopywriting");
+  assert.match(await f.locator("#terms").inputValue(), /This quote assumes:/);
+  assert.equal(await f.locator("#m-amt-0").inputValue(), "20000");
+  // A bad session is refused by the AI endpoint, before any model call.
+  assert.equal(await f.evaluate(async () => (await fetch("/api/ai/status", { headers: { authorization: "Bearer bad" } })).status), 401);
+  await f.goto(`${BASE}/projects/new?welcome=1`);
+  await f.getByTestId("ai-scope-draft").waitFor();
+
   // ---------------------------------------------------------- create project
   step("project form validation + create");
   await f.getByRole("button", { name: "Create project" }).click();
@@ -368,6 +398,10 @@ try {
   await f.getByTestId("upcoming").getByText("50% deposit", { exact: true }).waitFor();
   await f.getByTestId("upcoming").getByText("Payment for Brand identity for Northwind Coffee").waitFor();
   await f.getByText(/^In 3 days/).waitFor();
+  // The workspace assistant answers from the freelancer's own data (mock provider here).
+  const dashAsk = f.getByTestId("ai-assistant");
+  await dashAsk.getByRole("button", { name: "Who owes me money?" }).click();
+  await dashAsk.getByTestId("ai-answer").getByText("1 payment due").waitFor();
 
   // ---------------------------------------------------------- revisions + scope check
   step("client requests revisions — third exceeds the limit");
@@ -399,6 +433,34 @@ try {
   assert.equal(await f.getByText("Over revision limit").count(), 1);
   assert.equal(await f.getByText("Outside original scope").count(), 1);
   await shot(f, "08-project-requests");
+
+  step("AI: check a request against the scope, draft the change order; ask about the project (mock provider)");
+  const loyalty = f.locator("li", { hasText: "We'd also like a loyalty card design." });
+  await loyalty.getByTestId("ai-impact-open").click();
+  const impact = loyalty.getByTestId("ai-impact");
+  assert.equal(await impact.getByLabel("What the client asked for").inputValue(), "We'd also like a loyalty card design.");
+  await impact.getByRole("button", { name: "Check impact" }).click();
+  const impactResult = impact.getByTestId("ai-impact-result");
+  await impactResult.getByText("New work: needs a change order").waitFor();
+  await impactResult.getByText("Set a price").waitFor();
+  await impactResult.getByTestId("ai-client-message").waitFor();
+  await shot(f, "08a-ai-impact");
+  await impactResult.getByRole("button", { name: "Draft change order" }).click();
+  await f.waitForURL(/change-orders\/new\?request=/);
+  assert.equal(await f.getByLabel("Title").inputValue(), "Extra item");
+  assert.match(await f.getByLabel("Description").inputValue(), /isn't in the approved scope/);
+  await f.getByText("Filled in from the scope check.").waitFor();
+  await f.goto(projectUrl);
+  const ask = f.getByTestId("ai-assistant");
+  await ask.getByRole("button", { name: "Summarize the status" }).click();
+  await ask.getByTestId("ai-answer").getByText("Here is where things stand.").waitFor();
+  await ask.getByText("1 approval waiting").waitFor();
+  // Follow-up question in the same box.
+  await ask.getByLabel("Ask about this project…").fill("And what should I do next?");
+  await ask.getByRole("button", { name: "Ask" }).click();
+  await f.waitForFunction(() => document.querySelectorAll('[data-testid="ai-answer"]').length === 2);
+  await shot(f, "08b-ai-assistant");
+  await f.goto(projectUrl);
   // The agreed extra-round price pre-fills the change order for an over-limit revision.
   await f.getByRole("link", { name: "Charge extra round · $150.00" }).click();
   await f.waitForURL(/change-orders\/new\?request=/);

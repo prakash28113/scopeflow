@@ -151,6 +151,11 @@ jobs:
           RAZORPAY_KEY_SECRET: ${{ secrets.RAZORPAY_KEY_SECRET }}
           RAZORPAY_WEBHOOK_SECRET: ${{ secrets.RAZORPAY_WEBHOOK_SECRET }}
           BILLING_TESTERS: ${{ vars.BILLING_TESTERS }}
+          # AI suggestions (optional). AI_ACCESS is a plain variable: "" off, "all", or account emails.
+          # GEMINI_API_KEY is the optional fallback provider (a secret; Google's free tier may use prompts).
+          AI_ACCESS: ${{ vars.AI_ACCESS }}
+          AI_MODEL: ${{ vars.AI_MODEL }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
 
   rollback:
     name: Rollback
