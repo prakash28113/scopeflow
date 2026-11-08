@@ -75,11 +75,12 @@ try {
   await f.getByRole("link", { name: "support@scopeflow.in" }).first().waitFor();
   await f.getByText("Fresh guides for Indian freelancers every week").waitFor();
   await f.getByRole("link", { name: "Start free" }).first().waitFor();
-  // The real screens (four scenes, each with the real screen beside it) and the AI section, marked early access.
+  // The real screens (four scenes, each with the real screen beside it). The AI section stays off until AI reaches accounts.
   assert.equal(await f.locator(".hm-screen").count(), 4);
   assert.equal(await f.locator(".hm-screen .hm-ui img").count(), 4);
-  await f.locator("#ai").getByText("Early access", { exact: true }).waitFor();
-  for (const id of ["product", "ai", "tour", "how", "start"]) assert.equal(await f.locator(`#${id}`).count(), 1, `section #${id}`);
+  assert.equal(await f.locator("#ai").count(), 0, "no AI section while AI isn't available");
+  assert.equal(await f.getByText("Does ScopeFlow use AI?").count(), 0);
+  for (const id of ["product", "tour", "how", "start"]) assert.equal(await f.locator(`#${id}`).count(), 1, `section #${id}`);
   // Every in-page link points at a section that exists.
   for (const href of await f.locator('a[href^="#"], a[href^="/#"]').evaluateAll((as) => as.map((a) => a.getAttribute("href")))) {
     assert.equal(await f.locator(`[id="${href.split("#")[1]}"]`).count(), 1, `${href} has a target`);
@@ -168,7 +169,7 @@ try {
       return res.text();
     };
     const pages = {
-      "/": ["stop scope creep before it turns into unpaid work", "Define the scope, track every revision", "Does ScopeFlow take payments?", "Does ScopeFlow use AI?", "Built in Hyderabad by Prakash Mummidisetti"],
+      "/": ["stop scope creep before it turns into unpaid work", "Define the scope, track every revision", "Does ScopeFlow take payments?", "Built in Hyderabad by Prakash Mummidisetti"],
       "/pricing": ["Simple pricing.", "₹499"], // plans fetched at build time
       "/refunds": ["Refund and cancellation policy", "within 7 days"],
       "/contact": ["Contact us", "Hyderabad, Telangana"],

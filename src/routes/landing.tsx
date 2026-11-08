@@ -15,6 +15,12 @@ import { INSTAGRAM_URL, OPERATOR_CITY, OPERATOR_NAME, SUPPORT_EMAIL, supportMail
  * a fictional demo workspace). Every claim is true today; AI suggestions are marked as early access.
  * Motion is CSS-only, subtle, and stops with reduced motion.
  */
+/**
+ * The AI section and its FAQ answer stay off until AI suggestions reach at least one account (PR #36);
+ * the page never describes a feature nobody can use.
+ */
+const SHOW_AI = false;
+
 export default function Landing() {
   useSeo("/");
   useReveal();
@@ -26,7 +32,7 @@ export default function Landing() {
         <Manifesto />
         <MadeFor />
         <Screens />
-        <Ai />
+        {SHOW_AI ? <Ai /> : null}
         <Tour />
         <Handles />
         <Values />
@@ -698,7 +704,7 @@ function Questions() {
         Let’s clear a few things up
       </h2>
       <div className="border-t border-[var(--hm-line)]">
-        {[...HOME_FAQ, ...HOME_FAQ_EARLY].map(([q, a], i) => (
+        {[...HOME_FAQ, ...(SHOW_AI ? HOME_FAQ_EARLY : [])].map(([q, a], i) => (
           <details key={q} className="hm-qa" open={i === 0}>
             <summary>
               <span>{q}</span>
