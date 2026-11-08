@@ -18,11 +18,11 @@ describe("brand", () => {
     expect(OPERATOR_NAME).toBe("Prakash Mummidisetti");
     expect(SUPPORT_EMAIL).toBe("support@scopeflow.in");
     expect(INSTAGRAM_URL).toBe("https://www.instagram.com/scope_flow_official/");
-    expect(PUBLIC_PAGES["/"].title).toBe("ScopeFlow: get paid for every “just one small change”");
-    expect(PUBLIC_PAGES["/"].description).toMatch(/Quotes, client approval, scope checks, change orders and GST invoices for Indian freelancers/);
+    expect(PUBLIC_PAGES["/"].title).toBe("ScopeFlow: stop scope creep before it turns into unpaid work");
+    expect(PUBLIC_PAGES["/"].description).toMatch(/Quotes, approvals, change orders and GST invoices for freelancers and agencies/);
     const landing = readFileSync("src/routes/landing.tsx", "utf8");
-    expect(landing).toContain("Get paid for every “just one small change”.</h1>");
-    expect(landing).toContain("Every client job, on the record.</p>");
+    expect(landing).toContain("ScopeFlow — stop scope creep before it turns into unpaid work</h1>");
+    expect(landing).toContain("Define the scope, track every revision, catch extra requests and get paid for them.");
     expect(landing).toContain("Fresh guides for Indian freelancers every week");
     for (const f of ["src/routes/landing.tsx", "src/lib/seo-pages.ts", "src/components/site-footer.tsx", "src/routes/legal.tsx", "worker/blog.ts"]) {
       const text = readFileSync(f, "utf8");

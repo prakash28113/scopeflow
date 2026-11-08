@@ -76,12 +76,12 @@ async function main() {
   const assets = readdirSync(join(DIST, "assets"));
   const font = (re) => assets.find((f) => re.test(f));
   const inter = font(/^inter-latin-wght-normal-[\w-]+\.woff2$/);
-  const display = font(/^bricolage-grotesque-latin-opsz-normal-[\w-]+\.woff2$/);
 
   for (const [path, seo] of Object.entries(mod.PUBLIC_PAGES)) {
     const { html: body, state } = await mod.render(path);
     if (!body.includes("<h1")) throw new Error(`prerender: ${path} rendered without a heading`);
-    const fonts = [inter, path === "/" ? display : null].filter(Boolean);
+    // Every public page, the home page included, sets its type in Inter.
+    const fonts = [inter].filter(Boolean);
     const html = pageHtml(template, {
       path,
       seo,

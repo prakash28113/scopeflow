@@ -28,9 +28,9 @@ export type PageSeo = {
 
 export const PUBLIC_PAGES: Record<PublicPath, PageSeo> = {
   "/": {
-    title: "ScopeFlow: get paid for every “just one small change”",
+    title: "ScopeFlow: stop scope creep before it turns into unpaid work",
     description:
-      "ScopeFlow: get paid for every “just one small change”. Quotes, client approval, scope checks, change orders and GST invoices for Indian freelancers.",
+      "Define the scope, count revisions, catch extra requests and get paid for them. Quotes, approvals, change orders and GST invoices for freelancers and agencies.",
     file: "home.html",
     changefreq: "weekly",
     priority: "1.0",

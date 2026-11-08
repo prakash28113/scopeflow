@@ -1,7 +1,7 @@
 import { LogoFull } from "@/components/brand";
 import { useTitle } from "@/lib/title";
 import { useEffect, useState, type FormEvent, type ReactNode } from "react";
-import { Link, Navigate, useNavigate, useSearchParams } from "react-router";
+import { Link, Navigate, useLocation, useNavigate, useSearchParams } from "react-router";
 import { Alert, Field, Input, Logo } from "@/components/ui";
 import { SubmitButton } from "@/components/form-bits";
 import { Captcha, captchaSiteKey } from "@/components/captcha";
@@ -141,6 +141,10 @@ export function SignupPage() {
   const navigate = useNavigate();
   const f = useAuthForm();
   const [notice, setNotice] = useState<string | null>(null);
+  // The home page's "Start free" form hands over a name and email (navigation state); they only prefill the fields.
+  const handed = (useLocation().state ?? {}) as { name?: unknown; email?: unknown };
+  const preName = typeof handed.name === "string" ? handed.name.slice(0, 120) : "";
+  const preEmail = typeof handed.email === "string" ? handed.email.slice(0, 254) : "";
   if (session) return <Navigate to="/onboarding" replace />;
 
   async function onSubmit(e: FormEvent<HTMLFormElement>) {
@@ -203,10 +207,10 @@ export function SignupPage() {
           <form onSubmit={onSubmit} className="space-y-4" noValidate>
             {f.error ? <Alert>{f.error}</Alert> : null}
             <Field label="Your name" htmlFor="fullName" error={f.fieldErrors.fullName}>
-              <Input id="fullName" name="fullName" autoComplete="name" required />
+              <Input id="fullName" name="fullName" autoComplete="name" required defaultValue={preName} />
             </Field>
             <Field label="Email" htmlFor="email" error={f.fieldErrors.email}>
-              <Input id="email" name="email" type="email" autoComplete="email" required />
+              <Input id="email" name="email" type="email" autoComplete="email" required defaultValue={preEmail} />
             </Field>
             <Field
               label="Password"
@@ -218,7 +222,7 @@ export function SignupPage() {
                   : "At least 8 characters. Keep it safe: password resets go through support during the beta."
               }
             >
-              <Input id="password" name="password" type="password" autoComplete="new-password" required />
+              <Input id="password" name="password" type="password" autoComplete="new-password" required autoFocus={Boolean(preName && preEmail)} />
             </Field>
             <Captcha onToken={f.setCaptcha} />
             <SubmitButton className="w-full" pending={f.pending} pendingLabel="Creating account…">
