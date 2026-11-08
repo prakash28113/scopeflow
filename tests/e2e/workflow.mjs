@@ -67,24 +67,30 @@ try {
   // ---------------------------------------------------------- freelancer onboarding
   step("landing + sign up (no email confirmation)");
   await f.goto(BASE);
-  await f.getByRole("heading", { name: "Get paid for every “just one small change”." }).waitFor();
-  assert.equal(await f.getByTestId("hero-subline").innerText(), "Every client job, on the record.");
+  await f.getByRole("heading", { name: "ScopeFlow — stop scope creep before it turns into unpaid work" }).waitFor();
+  assert.match(await f.getByTestId("hero-subline").innerText(), /^Define the scope, track every revision, catch extra requests and get paid for them\./);
   // Footer: who built it, how to reach us.
   assert.equal(await f.getByTestId("built-by").innerText(), "Built in Hyderabad by Prakash Mummidisetti");
   assert.equal(await f.getByRole("link", { name: "Instagram" }).getAttribute("href"), "https://www.instagram.com/scope_flow_official/");
-  await f.getByRole("link", { name: "support@scopeflow.in" }).waitFor();
+  await f.getByRole("link", { name: "support@scopeflow.in" }).first().waitFor();
   await f.getByText("Fresh guides for Indian freelancers every week").waitFor();
   await f.getByRole("link", { name: "Start free" }).first().waitFor();
-  assert.equal(await f.locator(".lp-row").count(), 7); // the example job record
-  // The app preview is a picture of the product: built from the app's components, not focusable.
-  assert.equal(await f.locator(".lp-app[inert]").count(), 1);
+  // The real screens (four scenes, each with the real screen beside it) and the AI section, marked early access.
+  assert.equal(await f.locator(".hm-screen").count(), 4);
+  assert.equal(await f.locator(".hm-screen .hm-ui img").count(), 4);
+  await f.locator("#ai").getByText("Early access", { exact: true }).waitFor();
+  for (const id of ["product", "ai", "tour", "how", "start"]) assert.equal(await f.locator(`#${id}`).count(), 1, `section #${id}`);
+  // Every in-page link points at a section that exists.
+  for (const href of await f.locator('a[href^="#"], a[href^="/#"]').evaluateAll((as) => as.map((a) => a.getAttribute("href")))) {
+    assert.equal(await f.locator(`[id="${href.split("#")[1]}"]`).count(), 1, `${href} has a target`);
+  }
   await f.getByText("Does ScopeFlow take payments?").click();
   await f.getByText("It records the payments you receive.").waitFor();
   {
     // The home page on a phone: readable, nothing sideways.
     const lp = await phone.newPage();
     await lp.goto(BASE);
-    await lp.getByRole("heading", { name: "Get paid for every “just one small change”." }).waitFor();
+    await lp.getByRole("heading", { name: "ScopeFlow — stop scope creep before it turns into unpaid work" }).waitFor();
     // Pricing stays in the header on a phone.
     assert.ok(await lp.getByRole("navigation", { name: "Main" }).getByRole("link", { name: "Pricing" }).isVisible(), "Pricing link visible on a phone");
     assert.equal(await lp.evaluate(() => document.documentElement.scrollWidth > window.innerWidth || window.innerWidth > 390), false, "home page scrolls sideways on a phone");
@@ -97,8 +103,21 @@ try {
     }
     await lp.waitForTimeout(1200);
     assert.equal(await lp.locator("[data-reveal]:not([data-in])").count(), 0, "every section has been revealed");
+    // The carousel moves with its buttons (and by swipe: it's a native scroller).
+    const track = lp.locator("#how ul");
+    const before = await track.evaluate((el) => el.scrollLeft);
+    await lp.locator("#how").getByRole("button", { name: "Next" }).click();
+    await lp.waitForFunction((b) => document.querySelector("#how ul").scrollLeft > b + 50, before);
     await lp.evaluate(() => window.scrollTo(0, 0));
     await shot(lp, "00-landing-mobile");
+    // "Start free" hands the name and email to the real sign-up form; it creates nothing by itself.
+    await lp.locator("#start-name").fill("Asha Rao");
+    await lp.locator("#start-email").fill("asha@example.test");
+    await lp.getByRole("button", { name: "Continue to sign up" }).click();
+    await lp.waitForURL(/\/signup$/); // nothing personal in the address
+    assert.equal(await lp.locator("#fullName").inputValue(), "Asha Rao");
+    assert.equal(await lp.locator("#email").inputValue(), "asha@example.test");
+    assert.equal(await lp.locator("#password").inputValue(), "");
     await lp.close();
   }
   {
@@ -149,7 +168,7 @@ try {
       return res.text();
     };
     const pages = {
-      "/": ["Get paid for every “just one small change”.", "Every client job, on the record.", "Does ScopeFlow take payments?", "Built in Hyderabad by Prakash Mummidisetti"],
+      "/": ["stop scope creep before it turns into unpaid work", "Define the scope, track every revision", "Does ScopeFlow take payments?", "Does ScopeFlow use AI?", "Built in Hyderabad by Prakash Mummidisetti"],
       "/pricing": ["Simple pricing.", "₹499"], // plans fetched at build time
       "/refunds": ["Refund and cancellation policy", "within 7 days"],
       "/contact": ["Contact us", "Hyderabad, Telangana"],

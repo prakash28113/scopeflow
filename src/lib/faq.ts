@@ -24,6 +24,17 @@ export const HOME_FAQ: [string, string][] = [
   ["Can I use it on my phone?", "Yes. Everything works on a phone, for you and for your clients."],
 ];
 
+/**
+ * Shown on the home page only, after HOME_FAQ, and kept out of structured data: AI suggestions are in
+ * early access, not a feature every account has.
+ */
+export const HOME_FAQ_EARLY: [string, string][] = [
+  [
+    "Does ScopeFlow use AI?",
+    "AI suggestions are in early access and are being opened to accounts gradually. They draft a scope from your description, check a client request against the approved scope, and answer questions about your own projects. You can edit every suggestion, nothing changes until you confirm, and it never makes up prices or dates. Everything else in ScopeFlow works without AI.",
+  ],
+];
+
 export const PRICING_FAQ: [string, string][] = [
   ["Can I use ScopeFlow for free?", "Yes. Free includes 2 active projects and 5 clients with scopes, approvals, revision tracking, change orders, quotes, invoices and payment tracking. Analytics, expenses and the approval record PDF are on Solo (₹499/month). Completed and cancelled projects don't count toward the limit; drafts do."],
   ["Can I change plans later?", "Yes. You can cancel from Plan & usage at any time; when the paid period ends you can choose another plan. Downgrading never deletes anything."],
