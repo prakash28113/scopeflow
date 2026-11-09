@@ -286,6 +286,24 @@ window.Razorpay.prototype.open=function(){var o=this.o;window.__rzp=o;window.__r
     await ctx.close();
   }
 
+  // ------------------------------------------------------------------ T2-04
+  step("T2-04 a wrong password shows the generic error and the Google line, for any address");
+  {
+    const ctx = await newCtx();
+    const p = await ctx.newPage(); // the refused sign-ins are expected 400s
+    for (const email of ["asha@fixes.test", "nobody-here@fixes.test"]) {
+      await p.goto(`${BASE}/login`);
+      assert.equal(await p.getByTestId("google-hint").count(), 0, "not before an error");
+      await p.getByLabel("Email").fill(email);
+      await p.getByLabel("Password").fill("definitely-wrong-1");
+      await p.getByRole("button", { name: "Sign in" }).click();
+      await p.getByText("Incorrect email or password.").waitFor();
+      assert.equal(await p.getByTestId("google-hint").innerText(), "Signed up with Google? Use 'Continue with Google' above.");
+    }
+    await shot(p, "t2-04-google-hint");
+    await ctx.close();
+  }
+
   if (errors.length) throw new Error(`Browser errors:\n${errors.join("\n")}`);
   console.log("✓ fix-list checks passed with no browser errors");
 } finally {

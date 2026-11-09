@@ -14,8 +14,8 @@ import { BetaBadge } from "@/components/site-footer";
 import { issuesToFieldErrors, newPasswordSchema, resetRequestSchema, signInSchema, signUpSchema, type FieldErrors } from "@/lib/validation";
 import { readAuthHash, readRecoveryHash } from "@/lib/recovery";
 import { onboardingUrl, parseIntent, readIntent, rememberIntent } from "@/lib/plan-intent";
-import { CAPTCHA_FAILED, RESEND_WAIT_S, captchaBlocks, captchaOptions, confirmRedirect, isCaptchaError, resendError, signInError, signUpOutcome } from "@/lib/auth-flow";
-import { GoogleSignIn } from "@/components/google-signin";
+import { CAPTCHA_FAILED, GOOGLE_HINT, RESEND_WAIT_S, WRONG_PASSWORD, captchaBlocks, captchaOptions, confirmRedirect, isCaptchaError, resendError, signInError, signUpOutcome } from "@/lib/auth-flow";
+import { GoogleSignIn, googleSignInAvailable } from "@/components/google-signin";
 
 function AuthLayout({ children }: { children: ReactNode }) {
   return (
@@ -121,6 +121,11 @@ export function LoginPage() {
       </div>
       <form onSubmit={onSubmit} className="space-y-4" noValidate>
         {f.error ? <Alert>{f.error}</Alert> : null}
+        {f.error === WRONG_PASSWORD && googleSignInAvailable ? (
+          <p className="!mt-2 text-[13px] text-ink-2" data-testid="google-hint">
+            {GOOGLE_HINT}
+          </p>
+        ) : null}
         <Field label="Email" htmlFor="email" error={f.fieldErrors.email}>
           <Input id="email" name="email" type="email" autoComplete="email" required />
         </Field>
