@@ -14,6 +14,7 @@ import { STATUS_TEXT, useInvoices, useMyPlan, usePlans, type Interval, type Plan
 import { ActionButton } from "@/components/form-bits";
 import { BILLING_ENABLED, buyPlan, cancelPlan, useBillingStatus } from "@/lib/billing";
 import { planSale } from "@/lib/sale";
+import { ACTIVATING_TEXT, waitForPaidPlan } from "@/lib/activation";
 import { PRICE_TAX_NOTE } from "@/lib/business";
 
 export default function PlanPage() {
@@ -63,11 +64,7 @@ export default function PlanPage() {
   /** After Razorpay confirms, wait (briefly) for the plan to switch on. */
   async function waitForPlan() {
     setActivating(true);
-    for (let i = 0; i < 20; i++) {
-      const fresh = await qc.fetchQuery({ queryKey: ["my-plan"], staleTime: 0, queryFn: async () => (await supabase.rpc("my_plan")).data });
-      if (fresh?.effective_plan && fresh.effective_plan !== "free") break;
-      await new Promise((r) => setTimeout(r, 1500));
-    }
+    await waitForPaidPlan(async () => (await qc.fetchQuery({ queryKey: ["my-plan"], staleTime: 0, queryFn: async () => (await supabase.rpc("my_plan")).data }))?.effective_plan);
     setActivating(false);
     await Promise.all([qc.invalidateQueries({ queryKey: ["my-plan"] }), qc.invalidateQueries({ queryKey: ["invoices"] })]);
   }
@@ -77,7 +74,7 @@ export default function PlanPage() {
     try {
       const outcome = await buyPlan(id, interval);
       if (outcome.kind === "paid") {
-        toast("positive", "Payment received. Switching your plan on…");
+        toast("positive", ACTIVATING_TEXT);
         await waitForPlan();
         const now = qc.getQueryData<{ effective_plan?: string }>(["my-plan"]);
         toast(now?.effective_plan !== "free" ? "positive" : "info", now?.effective_plan !== "free" ? "Your plan is active. Thank you!" : "Your payment went through. Your plan will switch on within a few minutes.");
@@ -142,8 +139,8 @@ export default function PlanPage() {
               </p>
             ) : null}
             {activating ? (
-              <p className="rounded-md bg-accent-soft px-3 py-2 text-accent-hover" role="status">
-                Payment received. Switching your plan on…
+              <p className="rounded-md bg-accent-soft px-3 py-2 text-accent-hover" role="status" data-testid="activating">
+                {ACTIVATING_TEXT}
               </p>
             ) : null}
             {effective.id !== plan.id ? (

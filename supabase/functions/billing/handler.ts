@@ -4,7 +4,8 @@
  *   GET  /billing/status    signed in → is checkout available to this account, and in which mode
  *   POST /billing/checkout  signed in → creates a Razorpay subscription for { plan, interval }
  *   POST /billing/verify    signed in → checks the payment signature Checkout returned and, if it's
- *                           genuine, applies the subscription's state from Razorpay right away
+ *                           genuine and Razorpay says the subscription is active, applies it right
+ *                           away; otherwise answers { status: "pending" } and the webhook finishes it
  *   POST /billing/cancel    signed in → cancels the current subscription at the end of the paid period
  *   POST /billing/webhook   Razorpay → verified by HMAC-SHA256 signature, then recorded once per event
  *
@@ -203,9 +204,11 @@ async function checkout(req: Request, cfg: BillingConfig, f: Fetch) {
 
 /**
  * Checkout's success callback: Razorpay signs payment_id + "|" + subscription_id with the key secret.
- * A genuine signature means Razorpay took the payment, so the subscription's current state is fetched
- * from Razorpay and applied now instead of waiting for the webhook (which still arrives and is a no-op
- * if nothing changed). A wrong or missing signature changes nothing.
+ * A genuine signature means the person finished Razorpay's window, so the subscription's current
+ * state is fetched from Razorpay. Only 'active' (the first charge is captured) is applied here.
+ * Anything else, including 'authenticated' (mandate set up, money not yet taken), is "pending":
+ * nothing is activated, and the plan switches on when Razorpay's webhook reports the captured
+ * payment. A wrong or missing signature changes nothing.
  */
 async function verify(req: Request, cfg: BillingConfig, f: Fetch) {
   await signedInUser(req, cfg, f);
@@ -223,12 +226,13 @@ async function verify(req: Request, cfg: BillingConfig, f: Fetch) {
     throw new HttpError(400, "We couldn't confirm this payment. If money left your account, it will show here once Razorpay confirms it.");
   }
   const sub = await razorpay<Record<string, unknown>>(cfg, f, `/subscriptions/${encodeURIComponent(subscriptionId)}`);
+  if (sub?.status !== "active") return { verified: true, status: "pending", result: "pending" };
   const result = await rpc<string>(cfg, f, "process_razorpay_event", {
     p_event_id: `verify:${paymentId}`,
     p_mode: billingMode(cfg.keyId),
     p_event: { event: "subscription.activated", payload: { subscription: { entity: sub } } },
   });
-  return { verified: true, result };
+  return { verified: true, status: result === "applied" || result === "duplicate" ? "active" : "pending", result };
 }
 
 async function cancel(req: Request, cfg: BillingConfig, f: Fetch) {
@@ -255,7 +259,9 @@ async function webhook(req: Request, cfg: BillingConfig, f: Fetch) {
   } catch {
     return reply(400, { error: "bad json" });
   }
-  if (!String(event.event ?? "").startsWith("subscription.")) return reply(200, { result: "not_subscription" });
+  // Subscription events, plus a captured payment (matched to an account only through its subscription).
+  const type = String(event.event ?? "");
+  if (!type.startsWith("subscription.") && type !== "payment.captured") return reply(200, { result: "not_subscription" });
   // Razorpay's event id makes redeliveries idempotent; the body's hash is the fallback.
   const id = req.headers.get("x-razorpay-event-id") || `sha256:${hex(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(raw)))}`;
   const result = await rpc<string>(cfg, f, "process_razorpay_event", { p_event_id: id.slice(0, 200), p_mode: billingMode(cfg.keyId), p_event: event });

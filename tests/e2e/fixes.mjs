@@ -231,10 +231,66 @@ try {
     assert.ok(pricing.includes('"price":"499"') || pricing.includes('"price":499') || !pricing.includes('"@type":"Offer"'), "structured-data prices untouched");
   }
 
+  // ------------------------------------------------------------------ T1-04
+  step("T1-04 Razorpay says 'authenticated' (nothing charged yet): the plan stays Free and the page waits; the captured payment switches Solo on");
+  {
+    const { createHmac } = await import("node:crypto");
+    await fetch(`${AUTH}/__test/razorpay-status?status=authenticated`);
+    const ctx = await newCtx();
+    await ctx.route("https://checkout.razorpay.com/v1/checkout.js", (route) =>
+      route.fulfill({
+        contentType: "text/javascript",
+        body: `window.Razorpay=function(o){this.o=o};window.Razorpay.prototype.on=function(){};
+window.Razorpay.prototype.open=function(){var o=this.o;window.__rzp=o;window.__rzpPay=function(sig,pay){o.handler({razorpay_payment_id:pay,razorpay_subscription_id:o.subscription_id,razorpay_signature:sig})}}`,
+      }),
+    );
+    const p = await newPage(ctx, "t1-04");
+    await signUp(p, "Esha Pillai", "payer@fixes.test");
+    await p.goto(`${BASE}/plan`);
+    await p.getByRole("radio", { name: "Monthly" }).click();
+    await p.getByRole("button", { name: "Upgrade to Solo" }).click();
+    await p.waitForFunction(() => window.__rzp);
+    const opts = await p.evaluate(() => ({ sub: window.__rzp.subscription_id, desc: window.__rzp.description, keys: Object.keys(window.__rzp).sort() }));
+    // T1-03: the GST note is in Razorpay's description; no amount or plan is passed from the browser.
+    assert.equal(opts.desc, "Solo plan, billed monthly (test mode). ₹499/month. No GST is charged: ScopeFlow isn't GST-registered.");
+    assert.ok(!opts.keys.includes("amount") && !opts.keys.includes("plan_id"));
+    const verify = p.waitForResponse((r) => r.url().endsWith("/billing/verify"));
+    await p.evaluate(([s]) => window.__rzpPay(s, "pay_fix1"), [createHmac("sha256", "e2e-razorpay-key-secret").update(`pay_fix1|${opts.sub}`).digest("hex")]);
+    assert.deepEqual(await (await verify).json(), { verified: true, status: "pending", result: "pending" });
+    await p.getByTestId("activating").getByText("Payment received, activating… this can take a minute").waitFor();
+    await p.waitForTimeout(3500); // a few polls later: still Free
+    assert.match(await p.getByRole("heading", { name: /plan$/ }).first().innerText(), /Free plan/);
+    assert.equal(await p.getByTestId("activating").count(), 1, "still waiting");
+    await shot(p, "t1-04-activating");
+    // Razorpay's signed webhook: first only the mandate (pending), then the captured charge.
+    const hook = async (evt, id) => {
+      const body = JSON.stringify(evt);
+      const r = await fetch("http://127.0.0.1:54321/functions/v1/billing/webhook", {
+        method: "POST",
+        headers: { "content-type": "application/json", "x-razorpay-event-id": id, "x-razorpay-signature": createHmac("sha256", "e2e-razorpay-webhook-secret").update(body).digest("hex") },
+        body,
+      });
+      return (await r.json()).result;
+    };
+    const t = Math.floor(Date.now() / 1000);
+    const entity = (status) => ({ id: opts.sub, status, customer_id: "cust_e2e", current_start: t, current_end: t + 30 * 86400 });
+    assert.equal(await hook({ event: "subscription.authenticated", payload: { subscription: { entity: entity("authenticated") } } }, "evt_fix_auth"), "pending");
+    await p.waitForTimeout(2000);
+    assert.match(await p.getByRole("heading", { name: /plan$/ }).first().innerText(), /Free plan/);
+    const charged = { event: "subscription.charged", payload: { subscription: { entity: entity("active") }, payment: { entity: { id: "pay_fix1", invoice_id: "inv_fix1", amount: 49900, currency: "INR", status: "captured", created_at: t } } } };
+    assert.equal(await hook(charged, "evt_fix_charge"), "applied");
+    assert.equal(await hook(charged, "evt_fix_charge"), "duplicate");
+    await p.getByText("Your plan is active. Thank you!").waitFor();
+    await p.getByRole("heading", { name: "Solo plan" }).waitFor();
+    await fetch(`${AUTH}/__test/razorpay-status?status=active`);
+    await ctx.close();
+  }
+
   if (errors.length) throw new Error(`Browser errors:\n${errors.join("\n")}`);
   console.log("✓ fix-list checks passed with no browser errors");
 } finally {
   await settings("confirm=0&captcha=0").catch(() => {});
   await fetch(`${AUTH}/__test/purchasable?plan=solo&on=0`).catch(() => {});
+  await fetch(`${AUTH}/__test/razorpay-status?status=active`).catch(() => {});
   await browser.close();
 }

@@ -259,6 +259,10 @@ async function auth(req, res, url) {
     return link ? json(res, 200, { link }) : json(res, 404, { msg: "no recovery email" });
   }
   // Local test stand-in only: put an account on a plan, like the SQL editor's admin_set_plan.
+  if (path === "/__test/razorpay-status" && req.method === "GET") {
+    rzpStatus = url.searchParams.get("status") === "authenticated" ? "authenticated" : "active";
+    return json(res, 200, { status: rzpStatus });
+  }
   if (path === "/__test/purchasable" && req.method === "GET") {
     // What the release does for a plan with live keys: marks it on sale.
     await q("update public.plans set purchasable = $2 where id = $1 returning id", [url.searchParams.get("plan"), url.searchParams.get("on") === "1"]);
@@ -286,7 +290,7 @@ async function auth(req, res, url) {
 export const E2E_RAZORPAY = { keyId: "rzp_test_e2estandin01", keySecret: "e2e-razorpay-key-secret", webhookSecret: "e2e-razorpay-webhook-secret" };
 const BILLING = {
   ...E2E_RAZORPAY,
-  testers: ["buyer@studio.test"],
+  testers: ["buyer@studio.test", "payer@fixes.test"],
   origins: ["http://localhost:3000", "http://127.0.0.1:3000"],
   supabaseUrl: "http://127.0.0.1:54321",
   anonKey: ANON,
@@ -295,6 +299,8 @@ const BILLING = {
 };
 let rzpSeq = 0;
 const rzpSubs = new Map();
+// What the fake reports for a subscription after checkout: "active" (charged) or "authenticated" (mandate only).
+let rzpStatus = "active";
 async function fakeRazorpay(url, init = {}) {
   const u = new URL(url);
   const body = init.body ? JSON.parse(init.body) : {};
@@ -315,7 +321,7 @@ async function fakeRazorpay(url, init = {}) {
     // After the checkout payment the subscription is active for one period.
     const start = now();
     const year = sub.notes?.billing_interval === "year";
-    return ok({ ...sub, status: "active", current_start: start, current_end: start + (year ? 365 : 30) * 86400 });
+    return ok({ ...sub, status: rzpStatus, current_start: start, current_end: start + (year ? 365 : 30) * 86400 });
   }
   return new Response(JSON.stringify({ error: { description: `fake razorpay: ${init.method} ${u.pathname}` } }), { status: 404 });
 }

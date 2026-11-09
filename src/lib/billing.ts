@@ -95,7 +95,7 @@ export async function buyPlan(plan: PlanId, interval: Interval): Promise<Checkou
     const rzp = new window.Razorpay!({
       ...checkoutOptions(c, location.origin),
       handler: (r: RazorpayResponse) => {
-        call<{ result: string }>("verify", { method: "POST", body: JSON.stringify(r) }).then(
+        call<{ result: string; status?: "active" | "pending" }>("verify", { method: "POST", body: JSON.stringify(r) }).then(
           (v) => resolve({ kind: "paid", result: v.result }),
           // The payment went through at Razorpay; the webhook will still switch the plan on.
           () => resolve({ kind: "paid", result: "pending" }),
