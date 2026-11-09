@@ -77,7 +77,7 @@ export function PlanCards({
             )}
           >
             {recommended ? (
-              <span className="absolute -top-2.5 left-6 rounded-full bg-accent px-2.5 py-0.5 text-[11px] font-semibold text-white">Recommended</span>
+              <span className="absolute -top-2.5 left-6 rounded-full bg-accent px-2.5 py-0.5 text-[11px] font-semibold text-on-accent">Recommended</span>
             ) : null}
             <h3 className="text-[15px] font-semibold">{p.name}</h3>
             <p className="mt-3 flex items-baseline gap-1">

@@ -19,13 +19,13 @@ export function cx(...c: (string | false | null | undefined)[]) {
 type Variant = "primary" | "secondary" | "ghost" | "danger";
 const variants: Record<Variant, string> = {
   primary:
-    "bg-accent text-white border border-accent shadow-[var(--shadow-xs),inset_0_1px_0_rgb(255_255_255/0.12)] hover:bg-accent-hover hover:border-accent-hover active:translate-y-px",
-  secondary: "bg-surface text-ink border border-line-strong shadow-[var(--shadow-xs)] hover:bg-sunken hover:border-[#c0c6d0] active:translate-y-px",
+    "bg-accent text-on-accent border border-accent shadow-[var(--shadow-xs),inset_0_1px_0_rgb(255_255_255/0.12)] hover:bg-accent-hover hover:border-accent-hover active:translate-y-px",
+  secondary: "bg-surface text-ink border border-line-strong shadow-[var(--shadow-xs)] hover:bg-sunken hover:border-line-hover active:translate-y-px",
   ghost: "text-ink-2 border border-transparent hover:bg-sunken hover:text-ink",
   danger: "bg-surface text-danger border border-line-strong shadow-[var(--shadow-xs)] hover:bg-danger-soft hover:border-danger/30 active:translate-y-px",
 };
 const base =
-  "inline-flex items-center justify-center gap-2 rounded-lg font-medium transition-[background-color,border-color,color,transform] duration-150 disabled:opacity-50 disabled:pointer-events-none whitespace-nowrap select-none";
+  "sf-btn inline-flex items-center justify-center gap-2 rounded-lg font-medium transition-[background-color,border-color,color,transform] duration-150 disabled:opacity-50 disabled:pointer-events-none whitespace-nowrap select-none";
 const sizes = { sm: "h-8 px-3 text-[13px]", md: "h-9 px-3.5 text-sm" };
 
 export function buttonClass(variant: Variant = "primary", size: "sm" | "md" = "md") {
@@ -52,7 +52,7 @@ export function LinkButton({
 
 // ------------------------------------------------------------------ form fields
 const control =
-  "w-full rounded-lg border border-line-strong bg-surface px-3 text-sm text-ink shadow-[var(--shadow-xs)] placeholder:text-subtle transition-[border-color,box-shadow] duration-150 hover:border-[#b9c0cc] focus:border-accent focus:outline-none focus:ring-4 focus:ring-accent/12 disabled:bg-sunken disabled:text-muted aria-invalid:border-danger aria-invalid:focus:ring-danger/12";
+  "w-full rounded-lg border border-line-strong bg-surface px-3 text-sm text-ink shadow-[var(--shadow-xs)] placeholder:text-subtle transition-[border-color,box-shadow] duration-150 hover:border-line-hover focus:border-accent focus:outline-none focus:ring-4 focus:ring-accent/12 disabled:bg-sunken disabled:text-muted aria-invalid:border-danger aria-invalid:focus:ring-danger/12";
 
 export function Input({ className, ...props }: ComponentProps<"input">) {
   return <input className={cx(control, "h-10", className)} {...props} />;
@@ -108,10 +108,10 @@ const alertIcon = {
 };
 export function Alert({ tone = "danger", children }: { tone?: "danger" | "positive" | "info" | "warning"; children: ReactNode }) {
   const tones = {
-    danger: "border-danger/20 bg-danger-soft text-[#912018] [--dot:var(--color-danger)]",
-    positive: "border-positive/20 bg-positive-soft text-[#05603a] [--dot:var(--color-positive)]",
-    info: "border-accent-line bg-accent-soft text-[#003f91] [--dot:var(--color-accent)]",
-    warning: "border-warning/25 bg-warning-soft text-[#93370d] [--dot:#dc6803]",
+    danger: "border-danger/20 bg-danger-soft text-danger-ink [--dot:var(--color-danger)]",
+    positive: "border-positive/20 bg-positive-soft text-positive-ink [--dot:var(--color-positive)]",
+    info: "border-accent-line bg-accent-soft text-info-ink [--dot:var(--color-accent)]",
+    warning: "border-warning/25 bg-warning-soft text-warning-ink [--dot:#dc6803]",
   };
   return (
     <div role={tone === "danger" ? "alert" : "status"} className={cx("flex items-start gap-2.5 rounded-lg border px-3.5 py-2.5 text-sm leading-relaxed", tones[tone])}>
@@ -253,7 +253,7 @@ const statusTone: Record<ProjectStatus, BadgeTone> = {
 type BadgeTone = "neutral" | "accent" | "positive" | "warning" | "danger";
 const badgeTones: Record<BadgeTone, { box: string; dot: string }> = {
   neutral: { box: "bg-sunken text-ink-2", dot: "bg-subtle" },
-  accent: { box: "bg-accent-soft text-[#0047a3]", dot: "bg-accent" },
+  accent: { box: "bg-accent-soft text-info-ink", dot: "bg-accent" },
   positive: { box: "bg-positive-soft text-positive", dot: "bg-[#17b26a]" },
   warning: { box: "bg-warning-soft text-warning", dot: "bg-[#f79009]" },
   danger: { box: "bg-danger-soft text-danger", dot: "bg-[#f04438]" },
