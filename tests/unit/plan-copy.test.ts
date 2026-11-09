@@ -88,3 +88,43 @@ describe("T2-05 the Solo card", () => {
     expect(SOLO_OFFER_DESCRIPTION.match(/Unlimited/g)).toHaveLength(1);
   });
 });
+
+import { LIMIT_LATER_LABEL, LIMIT_UPGRADE_LABEL, limitPrompt, ordinal } from "@/lib/plan-copy";
+import { PlanLimitCard } from "@/components/plans";
+import { isRepeat, rememberCheckoutSource, takeCheckoutSource } from "@/lib/usage";
+
+describe("T2-11 the limit prompt gives the price, the reason and a way to upgrade", () => {
+  it("names the next project or client and what Solo costs", () => {
+    expect(limitPrompt("active_projects", 2)).toBe("Your 3rd active project needs Solo: ₹499/month. One approved extra of ₹2,500 (example) covers 5 months.");
+    expect(limitPrompt("clients", 5)).toBe("Your 6th client needs Solo: ₹499/month. One approved extra of ₹2,500 (example) covers 5 months.");
+    expect([1, 2, 3, 4, 11, 12, 13, 21, 22, 23, 101].map(ordinal)).toEqual(["1st", "2nd", "3rd", "4th", "11th", "12th", "13th", "21st", "22nd", "23rd", "101st"]);
+  });
+  it("the card: Upgrade to Solo goes to the plan page with Solo chosen; Not now leaves", () => {
+    for (const kind of ["active_projects", "clients"] as const) {
+      const out = html(createElement(PlanLimitCard, { limit: { kind, limit: kind === "clients" ? 5 : 2, used: kind === "clients" ? 5 : 2, plan: "free", message: "m" } }));
+      expect(out).toContain(limitPrompt(kind, kind === "clients" ? 5 : 2));
+      expect(out).toMatch(/<a[^>]*href="\/plan\?plan=solo&interval=monthly"[^>]*>Upgrade to Solo<\/a>/);
+      expect(out).toMatch(/<a[^>]*href="\/dashboard"[^>]*>Not now<\/a>/);
+      expect(out).not.toContain("See plans");
+    }
+    expect([LIMIT_UPGRADE_LABEL, LIMIT_LATER_LABEL]).toEqual(["Upgrade to Solo", "Not now"]);
+  });
+  it("remembers where Upgrade was pressed, for one checkout", () => {
+    const m = new Map<string, string>();
+    const store = { getItem: (k: string) => m.get(k) ?? null, setItem: (k: string, v: string) => void m.set(k, v), removeItem: (k: string) => void m.delete(k) };
+    expect(takeCheckoutSource(store)).toBe("plan");
+    rememberCheckoutSource("limit", store);
+    expect(takeCheckoutSource(store)).toBe("limit");
+    expect(takeCheckoutSource(store)).toBe("plan");
+    rememberCheckoutSource("pricing", store);
+    expect(takeCheckoutSource(store)).toBe("pricing");
+    expect(takeCheckoutSource(null)).toBe("plan");
+  });
+  it("counts a limit once even if the card renders again straight away", () => {
+    const seen = new Map<string, number>();
+    expect(isRepeat("limit_hit:clients", 1000, seen)).toBe(false);
+    expect(isRepeat("limit_hit:clients", 30_000, seen)).toBe(true);
+    expect(isRepeat("limit_hit:active_projects", 30_000, seen)).toBe(false);
+    expect(isRepeat("limit_hit:clients", 62_000, seen)).toBe(false);
+  });
+});

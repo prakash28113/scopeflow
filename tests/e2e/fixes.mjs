@@ -428,6 +428,7 @@ window.Razorpay.prototype.open=function(){var o=this.o;window.__rzp=o;window.__r
     assert.equal(order[0], "/home/hero-stamp-m-683.webp", `the hero is the first file asked for (${order.slice(0, 3).join(", ")})`);
     assert.ok(order.indexOf("/boot.js") < order.findIndex((f) => f.startsWith("/assets/index-")), "the app's code starts from boot.js");
     assert.ok(!order.includes("/home/hero-stamp-1024.webp"), "the wide photo isn't downloaded on a phone");
+    await p.waitForFunction(() => document.documentElement.dataset.app === "ready");
     // Hydrated: an in-app link moves without a full page load.
     await p.evaluate(() => (window.__sameDocument = true));
     await p.getByTestId("public-header").getByRole("link", { name: "Pricing" }).click();
@@ -439,6 +440,39 @@ window.Razorpay.prototype.open=function(){var o=this.o;window.__rzp=o;window.__r
     await w.goto(`${BASE}/`);
     assert.match(await w.locator("section#top picture img").evaluate((el) => el.currentSrc), /\/home\/hero-stamp-(640|1024)\.webp$/, "the wide photo on desktop");
     await wide.close();
+  }
+
+  // ------------------------------------------------------------------ T2-11
+  step("T2-11 a Free account at its limit sees the price and reason, and Upgrade to Solo opens the plan page with Solo chosen");
+  {
+    const ctx = await newCtx();
+    const p = await newPage(ctx, "t2-11");
+    await signUp(p, "Gauri Iyer", "gauri@fixes.test");
+    for (const n of [1, 2]) {
+      await p.goto(`${BASE}/projects/new`);
+      await p.getByLabel("Project title").fill(`Limit project ${n}`);
+      await p.getByLabel("Client name").fill(`Client ${n}`);
+      await p.getByLabel("Client email").fill(`client${n}@limit.test`);
+      await p.getByLabel("Deliverable 1", { exact: true }).fill("Logo");
+      await p.getByLabel("Agreed budget").fill("1000");
+      await p.getByRole("button", { name: "Create project" }).click();
+      await p.waitForURL(/\/projects\/[0-9a-f-]{36}$/);
+    }
+    await p.goto(`${BASE}/projects/new`);
+    assert.equal(await p.getByTestId("limit-prompt").innerText(), "Your 3rd active project needs Solo: ₹499/month. One approved extra of ₹2,500 (example) covers 5 months.");
+    assert.equal(await p.getByRole("link", { name: "Not now" }).getAttribute("href"), "/dashboard");
+    await shot(p, "t2-11-limit");
+    await p.getByTestId("limit-upgrade").click();
+    await p.waitForURL(/\/plan\?plan=solo&interval=monthly$/);
+    await p.locator('[data-plan="solo"][data-selected="true"]').waitFor();
+    // Counted for the owner: one limit_hit, nothing personal.
+    const events = await p.evaluate(async () => {
+      const token = Object.values(localStorage).map((v) => { try { return JSON.parse(v)?.access_token; } catch { return null; } }).find(Boolean);
+      const r = await fetch("http://127.0.0.1:54321/rest/v1/usage_events?select=event,detail", { headers: { authorization: `Bearer ${token}`, apikey: token } });
+      return r.json();
+    });
+    assert.deepEqual(events, [{ event: "limit_hit", detail: "active_projects" }]);
+    await ctx.close();
   }
 
   if (errors.length) throw new Error(`Browser errors:\n${errors.join("\n")}`);

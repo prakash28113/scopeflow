@@ -15,6 +15,7 @@ import { ActionButton } from "@/components/form-bits";
 import { BILLING_ENABLED, buyPlan, cancelPlan, preloadCheckout, useBillingStatus } from "@/lib/billing";
 import { planSale } from "@/lib/sale";
 import { ACTIVATING_TEXT, waitForPaidPlan } from "@/lib/activation";
+import { logUsage, takeCheckoutSource } from "@/lib/usage";
 import { PRICE_TAX_NOTE } from "@/lib/business";
 
 export default function PlanPage() {
@@ -80,7 +81,7 @@ export default function PlanPage() {
   async function buy(id: PlanId) {
     setBuying(id);
     try {
-      const outcome = await buyPlan(id, interval);
+      const outcome = await buyPlan(id, interval, () => logUsage("checkout_open", takeCheckoutSource()));
       if (outcome.kind === "paid") {
         toast("positive", ACTIVATING_TEXT);
         await waitForPlan();

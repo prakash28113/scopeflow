@@ -24,3 +24,19 @@ export const soloYearlyNote = (yearPrice: string, saved: string) => `${yearPrice
 
 /** Solo in a sentence, for search engines (structured data). */
 export const SOLO_OFFER_DESCRIPTION = "Unlimited active projects and clients, profit per client and per month, expense log, approval record PDF and the full template library";
+
+const ORDINAL_ENDINGS: Record<string, string> = { one: "st", two: "nd", few: "rd", other: "th" };
+const ordinalRules = new Intl.PluralRules("en", { type: "ordinal" });
+/** 3 → "3rd", 6 → "6th", 21 → "21st". */
+export const ordinal = (n: number) => `${n}${ORDINAL_ENDINGS[ordinalRules.select(n)] ?? "th"}`;
+
+/**
+ * What a Free account reads when it meets a plan limit: the next one (the 3rd active project, the
+ * 6th client) needs Solo, the price, and what that price is next to one piece of extra work.
+ */
+export function limitPrompt(kind: "active_projects" | "clients", limit: number): string {
+  const next = `${ordinal(limit + 1)} ${kind === "clients" ? "client" : "active project"}`;
+  return `Your ${next} needs Solo: ₹499/month. One approved extra of ₹2,500 (example) covers 5 months.`;
+}
+export const LIMIT_UPGRADE_LABEL = "Upgrade to Solo";
+export const LIMIT_LATER_LABEL = "Not now";

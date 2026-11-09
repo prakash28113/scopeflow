@@ -99,7 +99,7 @@ export type CheckoutOutcome = { kind: "paid"; result: string } | { kind: "dismis
  * Creates the subscription, opens Razorpay's payment window, and on success sends the signed
  * response back for verification. Resolves when the window closes, with what happened.
  */
-export async function buyPlan(plan: PlanId, interval: Interval): Promise<CheckoutOutcome> {
+export async function buyPlan(plan: PlanId, interval: Interval, onOpen?: () => void): Promise<CheckoutOutcome> {
   timeStart("checkout-open");
   const [c] = await Promise.all([call<Checkout>("checkout", { method: "POST", body: JSON.stringify({ plan, interval }) }), loadCheckout()]);
   return new Promise<CheckoutOutcome>((resolve) => {
@@ -124,6 +124,7 @@ export async function buyPlan(plan: PlanId, interval: Interval): Promise<Checkou
     });
     rzp.open();
     timeEnd("checkout-open");
+    onOpen?.();
   });
 }
 

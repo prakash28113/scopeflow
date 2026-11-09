@@ -1,10 +1,12 @@
 import { PRICE_TAX_NOTE } from "@/lib/business";
-import { FREE_REMINDERS_LINE, SOLO_LINES, SOLO_VALUE_LINE, soloYearlyNote } from "@/lib/plan-copy";
+import { FREE_REMINDERS_LINE, LIMIT_LATER_LABEL, LIMIT_UPGRADE_LABEL, SOLO_LINES, SOLO_VALUE_LINE, limitPrompt, soloYearlyNote } from "@/lib/plan-copy";
+import { useEffect } from "react";
+import { logUsage, rememberCheckoutSource } from "@/lib/usage";
 import { Link } from "react-router";
 import { BILLING_ENABLED } from "@/lib/billing";
 import { planSale, type Sale } from "@/lib/sale";
 import { Button, Meter, buttonClass, cx } from "./ui";
-import { SOLO_CTA_LABEL } from "@/lib/plan-intent";
+import { SOLO_CTA_LABEL, planUrl } from "@/lib/plan-intent";
 import { formatPrice, limitText, priceLabel, usePlans, type Interval, type Plan, type PlanId, type PlanLimit } from "@/lib/plans";
 
 export function IntervalToggle({ value, onChange }: { value: Interval; onChange: (v: Interval) => void }) {
@@ -47,6 +49,7 @@ export function PlanCards({
   testMode,
   soloLink,
   onSoloIntent,
+  onSoloClick,
   selected,
   sale = (p: Plan) => planSale(p, BILLING_ENABLED),
 }: {
@@ -54,6 +57,8 @@ export function PlanCards({
   soloLink?: { to: string; label: string; current: boolean };
   /** Hover or focus on the Solo button (signed in): a chance to get checkout ready. */
   onSoloIntent?: () => void;
+  /** The signed-in Solo button was pressed (pricing page). */
+  onSoloClick?: () => void;
   /** Plan & usage, arriving from pricing: the plan to point at. */
   selected?: PlanId | null;
   /** Is the plan on sale (public claim) — the shared answer from planSale. Signed out: build flag + catalogue. */
@@ -143,6 +148,7 @@ export function PlanCards({
                   data-testid={p.id === "solo" ? "solo-cta" : undefined}
                   onMouseEnter={p.id === "solo" ? onSoloIntent : undefined}
                   onFocus={p.id === "solo" ? onSoloIntent : undefined}
+                  onClick={p.id === "solo" ? onSoloClick : undefined}
                 >
                   {p.id === "solo" && soloLink ? soloLink.label : SOLO_CTA_LABEL}
                 </Link>
@@ -262,9 +268,13 @@ export function UsageMeter({ label, used, limit }: { label: string; used: number
 /** Shown when the database refuses a creation because of the plan. Explains, never nags. */
 export function PlanLimitCard({ limit }: { limit: PlanLimit }) {
   const what = limit.kind === "clients" ? "clients" : "active projects";
+  // Counted once per time the card appears (no names or amounts; see usage_events).
+  useEffect(() => logUsage("limit_hit", limit.kind), [limit.kind]);
   return (
     <div role="alert" className="rounded-[var(--radius-card)] border border-warning/40 bg-warning-soft p-5">
-      <p className="text-sm font-semibold text-ink">You've reached the Free plan's {what}</p>
+      <p className="text-sm font-semibold text-ink" data-testid="limit-prompt">
+        {limitPrompt(limit.kind, limit.limit)}
+      </p>
       <p className="mt-1 text-[13px] leading-relaxed text-ink-2">{limit.message}</p>
       <div className="mt-3 max-w-xs">
         <UsageMeter label={what[0].toUpperCase() + what.slice(1)} used={limit.used} limit={limit.limit} />
@@ -274,11 +284,11 @@ export function PlanLimitCard({ limit }: { limit: PlanLimit }) {
       ) : null}
       <p className="mt-3 text-[13px] text-ink-2">Your existing projects and client links keep working. Nothing is deleted.</p>
       <div className="mt-4 flex flex-wrap gap-2">
-        <Link to="/plan" className={buttonClass("primary", "sm")}>
-          See plans
+        <Link to={planUrl({ plan: "solo", interval: "month" })} onClick={() => rememberCheckoutSource("limit")} className={buttonClass("primary", "sm")} data-testid="limit-upgrade">
+          {LIMIT_UPGRADE_LABEL}
         </Link>
         <Link to="/dashboard" className={buttonClass("secondary", "sm")}>
-          Go to projects
+          {LIMIT_LATER_LABEL}
         </Link>
       </div>
     </div>

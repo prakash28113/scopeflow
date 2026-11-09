@@ -27,6 +27,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<AuthState>({ session: null, loading: true });
   const qc = useQueryClient();
   useEffect(() => {
+    // The app has taken over the page (on prerendered pages its code starts after the first picture).
+    document.documentElement.dataset.app = "ready";
     supabase.auth.getSession().then(({ data }) => {
       setState({ session: data.session, loading: false });
       if (data.session && !PUBLIC_ENTRY.test(window.location.pathname)) warm(qc, data.session.user.id);
