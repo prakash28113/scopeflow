@@ -11,6 +11,7 @@
   --color-sunken: #f0f2f5; /* wells, hovers, inactive segments */
   --color-line: #e4e7ec; /* dividers, panel borders */
   --color-line-strong: #d0d5dd; /* control borders */
+  --color-line-hover: #c0c6d0; /* control borders on hover */
   --color-ink: #101828; /* primary text */
   --color-ink-2: #344054; /* secondary text */
   --color-muted: #667085; /* supporting text */
@@ -21,6 +22,7 @@
   --color-accent-hover: #004cb0;
   --color-accent-soft: #eaf2fe;
   --color-accent-line: #bcd5f8;
+  --color-on-accent: #ffffff; /* text on a cobalt fill */
 
   /* Semantic: strong for text and dots, soft for backgrounds. */
   --color-positive: #067647;
@@ -31,6 +33,11 @@
   --color-danger-soft: #fef3f2;
   --color-info: #005dd4;
   --color-info-soft: #eaf2fe;
+  /* Text on the soft semantic backgrounds. */
+  --color-danger-ink: #912018;
+  --color-positive-ink: #05603a;
+  --color-info-ink: #003f91;
+  --color-warning-ink: #93370d;
 
   /* App chrome: the logo's charcoal, for the sidebar. */
   --color-chrome: #14171d;
@@ -1055,5 +1062,116 @@ dialog.sf-drawer {
   from {
     opacity: 0;
     transform: translateY(8px);
+  }
+}
+
+
+/* =====================================================================
+   The signed-in app ("console"): dark chrome around a rounded content panel, like a cloud console.
+   Only token values change here; every screen keeps using the same classes. Documents (quotes,
+   invoices, project records: article[data-print-scope]) stay on light paper, and printing is light.
+   ===================================================================== */
+.app-console {
+  color-scheme: dark;
+  --color-canvas: #2b2d31; /* the content panel */
+  --color-surface: #33363b; /* cards, tables, forms */
+  --color-sunken: #282a2e; /* wells, hovers */
+  --color-line: #43474e;
+  --color-line-strong: #5a5f67;
+  --color-line-hover: #7a808a;
+  --color-ink: #e8eaed;
+  --color-ink-2: #c4c7cc;
+  --color-muted: #a2a7ae; /* 5.6:1 on cards */
+  --color-subtle: #868b93;
+  --color-accent: #8ab4f8;
+  --color-accent-hover: #aecbfa;
+  --color-accent-soft: #2a3b55;
+  --color-accent-line: #45618e;
+  --color-on-accent: #10213d;
+  --color-positive: #81c995;
+  --color-positive-soft: #1f3528;
+  --color-warning: #fdd663;
+  --color-warning-soft: #3b3322;
+  --color-danger: #f28b82;
+  --color-danger-soft: #3e2624;
+  --color-info: #8ab4f8;
+  --color-info-soft: #2a3b55;
+  --color-danger-ink: #f6b3ad;
+  --color-positive-ink: #a8dab5;
+  --color-info-ink: #c2d7fa;
+  --color-warning-ink: #fde293;
+  --chart-received: #8ab4f8;
+  --chart-expenses: #f29b6b;
+  --chart-grid: #3d4046;
+  --chart-selected: #2f3a4b;
+  --color-chrome: #1f2023; /* top bar and sidebar */
+  --color-chrome-2: #2a2c30;
+  --color-chrome-line: #36393e;
+  --color-chrome-text: #d4d7dc;
+  --color-chrome-muted: #9aa0a6;
+  --shadow-xs: 0 1px 2px rgb(0 0 0 / 0.25);
+  --shadow-pop: 0 18px 44px -12px rgb(0 0 0 / 0.7), 0 2px 6px rgb(0 0 0 / 0.35);
+  background: var(--color-chrome);
+  color: var(--color-ink);
+}
+html:has(.app-console) {
+  background: #1f2023;
+}
+.app-console ::selection {
+  background: #3d5a87;
+  color: #fff;
+}
+/* Titles in the console use the body face at a calm weight. */
+.app-console .display {
+  font-family: var(--font-sans);
+  font-variation-settings: normal;
+  letter-spacing: -0.015em;
+}
+/* Pill buttons. */
+.app-console .sf-btn {
+  border-radius: 999px;
+}
+/* Paper: documents keep their printed look inside the console. */
+.app-console article[data-print-scope],
+.app-console .sf-paper {
+  color-scheme: light;
+  --color-canvas: #f4f5f7;
+  --color-surface: #ffffff;
+  --color-sunken: #f0f2f5;
+  --color-line: #e4e7ec;
+  --color-line-strong: #d0d5dd;
+  --color-line-hover: #c0c6d0;
+  --color-ink: #101828;
+  --color-ink-2: #344054;
+  --color-muted: #667085;
+  --color-subtle: #98a2b3;
+  --color-accent: #005dd4;
+  --color-accent-hover: #004cb0;
+  --color-accent-soft: #eaf2fe;
+  --color-accent-line: #bcd5f8;
+  --color-on-accent: #ffffff;
+  --color-positive: #067647;
+  --color-positive-soft: #ecfdf3;
+  --color-warning: #b54708;
+  --color-warning-soft: #fffaeb;
+  --color-danger: #b42318;
+  --color-danger-soft: #fef3f2;
+  --color-info: #005dd4;
+  --color-info-soft: #eaf2fe;
+  --color-danger-ink: #912018;
+  --color-positive-ink: #05603a;
+  --color-info-ink: #003f91;
+  --color-warning-ink: #93370d;
+  --chart-received: #005dd4;
+  --chart-expenses: #eb6834;
+  --chart-grid: #e6e6e1;
+  --chart-selected: #ebf3fe;
+  --shadow-xs: 0 1px 2px rgb(16 24 40 / 0.05);
+  color: var(--color-ink);
+}
+@media print {
+  .app-console,
+  html:has(.app-console) {
+    background: #fff !important;
   }
 }

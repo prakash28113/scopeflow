@@ -18,7 +18,7 @@ export function UpiPay({ upiId, payee, amountPaise, note }: { upiId: string; pay
   return (
     <div className="mt-2.5">
       <div className="flex flex-wrap items-center gap-2">
-        <a href={url} className="inline-flex items-center rounded-lg bg-accent px-3 py-1.5 text-[12px] font-semibold text-white hover:bg-accent-hover" data-testid="upi-pay">
+        <a href={url} className="inline-flex items-center rounded-lg bg-accent px-3 py-1.5 text-[12px] font-semibold text-on-accent hover:bg-accent-hover" data-testid="upi-pay">
           Pay via UPI
         </a>
         <button type="button" onClick={() => setQr((v) => !v)} className="rounded-lg px-2.5 py-1.5 text-[12px] font-medium text-accent ring-1 ring-accent-line hover:bg-accent-soft">

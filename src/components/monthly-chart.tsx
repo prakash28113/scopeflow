@@ -8,8 +8,9 @@ import { monthLabel, niceScale, type MonthRow } from "@/lib/analytics";
  * Columns ≤ 24px, 4px rounded tops, 2px surface gap between the pair; hover/tap a month for the tooltip;
  * a table view carries every value.
  */
-const RECEIVED = "#005dd4";
-const EXPENSES = "#eb6834";
+// CSS variables so the dark console can use its own validated pair (styles.css → .app-console).
+const RECEIVED = "var(--chart-received, #005dd4)";
+const EXPENSES = "var(--chart-expenses, #eb6834)";
 const WIDE = { W: 720, H: 240, left: 56 };
 /** Phones: fewer months in a narrower drawing, so labels render at a readable size. */
 const NARROW = { W: 360, H: 220, left: 48 };
@@ -68,7 +69,7 @@ export function MonthlyChart({ rows: allRows, currency, selected, onSelect }: { 
         <svg viewBox={`0 0 ${W} ${H}`} className="block h-auto w-full" role="img" aria-label={`Money received and expenses per month in ${currency}, last ${rows.length} months. Values for all 12 months are in the table below.`}>
           {scale.ticks.map((t) => (
             <g key={t}>
-              <line x1={PAD.left} x2={W - PAD.right} y1={y(t)} y2={y(t)} stroke="#e6e6e1" strokeWidth={1} />
+              <line x1={PAD.left} x2={W - PAD.right} y1={y(t)} y2={y(t)} stroke="var(--chart-grid, #e6e6e1)" strokeWidth={1} />
               <text x={PAD.left - 8} y={y(t)} dy="0.32em" textAnchor="end" className="fill-muted text-[11px]">
                 {compact(t, currency)}
               </text>
@@ -81,7 +82,7 @@ export function MonthlyChart({ rows: allRows, currency, selected, onSelect }: { 
             const isSel = r.month === selected;
             return (
               <g key={r.month}>
-                {isSel ? <rect x={x0 + 1} y={PAD.top} width={band - 2} height={plotH} rx={6} fill="#ebf3fe" /> : null}
+                {isSel ? <rect x={x0 + 1} y={PAD.top} width={band - 2} height={plotH} rx={6} fill="var(--chart-selected, #ebf3fe)" /> : null}
                 {col(left, r.received, RECEIVED)}
                 {col(left + bar + 2, r.expenses, EXPENSES)}
                 <text x={x0 + band / 2} y={H - 8} textAnchor="middle" className={`text-[11px] ${isSel ? "fill-ink font-semibold" : "fill-muted"}`}>

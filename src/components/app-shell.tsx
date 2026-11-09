@@ -143,10 +143,10 @@ function NavContent({ onNavigate }: { onNavigate?: () => void }) {
   const author = useIsBlogAuthor(Boolean(session));
   const groups = useNavGroups(waiting, author.data === true);
   return (
-    <nav aria-label="Main" className="flex-1 space-y-5 overflow-y-auto px-3 py-4">
+    <nav aria-label="Main" className="flex-1 space-y-4 overflow-y-auto px-2 py-3">
       {groups.map((g) => (
         <div key={g.label}>
-          <p className="px-2.5 pb-1.5 text-[12px] font-medium text-chrome-muted">{g.label}</p>
+          <p className="px-3 pb-1 text-[12px] font-medium text-chrome-muted">{g.label}</p>
           <ul className="space-y-0.5">
             {g.items.map((it) => (
               <li key={it.to}>
@@ -157,19 +157,18 @@ function NavContent({ onNavigate }: { onNavigate?: () => void }) {
                   {...intentProps(qc, it.to)}
                   className={({ isActive }) =>
                     cx(
-                      "group relative flex h-9 items-center gap-2.5 rounded-lg px-2.5 text-[14px] font-medium transition-colors",
-                      isActive ? "bg-chrome-2 text-white" : "text-chrome-text hover:bg-chrome-2/70 hover:text-white",
+                      "group relative flex h-9 items-center gap-3 rounded-full pl-3 pr-2.5 text-[14px] transition-colors",
+                      isActive ? "bg-accent-soft font-medium text-[#d3e3fd]" : "text-chrome-text hover:bg-chrome-2",
                     )
                   }
                 >
                   {({ isActive }) => (
                     <>
-                      {isActive ? <span className="absolute inset-y-2 left-0 w-[3px] rounded-r-full bg-accent" aria-hidden /> : null}
-                      <span className={isActive ? "text-white" : "text-chrome-muted group-hover:text-chrome-text"}>{it.icon}</span>
+                      <span className={isActive ? "text-[#d3e3fd]" : "text-chrome-muted group-hover:text-chrome-text"}>{it.icon}</span>
                       <span className="flex-1">{it.label}</span>
                       {it.tag ? <span className="rounded border border-white/15 px-1.5 text-[10px] font-medium leading-[16px] text-chrome-muted">{it.tag}</span> : null}
                       {it.count ? (
-                        <span className="num rounded-full bg-accent px-1.5 text-[11px] font-semibold leading-[18px] text-white" aria-label={`${it.count} waiting`}>
+                        <span className="num rounded-full bg-accent px-1.5 text-[11px] font-semibold leading-[18px] text-on-accent" aria-label={`${it.count} waiting`}>
                           {it.count}
                         </span>
                       ) : null}
@@ -190,11 +189,42 @@ function initials(name: string) {
 }
 
 /** Who's signed in, with the account menu (settings, plan, feedback, sign out). */
-function AccountMenu({ dark = true }: { dark?: boolean }) {
+function AccountMenu({ dark = true, compact = false }: { dark?: boolean; compact?: boolean }) {
   const profile = useProfile();
   const location = useLocation();
   const name = profile.data ? displayName(profile.data) : "";
   const business = profile.data?.business_name;
+  if (compact) {
+    return (
+      <details className="relative" key={location.pathname}>
+        <summary aria-label="Account menu" className="grid size-10 cursor-pointer list-none place-items-center rounded-full hover:bg-chrome-2 [&::-webkit-details-marker]:hidden">
+          <span className="grid size-8 place-items-center rounded-full bg-accent text-[12px] font-semibold text-on-accent" aria-hidden>
+            {initials(business || name)}
+          </span>
+        </summary>
+        <div className="absolute right-0 top-full z-40 mt-2 w-64 rounded-2xl border border-line bg-surface p-1.5 text-ink shadow-[var(--shadow-pop)]">
+          <div className="px-3 pb-2 pt-1.5">
+            <p className="truncate text-[14px] font-semibold">{business || name}</p>
+            {business ? <p className="truncate text-[12px] text-muted">{name}</p> : null}
+          </div>
+          <div className="mb-1 border-t border-line" />
+          <Link to="/settings" className="block rounded-lg px-3 py-2 text-sm hover:bg-sunken">
+            Settings
+          </Link>
+          <Link to="/plan" className="block rounded-lg px-3 py-2 text-sm hover:bg-sunken">
+            Plan &amp; usage
+          </Link>
+          <a href={feedbackMailto(location.pathname)} className="block rounded-lg px-3 py-2 text-sm hover:bg-sunken">
+            Send feedback
+          </a>
+          <div className="my-1 border-t border-line" />
+          <button type="button" className="block w-full rounded-lg px-3 py-2 text-left text-sm hover:bg-sunken" onClick={() => supabase.auth.signOut()}>
+            Sign out
+          </button>
+        </div>
+      </details>
+    );
+  }
   return (
     <details className="group relative" key={location.pathname}>
       <summary
@@ -204,7 +234,7 @@ function AccountMenu({ dark = true }: { dark?: boolean }) {
           dark ? "hover:bg-chrome-2" : "hover:bg-sunken",
         )}
       >
-        <span className="grid size-8 shrink-0 place-items-center rounded-full bg-accent text-[12px] font-semibold text-white" aria-hidden>
+        <span className="grid size-8 shrink-0 place-items-center rounded-full bg-accent text-[12px] font-semibold text-on-accent" aria-hidden>
           {initials(business || name)}
         </span>
         <span className="min-w-0 flex-1 text-left">
@@ -241,7 +271,7 @@ function Bell({ count, attention, dark = false }: { count: number; attention: nu
       to="/notifications"
       className={({ isActive }) =>
         cx(
-          "relative grid size-9 place-items-center rounded-lg transition-colors",
+          "relative grid size-10 place-items-center rounded-full transition-colors",
           dark ? "text-chrome-text hover:bg-chrome-2" : "text-ink-2 hover:bg-sunken",
           isActive && (dark ? "bg-chrome-2 text-white" : "bg-sunken text-ink"),
         )
@@ -250,11 +280,11 @@ function Bell({ count, attention, dark = false }: { count: number; attention: nu
     >
       {ICONS.bell}
       {count ? (
-        <span className="num absolute -right-0.5 -top-0.5 min-w-[18px] rounded-full bg-accent px-1 text-center text-[11px] font-semibold leading-[18px] text-white">
+        <span className="num absolute right-0 top-0 min-w-[18px] rounded-full bg-accent px-1 text-center text-[11px] font-semibold leading-[18px] text-on-accent">
           {count > 99 ? "99+" : count}
         </span>
       ) : null}
-      {attention ? <span className="absolute bottom-1 right-1 size-2.5 rounded-full border-2 border-canvas bg-danger" data-testid="bell-attention" /> : null}
+      {attention ? <span className="absolute bottom-1.5 right-1.5 size-2.5 rounded-full border-2 border-chrome bg-danger" data-testid="bell-attention" /> : null}
     </NavLink>
   );
 }
@@ -263,7 +293,7 @@ function Brand({ onNavigate }: { onNavigate?: () => void }) {
   return (
     <Link to="/dashboard" onClick={onNavigate} aria-label="ScopeFlow overview" className="flex items-center gap-2">
       <LogoFull tone="white" className="h-[25px] w-auto" />
-      <span className="rounded-full bg-chrome-2 px-2 py-0.5 text-[11px] font-medium leading-none text-chrome-text ring-1 ring-chrome-line">Beta</span>
+      <span className="hidden rounded-full px-2 py-0.5 text-[11px] font-medium leading-none text-chrome-muted ring-1 ring-chrome-line min-[380px]:inline">Beta</span>
     </Link>
   );
 }
@@ -354,57 +384,79 @@ export function AppShell() {
     return () => clearTimeout(t);
   }, [session, qc]);
 
-  return (
-    <div className="min-h-dvh lg:pl-[248px]">
-      {/* Desktop: fixed sidebar */}
-      <aside className="fixed inset-y-0 left-0 z-30 hidden w-[248px] flex-col bg-chrome lg:flex print:hidden">
-        <div className="flex h-14 items-center px-5">
-          <Brand />
-        </div>
-        <div className="px-3 pt-1">
-          <LinkButton to="/projects/new" className="w-full">
-            {ICONS.plus}
-            New project
-          </LinkButton>
-        </div>
-        <NavContent />
-        <div className="border-t border-chrome-line p-2">
-          <AccountMenu />
-        </div>
-      </aside>
+  const profile = useProfile();
+  const business = profile.data?.business_name || (profile.data ? displayName(profile.data) : "");
+  const section = sectionOf(location.pathname);
 
-      {/* Top bar: menu (phones), notifications */}
-      <header className="sticky top-0 z-20 border-b border-line bg-canvas/85 backdrop-blur print:hidden">
-        <div className="mx-auto flex h-14 max-w-[1180px] items-center gap-2 px-4 sm:px-6 lg:px-8">
-          <button type="button" onClick={() => setMenu(true)} aria-label="Open menu" className="-ml-1.5 grid size-9 place-items-center rounded-lg text-ink-2 hover:bg-sunken lg:hidden">
+  return (
+    <div className="app-console min-h-dvh">
+      {/* Top bar: the whole width, like a cloud console */}
+      <header className="fixed inset-x-0 top-0 z-30 bg-chrome print:hidden">
+        <div className="flex h-14 items-center gap-1 px-2 sm:gap-2 sm:px-3">
+          <button type="button" onClick={() => setMenu(true)} aria-label="Open menu" className="grid size-10 place-items-center rounded-full text-chrome-text hover:bg-chrome-2 lg:hidden">
             {ICONS.menu}
           </button>
-          <Link to="/dashboard" aria-label="ScopeFlow overview" className="lg:hidden">
-            <LogoFull className="h-[22px] w-auto" />
-          </Link>
-          <p className="hidden min-w-0 truncate text-[13px] text-muted lg:block" data-testid="section-label">
-            {sectionOf(location.pathname)}
-          </p>
+          <div className="flex items-center gap-2 pl-1 lg:pl-2">
+            <Brand />
+          </div>
+          {business ? (
+            <Link
+              to="/settings"
+              className="ml-2 hidden h-9 max-w-[240px] items-center gap-2 rounded-full border border-chrome-line px-3.5 text-[13px] font-medium text-chrome-text hover:bg-chrome-2 md:flex"
+              title="Your business details"
+              data-testid="workspace-chip"
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden className="shrink-0 text-chrome-muted">
+                <circle cx="6" cy="12" r="3" />
+                <circle cx="17" cy="6" r="3" />
+                <circle cx="17" cy="18" r="3" />
+              </svg>
+              <span className="truncate">{business}</span>
+            </Link>
+          ) : null}
           <div className="flex-1" />
-          <Bell count={unread.data ?? 0} attention={attention} />
-          <LinkButton to="/projects/new" size="sm" className="lg:hidden" aria-label="New project">
-            {ICONS.plus}
-            <span className="hidden sm:inline">New project</span>
-          </LinkButton>
+          <span className="mr-1 hidden sm:block">
+            <LinkButton to="/projects/new" size="sm">
+              {ICONS.plus}
+              New project
+            </LinkButton>
+          </span>
+          <span className="sm:hidden">
+            <LinkButton to="/projects/new" size="sm" className="size-9 px-0" aria-label="New project">
+              {ICONS.plus}
+            </LinkButton>
+          </span>
+          <Bell count={unread.data ?? 0} attention={attention} dark />
+          <AccountMenu compact />
         </div>
       </header>
+
+      {/* Desktop: navigation under the top bar */}
+      <aside className="fixed bottom-0 left-0 top-14 z-20 hidden w-[248px] flex-col bg-chrome lg:flex print:hidden">
+        <NavContent />
+      </aside>
       <MobileDrawer open={menu} onClose={() => setMenu(false)} />
 
-      <main className="mx-auto max-w-[1180px] px-4 py-6 sm:px-6 sm:py-8 lg:px-8">
-        <Outlet />
-      </main>
-      <footer className="mx-auto max-w-[1180px] px-4 pb-10 text-[12px] text-muted sm:px-6 lg:px-8 print:hidden">
-        Something missing or not working?{" "}
-        <a href={feedbackMailto(location.pathname)} className="font-medium text-accent hover:underline" data-testid="feedback-link">
-          Send feedback
-        </a>{" "}
-        and it comes straight to the ScopeFlow team.
-      </footer>
+      {/* The content panel */}
+      <div className="pt-14 lg:pl-[248px] print:p-0">
+        <div className="sm:px-2 sm:pb-2 lg:pl-0 print:p-0">
+          <p className="truncate px-3 pb-2 pt-1 text-[13px] text-chrome-muted lg:px-1" data-testid="section-label">
+            {section || " "}
+          </p>
+          <div className="min-h-[calc(100dvh-6rem)] rounded-t-[18px] bg-canvas sm:rounded-[18px] print:min-h-0 print:rounded-none print:bg-white">
+            <main className="mx-auto max-w-[1180px] px-4 py-6 sm:px-6 sm:py-8 lg:px-8">
+              <Outlet />
+            </main>
+            <footer className="mx-auto max-w-[1180px] px-4 pb-10 text-[12px] text-muted sm:px-6 lg:px-8 print:hidden">
+              Something missing or not working?{" "}
+              <a href={feedbackMailto(location.pathname)} className="font-medium text-accent hover:underline" data-testid="feedback-link">
+                Send feedback
+              </a>{" "}
+              and it comes straight to the ScopeFlow team.
+            </footer>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
