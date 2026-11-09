@@ -65,8 +65,17 @@ export function whenLabel(daysAway: number): string {
   return `In ${daysAway} days`;
 }
 
-/** Today's date in the viewer's own time zone, as YYYY-MM-DD. */
-export function localToday(now = new Date()): string {
-  const off = now.getTimezoneOffset() * 60_000;
-  return new Date(now.getTime() - off).toISOString().slice(0, 10);
+/** ScopeFlow's calendar: India. The database uses the same day (_today_india()). */
+export const BUSINESS_TIME_ZONE = "Asia/Kolkata";
+
+/**
+ * Today's date as YYYY-MM-DD on the India calendar, wherever the browser is. Default dates in the
+ * payment, invoice, request and expense forms (and "overdue") follow this, so a browser in another
+ * zone doesn't pick yesterday or tomorrow around midnight IST. Profiles don't store a time zone
+ * today; pass one here if they ever do. Dates a person picks are stored exactly as picked.
+ */
+export function localToday(now = new Date(), timeZone: string = BUSINESS_TIME_ZONE): string {
+  const parts = new Intl.DateTimeFormat("en-CA", { timeZone, year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(now);
+  const get = (t: string) => parts.find((p) => p.type === t)!.value;
+  return `${get("year")}-${get("month")}-${get("day")}`;
 }

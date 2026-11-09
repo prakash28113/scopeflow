@@ -52,7 +52,15 @@ describe("overdue / upcoming is judged by the viewer's own date", () => {
     expect(whenLabel(upcomingItems([project], inIndia)[0].daysAway)).toBe("Today");
     expect(whenLabel(upcomingItems([project], inHonolulu)[0].daysAway)).toBe("Tomorrow");
   });
-  it("localToday follows the process time zone", () => {
-    expect(localToday(new Date("2026-11-01T12:00:00Z"))).toMatch(/^2026-11-0[12]$/);
+  it("T2-09 localToday is the India calendar date in every process time zone", () => {
+    // IST is UTC+5:30, so the date turns over at 18:30 UTC.
+    expect(localToday(new Date("2026-11-10T19:00:00Z"))).toBe("2026-11-11");
+    expect(localToday(new Date("2026-11-10T18:00:00Z"))).toBe("2026-11-10");
+    expect(localToday(new Date("2026-11-10T18:29:59Z"))).toBe("2026-11-10");
+    expect(localToday(new Date("2026-11-10T18:30:00Z"))).toBe("2026-11-11");
+    expect(localToday(new Date("2026-12-31T20:00:00Z"))).toBe("2027-01-01");
+    // Another zone only if one is asked for (profiles don't store one today).
+    expect(localToday(new Date("2026-11-10T19:00:00Z"), "America/New_York")).toBe("2026-11-10");
+    expect(localToday(new Date("2026-11-01T12:00:00Z"))).toBe("2026-11-01");
   });
 });
