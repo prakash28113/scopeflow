@@ -107,6 +107,7 @@ export const canonicalUrl = (path: string) => SITE_URL + (path === "/" ? "/" : p
 
 const ORG_ID = `${SITE_URL}/#organization`;
 const SITE_ID = `${SITE_URL}/#website`;
+const APP_ID = `${SITE_URL}/#app`;
 
 const faq = (items: [string, string][]) => ({
   "@type": "FAQPage",
@@ -150,7 +151,8 @@ export function structuredData(path: PublicPath): Record<string, unknown> {
   if (path === "/") {
     graph.push(
       {
-        "@type": "SoftwareApplication",
+        "@type": ["SoftwareApplication", "WebApplication"],
+        "@id": APP_ID,
         name: SITE_NAME,
         url: `${SITE_URL}/`,
         applicationCategory: "BusinessApplication",
@@ -173,13 +175,20 @@ export function structuredData(path: PublicPath): Record<string, unknown> {
     );
   }
   if (path === "/pricing") {
+    // The app and its plans. Not a Product: ScopeFlow isn't a shop item, and Search Console reads
+    // Product as a merchant listing (which needs an image, availability, shipping…).
     graph.push({
-      "@type": "Product",
-      name: `${SITE_NAME} plans`,
-      description: page.description,
-      brand: { "@id": ORG_ID },
+      "@type": ["SoftwareApplication", "WebApplication"],
+      "@id": APP_ID,
+      name: SITE_NAME,
+      url: `${SITE_URL}/`,
+      applicationCategory: "BusinessApplication",
+      operatingSystem: "Web browser",
+      image: OG_IMAGE,
+      publisher: { "@id": ORG_ID },
       offers: planOffers(),
     });
+    Object.assign(webpage, { mainEntity: { "@id": APP_ID }, about: { "@id": APP_ID } });
     graph.push(faq(PRICING_FAQ));
   }
   return { "@context": "https://schema.org", "@graph": graph };

@@ -361,6 +361,30 @@ window.Razorpay.prototype.open=function(){var o=this.o;window.__rzp=o;window.__r
     await ctx.close();
   }
 
+  // ------------------------------------------------------------------ T2-07
+  step("T2-07 /pricing structured data has no Product; trailing slashes, /index.html and /home answer 301");
+  {
+    const html = await (await fetch(`${BASE}/pricing`)).text();
+    const ld = JSON.parse(html.match(/<script type="application\/ld\+json">(.+?)<\/script>/s)[1]);
+    assert.ok(!JSON.stringify(ld).includes('"Product"'), "no Product node");
+    const app = ld["@graph"].find((n) => n["@id"] === "https://scopeflow.in/#app");
+    assert.deepEqual(app["@type"], ["SoftwareApplication", "WebApplication"]);
+    assert.deepEqual(app.offers.map((o) => `${o.price} ${o.priceCurrency}`), ["0 INR", "499 INR", "4999 INR", "999 INR", "9999 INR"]);
+    const hop = async (path) => {
+      const r = await fetch(`${BASE}${path}`, { redirect: "manual" });
+      return [r.status, r.headers.get("location")];
+    };
+    assert.deepEqual(await hop("/pricing/"), [301, `${BASE}/pricing`]);
+    assert.deepEqual(await hop("/privacy/"), [301, `${BASE}/privacy`]);
+    assert.deepEqual(await hop("/index.html"), [301, `${BASE}/`]);
+    assert.deepEqual(await hop("/home"), [301, `${BASE}/`]);
+    assert.deepEqual(await hop("/blog/"), [301, `${BASE}/blog`]);
+    assert.equal((await fetch(`${BASE}/`, { redirect: "manual" })).status, 200, "the home page itself still answers");
+    assert.equal((await fetch(`${BASE}/pricing`, { redirect: "manual" })).status, 200);
+    // Sign-in pages keep their noindex.
+    for (const path of ["/login", "/signup", "/forgot-password"]) assert.match((await fetch(`${BASE}${path}`)).headers.get("x-robots-tag") ?? "", /noindex/, `${path} stays noindex`);
+  }
+
   if (errors.length) throw new Error(`Browser errors:\n${errors.join("\n")}`);
   console.log("✓ fix-list checks passed with no browser errors");
 } finally {
