@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { Link } from "react-router";
 import { PublicHeader } from "@/components/public-header";
 import { BetaBadge, SiteFooter } from "@/components/site-footer";
+import { PRICE_TAX_NOTE, businessGstinLine } from "@/lib/business";
 import { LEGAL_UPDATED, OPERATOR_NAME, SUPPORT_EMAIL, supportMailto } from "@/lib/site";
 import { useSeo } from "@/lib/seo";
 
@@ -98,6 +99,7 @@ export function PrivacyPage() {
 
 /** Plain-language Terms & Conditions. Operator and courts confirmed by the owner (1 Nov 2026). */
 const OPERATOR = OPERATOR_NAME;
+const GSTIN_LINE = businessGstinLine();
 const COURTS = "Hyderabad, Telangana";
 const CITY = "Hyderabad, Telangana";
 
@@ -156,6 +158,7 @@ export function TermsPage() {
         <ul>
           <li>The <strong>Free plan</strong> costs nothing and has the limits shown on the <Link to="/pricing" className="font-medium text-accent hover:underline">Pricing</Link> page (currently 2 active projects and 5 clients).</li>
           <li><strong>Paid plans</strong> are subscriptions, priced in Indian rupees and billed in advance, monthly or yearly, through Razorpay. A plan marked &ldquo;Not on sale yet&rdquo; can&apos;t be bought. You&apos;re charged only after you choose a paid plan yourself and approve the payment in Razorpay&apos;s window.</li>
+          <li data-testid="terms-tax"><strong>Prices and tax:</strong> Solo is {PRICE_TAX_NOTE} The price shown is the full amount charged.{GSTIN_LINE ? ` ScopeFlow ${GSTIN_LINE}.` : ""}</li>
           <li>A subscription renews automatically at the end of each period, at the price you signed up at, until you cancel. You can cancel at any time from Plan &amp; usage; you keep the paid plan until the end of the period already paid for, and you won&apos;t be charged again.</li>
           <li>If a renewal payment fails, Razorpay retries it. Paid features stay on for a short grace period; if the payment still fails, the account moves to the Free plan&apos;s limits.</li>
           <li>Refunds follow our <Link to="/refunds" className="font-medium text-accent hover:underline">Refund and cancellation policy</Link>.</li>
@@ -330,7 +333,7 @@ export function ContactPage() {
     <LegalLayout title="Contact us">
       <section>
         <p>
-          ScopeFlow is run by <strong>{OPERATOR}</strong>, an independent developer in {CITY}, India.
+          ScopeFlow is run by <strong>{OPERATOR}</strong>, an independent developer in {CITY}, India.{GSTIN_LINE ? ` ${GSTIN_LINE}.` : ""}
         </p>
       </section>
       <section>

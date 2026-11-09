@@ -7,6 +7,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "./supabase";
 import type { Interval, PlanId } from "./plans";
+import { checkoutOptions } from "./checkout-options";
 
 /** Set at build time when Razorpay keys are configured (scripts/ci/release.mjs). */
 export const BILLING_ENABLED = import.meta.env.VITE_BILLING_PROVIDER === "razorpay";
@@ -14,7 +15,7 @@ const FUNCTIONS = `${String(import.meta.env.VITE_SUPABASE_URL ?? "").replace(/\/
 const CHECKOUT_JS = "https://checkout.razorpay.com/v1/checkout.js";
 
 export type BillingStatus = { enabled: boolean; mode: "test" | "live" | null; tester: boolean };
-type Checkout = {
+export type Checkout = {
   key_id: string;
   subscription_id: string;
   mode: "test" | "live";
@@ -92,13 +93,7 @@ export async function buyPlan(plan: PlanId, interval: Interval): Promise<Checkou
   return new Promise<CheckoutOutcome>((resolve) => {
     let failure: string | null = null;
     const rzp = new window.Razorpay!({
-      key: c.key_id,
-      subscription_id: c.subscription_id,
-      name: "ScopeFlow",
-      description: `${c.plan_name} plan, billed ${c.interval === "year" ? "yearly" : "monthly"}${c.mode === "test" ? " (test mode)" : ""}`,
-      image: `${location.origin}/icon-512.png`,
-      prefill: { name: c.name, email: c.email },
-      theme: { color: "#005DD4" },
+      ...checkoutOptions(c, location.origin),
       handler: (r: RazorpayResponse) => {
         call<{ result: string }>("verify", { method: "POST", body: JSON.stringify(r) }).then(
           (v) => resolve({ kind: "paid", result: v.result }),

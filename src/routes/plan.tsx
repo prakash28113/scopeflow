@@ -14,6 +14,7 @@ import { STATUS_TEXT, useInvoices, useMyPlan, usePlans, type Interval, type Plan
 import { ActionButton } from "@/components/form-bits";
 import { BILLING_ENABLED, buyPlan, cancelPlan, useBillingStatus } from "@/lib/billing";
 import { planSale } from "@/lib/sale";
+import { PRICE_TAX_NOTE } from "@/lib/business";
 
 export default function PlanPage() {
   const plans = usePlans();
@@ -190,7 +191,7 @@ export default function PlanPage() {
             <h2 className="text-lg font-semibold tracking-[-0.02em]">Plans</h2>
             <p className="mt-1 text-[13px] text-muted">
               {b?.enabled && (testMode ? b.tester : plans.data.some((p) => p.purchasable))
-                ? "Prices in Indian rupees. Payments are handled by Razorpay (UPI, cards, netbanking); ScopeFlow never sees your card or bank details."
+                ? `Prices in Indian rupees. Solo: ${PRICE_TAX_NOTE} Payments are handled by Razorpay (UPI, cards, netbanking); ScopeFlow never sees your card or bank details.`
                 : "Paid plans are in early access. Joining the list is free and takes no payment details."}
             </p>
             {testMode && b?.tester ? (

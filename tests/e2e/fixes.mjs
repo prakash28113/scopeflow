@@ -164,6 +164,8 @@ try {
     assert.equal(await p.evaluate(() => localStorage.getItem("sf-plan-intent")), null, "cleared after use");
     assert.equal(await p.locator(".razorpay-container, iframe[src*='razorpay']").count(), 0, "no payment opens by itself");
     await shot(p, "t1-02-plan-selected");
+    // T1-03: the GST note sits in the Solo card next to its button, and in the Plans intro.
+    await p.locator('[data-plan="solo"]').getByTestId("price-tax-note").waitFor();
 
     step("T1-02 signed in on Free: the Solo button goes to Plan & usage, never to sign-up");
     await p.goto(`${BASE}/pricing`);
@@ -211,6 +213,23 @@ try {
     await fetch(`${AUTH}/__test/purchasable?plan=solo&on=0`);
   }
 
+
+  // ------------------------------------------------------------------ T1-03
+  step("T1-03 the GST note is on the prerendered pricing page, its FAQ and the Terms; no GSTIN anywhere");
+  {
+    const NOTE = "₹499/month. No GST is charged: ScopeFlow isn't GST-registered.";
+    const text = async (path) => (await (await fetch(`${BASE}${path}`)).text()).replace(/&#x27;/g, "'").replace(/<!-- -->/g, "");
+    const pricing = await text("/pricing");
+    assert.ok(pricing.includes(`data-testid="price-tax-note">${NOTE}`), "under the Solo price");
+    assert.ok(pricing.includes(`Solo: ${NOTE}`), "compare-table footer");
+    assert.ok(pricing.includes("Do prices include GST?"), "pricing FAQ");
+    assert.ok((await text("/terms")).includes(`Prices and tax:</strong> Solo is ${NOTE}`), "Terms");
+    for (const path of ["/", "/pricing", "/terms", "/refunds", "/contact", "/privacy"]) {
+      const page = await text(path);
+      assert.ok(!page.includes("business-gstin") && !/GSTIN\s+[0-9]{2}[A-Z]{5}/.test(page) && !page.includes("ScopeFlow GSTIN"), `${path} shows no ScopeFlow GSTIN`);
+    }
+    assert.ok(pricing.includes('"price":"499"') || pricing.includes('"price":499') || !pricing.includes('"@type":"Offer"'), "structured-data prices untouched");
+  }
 
   if (errors.length) throw new Error(`Browser errors:\n${errors.join("\n")}`);
   console.log("✓ fix-list checks passed with no browser errors");

@@ -1,3 +1,4 @@
+import { PRICE_TAX_NOTE } from "@/lib/business";
 import { Link } from "react-router";
 import { BILLING_ENABLED } from "@/lib/billing";
 import { planSale, type Sale } from "@/lib/sale";
@@ -95,6 +96,11 @@ export function PlanCards({
               <span className="text-[13px] text-muted">{price.per}</span>
             </p>
             <p className="num mt-1 min-h-[18px] text-[12px] text-positive">{price.note}</p>
+            {p.id === "solo" ? (
+              <p className="mt-1 text-[12px] text-muted" data-testid="price-tax-note">
+                {PRICE_TAX_NOTE}
+              </p>
+            ) : null}
             <ul className="mt-5 space-y-2 text-[13px] text-ink-2">
               <li className="font-medium text-ink">{limitText(p.max_active_projects, "active projects")}</li>
               <li className="font-medium text-ink">{limitText(p.max_clients, "clients")}</li>
@@ -206,6 +212,13 @@ export function FeatureMatrix({ plans }: { plans: Plan[] }) {
             </tr>
           ))}
         </tbody>
+        <tfoot>
+          <tr className="border-t border-line">
+            <td colSpan={plans.length + 1} className="px-4 py-3 text-[12px] text-muted" data-testid="compare-tax-note">
+              {`Solo: ${PRICE_TAX_NOTE}`}
+            </td>
+          </tr>
+        </tfoot>
       </table>
     </div>
   );
