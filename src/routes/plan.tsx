@@ -12,7 +12,7 @@ import { formatDate } from "@/lib/format";
 import { formatMoney } from "@/lib/money";
 import { STATUS_TEXT, useInvoices, useMyPlan, usePlans, type Interval, type Plan, type PlanId } from "@/lib/plans";
 import { ActionButton } from "@/components/form-bits";
-import { BILLING_ENABLED, buyPlan, cancelPlan, useBillingStatus } from "@/lib/billing";
+import { BILLING_ENABLED, buyPlan, cancelPlan, preloadCheckout, useBillingStatus } from "@/lib/billing";
 import { planSale } from "@/lib/sale";
 import { ACTIVATING_TEXT, waitForPaidPlan } from "@/lib/activation";
 import { PRICE_TAX_NOTE } from "@/lib/business";
@@ -44,6 +44,14 @@ export default function PlanPage() {
     // Once, when the page has its data.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ready]);
+
+  // T2-03: have Razorpay's script ready before the click, for accounts that can buy something now.
+  const mayBuy = Boolean(
+    ready && mine.data?.effective_plan === "free" && billing.data && plans.data?.some((p) => planSale(p, BILLING_ENABLED, billing.data).buyable),
+  );
+  useEffect(() => {
+    if (mayBuy) preloadCheckout();
+  }, [mayBuy]);
 
   // Wait for the billing check too, so a plan never shows "on sale" and "early access" at once.
   if (plans.isLoading || mine.isLoading || (BILLING_ENABLED && billing.isLoading)) return <PageSpinner />;

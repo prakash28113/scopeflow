@@ -1,4 +1,10 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { timeEnd, timeStart, whenIdle } from "@/lib/timing";
+
+/** Downloads the PDF code (and its two libraries) ahead of the click. */
+export const prefetchPdf = () => {
+  void import("@/lib/pdf").then((m) => m.preloadPdfLibraries()).catch(() => {});
+};
 import { Button } from "./ui";
 import { useToast } from "./toast";
 import { formatMoney } from "@/lib/money";
@@ -119,6 +125,8 @@ export function PrintButton({ label = "Save as PDF", size = "sm" }: { label?: st
 export function DownloadPdfButton({ name, selector, size = "sm", variant = "secondary" }: { name: string; selector?: string; size?: "sm" | "md"; variant?: "primary" | "secondary" }) {
   const [busy, setBusy] = useState(false);
   const toast = useToast();
+  // T2-03: fetch the PDF code while the document is being read, so the click doesn't wait for it.
+  useEffect(() => whenIdle(prefetchPdf), []);
   return (
     <Button
       type="button"
@@ -131,9 +139,11 @@ export function DownloadPdfButton({ name, selector, size = "sm", variant = "seco
         const el = (selector ? document.querySelector(selector) : (btn.closest("[data-print-scope]") ?? document.querySelector("[data-print-scope]"))) as HTMLElement | null;
         if (!el) return;
         setBusy(true);
+        timeStart("pdf");
         try {
           const { downloadPdf } = await import("@/lib/pdf");
           await downloadPdf(el, name);
+          timeEnd("pdf");
         } catch {
           toast("danger", "Couldn't create the PDF on this device. Use Print and choose “Save as PDF” instead.");
         } finally {

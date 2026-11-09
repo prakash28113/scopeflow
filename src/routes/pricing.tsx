@@ -10,7 +10,7 @@ import { useAuth } from "@/lib/auth";
 import { PRICING_FAQ as FAQ } from "@/lib/faq";
 import { PublicHeader } from "@/components/public-header";
 import { anyOnSale } from "@/lib/sale";
-import { BILLING_ENABLED } from "@/lib/billing";
+import { BILLING_ENABLED, preloadCheckout } from "@/lib/billing";
 import { useSeo } from "@/lib/seo";
 
 export default function PricingPage() {
@@ -43,7 +43,7 @@ export default function PricingPage() {
           <Alert>Couldn't load plans. Please refresh.</Alert>
         ) : (
           <>
-            <PlanCards plans={plans.data} interval={interval} soloLink={solo} />
+            <PlanCards plans={plans.data} interval={interval} soloLink={solo} onSoloIntent={session && !solo.current ? preloadCheckout : undefined} />
             <p className="mx-auto mt-6 max-w-2xl text-center text-[13px] text-muted">
               {anyOnSale(plans.data, BILLING_ENABLED)
                 ? "Prices in Indian rupees, billed monthly or yearly until you cancel. Payments are handled by Razorpay (UPI, cards, netbanking). Plans marked “Not on sale yet” are in early access."

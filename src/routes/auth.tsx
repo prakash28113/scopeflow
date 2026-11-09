@@ -1,3 +1,4 @@
+import { timeEnd, timeStart } from "@/lib/timing";
 import { LogoFull } from "@/components/brand";
 import { useTitle } from "@/lib/title";
 import { useEffect, useState, type FormEvent, type ReactNode } from "react";
@@ -102,6 +103,8 @@ export function LoginPage() {
     f.setFieldErrors({});
     f.setError(null);
     f.setPending(true);
+    timeStart("sign-in");
+    timeStart("sign-in:session");
     const { error } = await supabase.auth.signInWithPassword({ ...parsed.data, options: captchaOptions(f.captcha) });
     f.setPending(false);
     f.resetCaptcha();
@@ -409,10 +412,12 @@ export function ForgotPasswordPage() {
     f.setFieldErrors({});
     f.setError(null);
     f.setPending(true);
+    timeStart("reset-request");
     const { error } = await supabase.auth.resetPasswordForEmail(parsed.data.email, {
       redirectTo: `${window.location.origin}/reset-password`,
       ...captchaOptions(f.captcha),
     });
+    timeEnd("reset-request");
     f.setPending(false);
     f.resetCaptcha();
     if (isCaptchaError(error)) return f.setError(CAPTCHA_FAILED);

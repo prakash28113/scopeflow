@@ -73,16 +73,17 @@ export function usePlans() {
   return useQuery(plansQuery);
 }
 
+export const myPlanQuery = {
+  queryKey: ["my-plan"] as const,
+  queryFn: async () => {
+    const { data, error } = await supabase.rpc("my_plan");
+    if (error) throw error;
+    return data as MyPlan;
+  },
+};
+
 export function useMyPlan(enabled = true) {
-  return useQuery({
-    queryKey: ["my-plan"],
-    enabled,
-    queryFn: async () => {
-      const { data, error } = await supabase.rpc("my_plan");
-      if (error) throw error;
-      return data as MyPlan;
-    },
-  });
+  return useQuery({ ...myPlanQuery, enabled });
 }
 
 export function useInvoices() {

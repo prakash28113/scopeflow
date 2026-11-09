@@ -1107,7 +1107,9 @@ document.body.appendChild(d)}`,
     assert.equal(page.headers()["referrer-policy"], "strict-origin");
     await bp.getByRole("heading", { name: "Plan & usage" }).waitFor();
     await bp.getByText("Test mode: use Razorpay's test card or UPI. No real money moves.").waitFor();
-    assert.equal(checkoutScriptLoads, 0, "checkout.js loads only when someone starts a payment");
+    // T2-03: checkout.js is fetched as the page opens (this account can buy), before any click.
+    await bp.waitForFunction(() => typeof window.Razorpay === "function");
+    assert.equal(checkoutScriptLoads, 1, "checkout.js is ready before the click, and fetched once");
     // Studio stays in early access; Solo can be bought.
     assert.equal(await bp.getByRole("button", { name: "Upgrade to Studio" }).count(), 1); // testers can try both in test mode
     await bp.getByRole("radio", { name: "Monthly" }).click();

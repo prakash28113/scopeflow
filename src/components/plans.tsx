@@ -46,11 +46,14 @@ export function PlanCards({
   buying,
   testMode,
   soloLink,
+  onSoloIntent,
   selected,
   sale = (p: Plan) => planSale(p, BILLING_ENABLED),
 }: {
   /** Public pricing page: where the Solo button goes and what it says (src/lib/plan-intent.ts). */
   soloLink?: { to: string; label: string; current: boolean };
+  /** Hover or focus on the Solo button (signed in): a chance to get checkout ready. */
+  onSoloIntent?: () => void;
   /** Plan & usage, arriving from pricing: the plan to point at. */
   selected?: PlanId | null;
   /** Is the plan on sale (public claim) — the shared answer from planSale. Signed out: build flag + catalogue. */
@@ -129,6 +132,8 @@ export function PlanCards({
                   to={p.id === "solo" && soloLink ? soloLink.to : "/signup"}
                   className={cx(buttonClass(p.id === "solo" && soloLink?.current ? "secondary" : recommended ? "primary" : "secondary"), "w-full")}
                   data-testid={p.id === "solo" ? "solo-cta" : undefined}
+                  onMouseEnter={p.id === "solo" ? onSoloIntent : undefined}
+                  onFocus={p.id === "solo" ? onSoloIntent : undefined}
                 >
                   {p.id === "solo" && soloLink ? soloLink.label : SOLO_CTA_LABEL}
                 </Link>

@@ -8,6 +8,7 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "./supabase";
 import type { Interval, PlanId } from "./plans";
 import { checkoutOptions } from "./checkout-options";
+import { timeEnd, timeStart } from "./timing";
 
 /** Set at build time when Razorpay keys are configured (scripts/ci/release.mjs). */
 export const BILLING_ENABLED = import.meta.env.VITE_BILLING_PROVIDER === "razorpay";
@@ -64,7 +65,17 @@ export function useBillingStatus(enabled = true) {
 }
 
 let loading: Promise<void> | null = null;
-/** Loads Razorpay's checkout.js once, only when someone starts a payment. */
+/**
+ * Fetches Razorpay's checkout.js ahead of the click (when Plan & usage opens for an account that
+ * can buy, or the signed-in Solo button on pricing is hovered or focused), so pressing Upgrade only
+ * waits for the subscription to be created. Quiet on failure: the click tries again and explains.
+ */
+export function preloadCheckout(): void {
+  if (!BILLING_ENABLED || typeof window === "undefined") return;
+  loadCheckout().catch(() => {});
+}
+
+/** Loads Razorpay's checkout.js once. */
 export function loadCheckout(): Promise<void> {
   if (window.Razorpay) return Promise.resolve();
   loading ??= new Promise<void>((resolve, reject) => {
@@ -89,6 +100,7 @@ export type CheckoutOutcome = { kind: "paid"; result: string } | { kind: "dismis
  * response back for verification. Resolves when the window closes, with what happened.
  */
 export async function buyPlan(plan: PlanId, interval: Interval): Promise<CheckoutOutcome> {
+  timeStart("checkout-open");
   const [c] = await Promise.all([call<Checkout>("checkout", { method: "POST", body: JSON.stringify({ plan, interval }) }), loadCheckout()]);
   return new Promise<CheckoutOutcome>((resolve) => {
     let failure: string | null = null;
@@ -111,6 +123,7 @@ export async function buyPlan(plan: PlanId, interval: Interval): Promise<Checkou
       failure = r.error?.description || "The payment didn't go through. Nothing was charged.";
     });
     rzp.open();
+    timeEnd("checkout-open");
   });
 }
 
