@@ -7,6 +7,7 @@
  * Every claim here must be true of the product today: no ratings, reviews, user counts or AI.
  */
 // Pure data (no React, relative imports only): the Worker imports this module too.
+import { SOLO_OFFER_DESCRIPTION } from "./plan-copy";
 import { HOME_FAQ, PRICING_FAQ } from "./faq";
 import { INSTAGRAM_URL, OPERATOR_CITY, OPERATOR_NAME, SUPPORT_EMAIL } from "./operator";
 
@@ -76,7 +77,7 @@ export const PUBLIC_PAGES: Record<PublicPath, PageSeo> = {
 /** Plan prices for structured data, in rupees (the database catalogue holds the same amounts). */
 export const PLAN_PRICES = [
   { plan: "Free", month: 0, year: 0, description: "2 active projects and 5 clients" },
-  { plan: "Solo", month: 499, year: 4999, description: "Unlimited projects and clients, analytics, expenses and approval record PDF" },
+  { plan: "Solo", month: 499, year: 4999, description: SOLO_OFFER_DESCRIPTION },
   { plan: "Studio", month: 999, year: 9999, description: "Everything in Solo, for small studios" },
 ] as const;
 

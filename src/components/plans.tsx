@@ -1,11 +1,11 @@
 import { PRICE_TAX_NOTE } from "@/lib/business";
-import { FREE_REMINDERS_LINE } from "@/lib/plan-copy";
+import { FREE_REMINDERS_LINE, SOLO_LINES, SOLO_VALUE_LINE, soloYearlyNote } from "@/lib/plan-copy";
 import { Link } from "react-router";
 import { BILLING_ENABLED } from "@/lib/billing";
 import { planSale, type Sale } from "@/lib/sale";
 import { Button, Meter, buttonClass, cx } from "./ui";
 import { SOLO_CTA_LABEL } from "@/lib/plan-intent";
-import { limitText, priceLabel, usePlans, type Interval, type Plan, type PlanId, type PlanLimit } from "@/lib/plans";
+import { formatPrice, limitText, priceLabel, usePlans, type Interval, type Plan, type PlanId, type PlanLimit } from "@/lib/plans";
 
 export function IntervalToggle({ value, onChange }: { value: Interval; onChange: (v: Interval) => void }) {
   const opt = (v: Interval, label: string) => (
@@ -30,7 +30,7 @@ export function IntervalToggle({ value, onChange }: { value: Interval; onChange:
 /** What each plan offers, honestly: features that aren't built yet say "Coming". */
 export const HIGHLIGHTS: Record<PlanId, string[]> = {
   free: ["Scope agreements, approvals, revision tracking", "Change orders, quotes and GST invoices", FREE_REMINDERS_LINE],
-  solo: ["Everything in Free", "Unlimited projects and clients", "Analytics, expenses and profit", "Approval record PDF export"],
+  solo: [...SOLO_LINES],
   studio: ["Everything in Solo", "Up to 3 team members — coming", "White-label client portal — coming"],
 };
 
@@ -79,6 +79,7 @@ export function PlanCards({
         const isCurrent = current === p.id;
         const buyable = Boolean(onBuy && canBuy?.(p));
         const onSale = sale(p).onSale;
+        const unlimitedOnce = p.id === "solo" && p.max_active_projects === null && p.max_clients === null;
         return (
           <section
             key={p.id}
@@ -99,17 +100,25 @@ export function PlanCards({
               <span className="num text-[32px] font-semibold tracking-[-0.03em]">{price.main}</span>
               <span className="text-[13px] text-muted">{price.per}</span>
             </p>
-            <p className="num mt-1 min-h-[18px] text-[12px] text-positive">{price.note}</p>
+            <p className="num mt-1 min-h-[18px] text-[12px] text-positive" data-testid={p.id === "solo" ? "solo-price-note" : undefined}>
+              {p.id === "solo" && interval === "year" ? soloYearlyNote(price.main, formatPrice(p.monthly_price_cents * 12 - p.annual_price_cents, p.currency)) : price.note}
+            </p>
+            {p.id === "solo" ? (
+              <p className="mt-1 text-[12px] text-ink-2" data-testid="solo-value-line">
+                {SOLO_VALUE_LINE}
+              </p>
+            ) : null}
             {p.id === "solo" ? (
               <p className="mt-1 text-[12px] text-muted" data-testid="price-tax-note">
                 {PRICE_TAX_NOTE}
               </p>
             ) : null}
             <ul className="mt-5 space-y-2 text-[13px] text-ink-2">
-              <li className="font-medium text-ink">{limitText(p.max_active_projects, "active projects")}</li>
-              <li className="font-medium text-ink">{limitText(p.max_clients, "clients")}</li>
-              {HIGHLIGHTS[p.id].map((h) => (
-                <li key={h} className={cx(h.endsWith("coming") && "text-muted")}>
+              {/* Solo says "unlimited" once, in its first line. */}
+              {unlimitedOnce ? null : <li className="font-medium text-ink">{limitText(p.max_active_projects, "active projects")}</li>}
+              {unlimitedOnce ? null : <li className="font-medium text-ink">{limitText(p.max_clients, "clients")}</li>}
+              {HIGHLIGHTS[p.id].map((h, i) => (
+                <li key={h} className={cx(h.endsWith("coming") && "text-muted", unlimitedOnce && i === 0 && "font-medium text-ink")}>
                   {h}
                 </li>
               ))}

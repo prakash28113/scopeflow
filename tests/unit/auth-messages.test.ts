@@ -28,7 +28,7 @@ describe("T2-04 Google-only accounts", () => {
     ].map(signInError);
     expect(new Set(answers).size).toBe(1);
     // Sign-up: an existing address gets the same screen as a new one.
-    expect(signUpOutcome({ user: null, session: null }, { status: 422, code: "user_already_exists", message: "User already registered" }, "help@scopeflow.in")).toEqual({ kind: "check-inbox" });
+    expect(signUpOutcome({ session: null }, { status: 422, code: "user_already_exists", message: "User already registered" }, "help@scopeflow.in")).toEqual({ kind: "check-inbox" });
     expect(resendError({ status: 400, message: "User not found" })).toBeNull();
   });
   it("no message on the sign-in screens says whether an email exists", () => {
