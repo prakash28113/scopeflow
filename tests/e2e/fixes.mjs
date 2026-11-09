@@ -409,6 +409,38 @@ window.Razorpay.prototype.open=function(){var o=this.o;window.__rzp=o;window.__r
     await ctx.close();
   }
 
+  // ------------------------------------------------------------------ T2-10
+  step("T2-10 home: phones fetch the square hero and no app code before it; the app still takes over");
+  {
+    const ctx = await newCtx({ ...PHONE, viewport: { width: 400, height: 844 } });
+    const p = await newPage(ctx, "t2-10 phone");
+    const order = [];
+    p.on("request", (r) => {
+      const u = new URL(r.url());
+      if (u.origin === BASE && /\.(js|webp)$/.test(u.pathname)) order.push(u.pathname);
+    });
+    await p.goto(`${BASE}/`);
+    const hero = p.locator("section#top picture img");
+    assert.match(await hero.evaluate((el) => el.currentSrc), /\/home\/hero-stamp-m-683\.webp$/, "the square crop on a phone");
+    const box = await hero.boundingBox();
+    assert.ok(Math.abs(box.width - box.height) < 2, "the hero card is square at this width");
+    await p.waitForFunction(() => document.querySelector('script[type="module"][src^="/assets/index-"]'));
+    assert.equal(order[0], "/home/hero-stamp-m-683.webp", `the hero is the first file asked for (${order.slice(0, 3).join(", ")})`);
+    assert.ok(order.indexOf("/boot.js") < order.findIndex((f) => f.startsWith("/assets/index-")), "the app's code starts from boot.js");
+    assert.ok(!order.includes("/home/hero-stamp-1024.webp"), "the wide photo isn't downloaded on a phone");
+    // Hydrated: an in-app link moves without a full page load.
+    await p.evaluate(() => (window.__sameDocument = true));
+    await p.getByTestId("public-header").getByRole("link", { name: "Pricing" }).click();
+    await p.waitForURL(`${BASE}/pricing`);
+    assert.equal(await p.evaluate(() => window.__sameDocument === true), true, "client-side navigation after the app took over");
+    await ctx.close();
+    const wide = await newCtx();
+    const w = await newPage(wide, "t2-10 desktop");
+    await w.goto(`${BASE}/`);
+    assert.match(await w.locator("section#top picture img").evaluate((el) => el.currentSrc), /\/home\/hero-stamp-(640|1024)\.webp$/, "the wide photo on desktop");
+    await wide.close();
+  }
+
   if (errors.length) throw new Error(`Browser errors:\n${errors.join("\n")}`);
   console.log("✓ fix-list checks passed with no browser errors");
 } finally {

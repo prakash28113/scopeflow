@@ -13,6 +13,7 @@ import { plansQuery } from "./lib/plans";
 import { PUBLIC_PAGES, SITE_URL, structuredData, canonicalUrl, OG_IMAGE, type PublicPath } from "./lib/seo";
 
 export { PUBLIC_PAGES, SITE_URL, structuredData, canonicalUrl, OG_IMAGE };
+export { heroPreloads } from "./lib/hero";
 export type { PublicPath };
 
 /** Data a page needs on first render, fetched once per build. Optional: a page renders its loading state without it. */

@@ -1,3 +1,4 @@
+import { HERO } from "@/lib/hero";
 import { useEffect, useRef, useState, type CSSProperties, type FormEvent, type ReactNode } from "react";
 import { Link, useNavigate } from "react-router";
 import { cx } from "@/components/ui";
@@ -126,7 +127,11 @@ function Hero() {
       </div>
 
       <div className="hm-card hm-hero-card mt-10 sm:mt-14">
-        <Photo name="hero-stamp" w={1024} h={683} eager alt="A hand pressing a wooden stamp onto a sheet of paper in a single beam of warm light" className="hm-kb absolute inset-0 size-full object-cover" style={{ objectPosition: "60% 50%" }} />
+        {/* Phones get the square the card shows (src/lib/hero.ts); the build preloads the right file in <head>. */}
+        <picture>
+          <source media={HERO.mobile.media} srcSet={HERO.mobile.src} width={HERO.mobile.size} height={HERO.mobile.size} />
+          <Photo name={HERO.name} widths={[...HERO.widths]} sizes={HERO.sizes} w={1024} h={683} eager alt="A hand pressing a wooden stamp onto a sheet of paper in a single beam of warm light" className="hm-kb absolute inset-0 size-full object-cover" style={{ objectPosition: "60% 50%" }} />
+        </picture>
       </div>
 
       <div className="mt-3.5 grid grid-cols-2 gap-3.5">
