@@ -40,6 +40,12 @@ export const planUrl = (i: PlanIntent) => `/plan?${intentQuery(i)}`;
 export const signupUrl = (i: PlanIntent) => `/signup?${intentQuery(i)}`;
 export const onboardingUrl = (i: PlanIntent | null) => (i ? `/onboarding?${intentQuery(i)}` : "/onboarding");
 
+/**
+ * /onboarding opened by an account that has already finished set-up: there's nothing to do there.
+ * Returns where to send them (the pending plan, else the dashboard), or null to show set-up.
+ */
+export const alreadySetUp = (onboardedAt: string | null | undefined, i: PlanIntent | null): string | null => (onboardedAt ? (i ? planUrl(i) : "/dashboard") : null);
+
 /** After set-up: Plan & usage with the plan selected, or the usual first-project screen. */
 export const afterOnboarding = (i: PlanIntent | null) => (i ? planUrl(i) : "/projects/new?welcome=1");
 

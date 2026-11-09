@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
-import { INTENT_TTL_MS, SOLO_CTA_LABEL, afterOnboarding, intentQuery, onboardingUrl, parseIntent, planUrl, readIntent, rememberIntent, signupUrl, soloCta, takeIntent } from "@/lib/plan-intent";
+import { INTENT_TTL_MS, SOLO_CTA_LABEL, afterOnboarding, alreadySetUp, intentQuery, onboardingUrl, parseIntent, planUrl, readIntent, rememberIntent, signupUrl, soloCta, takeIntent } from "@/lib/plan-intent";
 
 const src = (p: string) => readFileSync(new URL(`../../${p}`, import.meta.url), "utf8");
 function memory() {
@@ -77,5 +77,22 @@ describe("T1-02 the Solo button on pricing reaches checkout", () => {
     const cards = src("src/components/plans.tsx");
     expect(cards).toContain('<Link to="/signup" className={cx(buttonClass("secondary"), "w-full")}>\n                    Start free\n                  </Link>');
     expect(cards).toContain('<Link to="/signup?plan=early" className={cx(buttonClass(recommended ? "primary" : "secondary"), "w-full")}>\n                  Start free, join early access\n                </Link>');
+  });
+});
+
+describe("T2-08 /onboarding after set-up is finished", () => {
+  it("sends a finished account to the dashboard, or to the plan it came for", () => {
+    expect(alreadySetUp("2026-11-01T10:00:00Z", null)).toBe("/dashboard");
+    expect(alreadySetUp("2026-11-01T10:00:00Z", { plan: "solo", interval: "year" })).toBe("/plan?plan=solo&interval=yearly");
+  });
+  it("shows set-up to an account that hasn't finished it", () => {
+    expect(alreadySetUp(null, null)).toBeNull();
+    expect(alreadySetUp(undefined, { plan: "solo", interval: "month" })).toBeNull();
+  });
+  it("is decided when the page opens, so finishing set-up still goes where set-up sends you; the tab has a proper title", () => {
+    const page = src("src/routes/settings.tsx");
+    expect(page).toContain("if (startedDone.current === undefined) startedDone.current = profile.data.onboarded_at;");
+    expect(page).toContain('export const ONBOARDING_TITLE = "Set up ScopeFlow";');
+    expect(page).toContain("useTitle(ONBOARDING_TITLE, { bare: true });");
   });
 });

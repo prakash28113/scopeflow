@@ -385,6 +385,30 @@ window.Razorpay.prototype.open=function(){var o=this.o;window.__rzp=o;window.__r
     for (const path of ["/login", "/signup", "/forgot-password"]) assert.match((await fetch(`${BASE}${path}`)).headers.get("x-robots-tag") ?? "", /noindex/, `${path} stays noindex`);
   }
 
+  // ------------------------------------------------------------------ T2-08
+  step("T2-08 /onboarding has a title, and doesn't reopen once set-up is finished");
+  {
+    const ctx = await newCtx();
+    const p = await newPage(ctx, "t2-08");
+    await p.goto(`${BASE}/signup`);
+    await p.getByLabel("Your name").fill("Farah Khan");
+    await p.getByLabel("Email").fill("farah@fixes.test");
+    await p.getByLabel("Password").fill(PASSWORD);
+    await p.getByRole("button", { name: "Create account" }).click();
+    await p.waitForURL("**/onboarding");
+    await p.getByRole("heading", { name: "Set up your workspace" }).waitFor();
+    assert.equal(await p.title(), "Set up ScopeFlow");
+    await p.getByLabel("Default currency").selectOption("INR");
+    await p.getByRole("button", { name: "Continue" }).click();
+    await p.waitForURL(/\/projects\/new\?welcome=1$/); // finishing set-up still goes to the first project
+    await p.goto(`${BASE}/onboarding`);
+    await p.waitForURL(/\/dashboard$/);
+    assert.equal(await p.getByText("Step 1 of 2").count(), 0);
+    await p.goto(`${BASE}/onboarding?plan=solo&interval=yearly`);
+    await p.waitForURL(/\/plan\?plan=solo&interval=yearly$/);
+    await ctx.close();
+  }
+
   if (errors.length) throw new Error(`Browser errors:\n${errors.join("\n")}`);
   console.log("✓ fix-list checks passed with no browser errors");
 } finally {

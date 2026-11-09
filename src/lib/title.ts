@@ -4,10 +4,10 @@ import { useEffect } from "react";
 const SITE_NAME = "ScopeFlow";
 
 /** Sets a plain page title (app and sign-in pages, which aren't prerendered). */
-export function useTitle(title: string) {
+export function useTitle(title: string, { bare = false }: { bare?: boolean } = {}) {
   useEffect(() => {
-    document.title = title === SITE_NAME ? title : `${title} | ${SITE_NAME}`;
-  }, [title]);
+    document.title = bare || title === SITE_NAME ? title : `${title} | ${SITE_NAME}`;
+  }, [title, bare]);
 }
 
 /** Asks search engines not to index the current page (e.g. "Page not found"), and removes the request on leaving it. */

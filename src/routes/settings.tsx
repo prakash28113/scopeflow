@@ -1,9 +1,10 @@
-import { useEffect, useState, type FormEvent, type ReactNode } from "react";
+import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
+import { useTitle } from "@/lib/title";
 import { takeSource } from "@/lib/signup-source";
 import { DEFAULT_SAC, GST_STATES_SORTED, SAC_SUGGESTIONS } from "@/lib/gst";
 import { financialYear } from "@/lib/format";
-import { useNavigate, useSearchParams } from "react-router";
-import { afterOnboarding, parseIntent, rememberIntent, takeIntent } from "@/lib/plan-intent";
+import { Navigate, useNavigate, useSearchParams } from "react-router";
+import { afterOnboarding, alreadySetUp, parseIntent, readIntent, rememberIntent, takeIntent } from "@/lib/plan-intent";
 import { useQueryClient } from "@tanstack/react-query";
 import { z } from "zod";
 import { Alert, Card, Field, Input, Logo, PageHeader, Select, Textarea } from "@/components/ui";
@@ -60,6 +61,8 @@ function WorkspaceForm({ profile, onDone, submitLabel }: { profile: Profile; onD
   );
 }
 
+export const ONBOARDING_TITLE = "Set up ScopeFlow";
+
 export function OnboardingPage() {
   const profile = useProfile();
   const navigate = useNavigate();
@@ -71,7 +74,13 @@ export function OnboardingPage() {
     if (fromUrl) rememberIntent(fromUrl);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fromUrl?.interval]);
+  useTitle(ONBOARDING_TITLE, { bare: true });
+  // Whether set-up was already finished when this page opened (not when the form below saves).
+  const startedDone = useRef<string | null | undefined>(undefined);
   if (!profile.data) return <PageSpinner />;
+  if (startedDone.current === undefined) startedDone.current = profile.data.onboarded_at;
+  const away = alreadySetUp(startedDone.current, fromUrl ?? readIntent());
+  if (away) return <Navigate to={away} replace />;
   return (
     <div className="flex min-h-dvh flex-col">
       <header className="px-6 py-5">
