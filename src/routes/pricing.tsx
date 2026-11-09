@@ -43,6 +43,7 @@ export default function PricingPage() {
           <Alert>Couldn't load plans. Please refresh.</Alert>
         ) : (
           <>
+            <h2 className="sr-only">Plans</h2>
             <PlanCards plans={plans.data} interval={interval} soloLink={solo} onSoloIntent={session && !solo.current ? preloadCheckout : undefined} />
             <p className="mx-auto mt-6 max-w-2xl text-center text-[13px] text-muted">
               {anyOnSale(plans.data, BILLING_ENABLED)

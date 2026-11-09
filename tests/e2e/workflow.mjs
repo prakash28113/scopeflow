@@ -23,6 +23,8 @@ async function newCtx(opts = {}) {
       ? route.fulfill({ contentType: "text/javascript", body: GOOGLE_STUB })
       : route.abort(),
   );
+  // Razorpay's checkout.js is fetched ahead of a click (T2-03); tests never reach the real one.
+  await c.route("https://checkout.razorpay.com/**", (route) => route.fulfill({ contentType: "text/javascript", body: "window.Razorpay=function(){};window.Razorpay.prototype.on=function(){};window.Razorpay.prototype.open=function(){};" }));
   return c;
 }
 const desk = await newCtx({ viewport: { width: 1360, height: 900 }, permissions: ["clipboard-read", "clipboard-write"] });

@@ -3,7 +3,8 @@
 // Usage: BASE=http://localhost:3000 node tests/e2e/fixes.mjs
 import { chromium } from "playwright";
 import assert from "node:assert/strict";
-import { mkdirSync } from "node:fs";
+import { mkdirSync, readFileSync } from "node:fs";
+import { createRequire } from "node:module";
 
 const BASE = process.env.BASE ?? "http://localhost:3000";
 const AUTH = "http://127.0.0.1:54321/auth/v1";
@@ -17,6 +18,8 @@ async function newCtx(opts = {}) {
   await c.route("https://accounts.google.com/**", (route) =>
     route.request().url().startsWith("https://accounts.google.com/gsi/client") ? route.fulfill({ contentType: "text/javascript", body: GOOGLE_STUB }) : route.abort(),
   );
+  // Razorpay's checkout.js is fetched ahead of a click (T2-03); tests never reach the real one.
+  await c.route("https://checkout.razorpay.com/**", (route) => route.fulfill({ contentType: "text/javascript", body: "window.Razorpay=function(){};window.Razorpay.prototype.on=function(){};window.Razorpay.prototype.open=function(){};" }));
   return c;
 }
 async function newPage(ctx, who) {
@@ -28,6 +31,16 @@ async function newPage(ctx, who) {
 const PHONE = { viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true };
 const shot = (p, name, full = false) => p.screenshot({ path: `${OUT}fix-${name}.png`, fullPage: full });
 const step = (s) => console.log(`• ${s}`);
+const AXE = readFileSync(createRequire(import.meta.url).resolve("axe-core/axe.min.js"), "utf8");
+/** Serious and critical accessibility problems on the page (or inside one element), as short lines. */
+async function axe(p, selector = null) {
+  await p.evaluate(AXE);
+  return p.evaluate(async (sel) => {
+    const r = await window.axe.run(sel ? document.querySelector(sel) : document, { resultTypes: ["violations"] });
+    return r.violations.filter((v) => v.impact === "serious" || v.impact === "critical").map((v) => `${v.id} ×${v.nodes.length}: ${v.nodes[0].target.join(" ")}`);
+  }, selector);
+}
+const overlap = (a, b) => a && b && a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height;
 const settings = (q) => fetch(`${AUTH}/__test/settings?${q}`).then((r) => r.json());
 const PASSWORD = "correct-horse-9";
 /** Signs up (Confirm email off) and finishes set-up; ends on the first screen after it. */
@@ -301,6 +314,50 @@ window.Razorpay.prototype.open=function(){var o=this.o;window.__rzp=o;window.__r
       assert.equal(await p.getByTestId("google-hint").innerText(), "Signed up with Google? Use 'Continue with Google' above.");
     }
     await shot(p, "t2-04-google-hint");
+    await ctx.close();
+  }
+
+  // ------------------------------------------------------------------ T2-06 (and RT4-02)
+  step("T2-06 mobile pricing: Beta badge clear of the nav at 360/400/414 px, compare table swipeable and focusable, no serious a11y issues");
+  {
+    for (const width of [360, 400, 414]) {
+      const ctx = await newCtx({ ...PHONE, viewport: { width, height: 844 } });
+      const p = await newPage(ctx, `t2-06 ${width}`);
+      for (const path of ["/pricing", "/privacy", "/terms", "/refunds"]) {
+        await p.goto(`${BASE}${path}`);
+        const header = p.getByTestId("public-header");
+        const badge = await header.getByTestId("beta-badge").boundingBox();
+        const pricing = await header.getByRole("link", { name: "Pricing" }).boundingBox();
+        const logo = await header.getByRole("link", { name: "ScopeFlow home" }).boundingBox();
+        assert.ok(badge && pricing && logo, `${path} @${width}: badge, logo and Pricing are shown`);
+        assert.ok(!overlap(badge, pricing), `${path} @${width}: the Beta badge and Pricing don't overlap`);
+        assert.ok(pricing.x - (badge.x + badge.width) >= 4, `${path} @${width}: a gap between the badge and Pricing (${Math.round(pricing.x - badge.x - badge.width)}px)`);
+        assert.ok(!overlap(badge, logo), `${path} @${width}: the badge doesn't sit on the logo`);
+        assert.equal(await p.evaluate(() => document.documentElement.scrollWidth > window.innerWidth), false, `${path} @${width}: no sideways page scroll`);
+        if (width !== 414 || path === "/pricing") await shot(p, `t2-06-${path.slice(1)}-${width}`);
+      }
+      assert.equal(await p.getByTestId("public-header").getByTestId("beta-badge").getAttribute("title"), "Beta: new features ship weekly; prices shown are real.");
+      await p.goto(`${BASE}/pricing`);
+      const region = p.getByRole("region", { name: "Compare plans" });
+      await region.scrollIntoViewIfNeeded();
+      assert.equal(await region.getAttribute("tabindex"), "0", "the scroller can be focused from the keyboard");
+      assert.ok(await p.getByTestId("compare-swipe-hint").isVisible(), "a visible swipe hint");
+      const before = await region.locator("tbody th").first().boundingBox();
+      await region.evaluate((el) => (el.scrollLeft = 200));
+      const after = await region.locator("tbody th").first().boundingBox();
+      assert.ok(Math.abs(before.x - after.x) < 2, "the feature names stay put while the plans scroll");
+      assert.deepEqual(await axe(p), [], `/pricing @${width}: axe serious/critical`);
+      await ctx.close();
+    }
+    const ctx = await newCtx();
+    const p = await newPage(ctx, "t2-06 desktop");
+    await p.goto(`${BASE}/pricing`);
+    await p.getByRole("region", { name: "Compare plans" }).waitFor();
+    assert.equal(await p.getByTestId("compare-swipe-hint").isVisible(), false, "no swipe hint on desktop");
+    assert.deepEqual(await axe(p), [], "/pricing desktop: axe serious/critical");
+    // Headings go h1 → h2 → h3 without skipping.
+    const levels = await p.evaluate(() => [...document.querySelectorAll("main h1, main h2, main h3")].map((h) => Number(h.tagName[1])));
+    assert.ok(levels.every((l, i) => i === 0 || l - levels[i - 1] <= 1), `heading order ${levels.join(",")}`);
     await ctx.close();
   }
 

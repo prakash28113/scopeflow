@@ -14,7 +14,7 @@ export function IntervalToggle({ value, onChange }: { value: Interval; onChange:
       role="radio"
       aria-checked={value === v}
       onClick={() => onChange(v)}
-      className={cx("rounded-md px-3.5 py-1.5 text-[13px] font-medium transition-colors", value === v ? "bg-surface text-ink shadow-sm" : "text-muted hover:text-ink")}
+      className={cx("rounded-md px-3.5 py-1.5 text-[13px] font-medium transition-colors", value === v ? "bg-surface text-ink shadow-sm" : "text-ink-2 hover:text-ink")}
     >
       {label}
     </button>
@@ -195,12 +195,16 @@ export const ROWS: { label: string; cells: [Cell, Cell, Cell]; soon?: boolean }[
 
 export function FeatureMatrix({ plans }: { plans: Plan[] }) {
   return (
-    <div className="overflow-x-auto rounded-[var(--radius-card)] border border-line bg-surface">
+    <div>
+      <p className="mb-2 text-right text-[12px] font-medium text-ink-2 sm:hidden" data-testid="compare-swipe-hint" aria-hidden>
+        Swipe to compare →
+      </p>
+    <div className="compare-scroll overflow-x-auto rounded-[var(--radius-card)] border border-line bg-surface" tabIndex={0} role="region" aria-label="Compare plans">
       <table className="w-full min-w-[560px] text-left text-[13px]">
         <caption className="sr-only">Compare plans</caption>
         <thead>
           <tr className="border-b border-line">
-            <th scope="col" className="px-4 py-3 font-medium text-muted">Feature</th>
+            <th scope="col" className="sticky left-0 z-[1] max-w-[46vw] bg-surface px-4 py-3 font-medium text-ink-2 sm:static sm:max-w-none">Feature</th>
             {plans.map((p) => (
               <th key={p.id} scope="col" className="px-4 py-3 font-semibold">
                 {p.name}
@@ -211,9 +215,9 @@ export function FeatureMatrix({ plans }: { plans: Plan[] }) {
         <tbody className="divide-y divide-line">
           {ROWS.map((r) => (
             <tr key={r.label}>
-              <th scope="row" className="px-4 py-2.5 font-normal text-ink-2">
+              <th scope="row" className="sticky left-0 z-[1] max-w-[46vw] bg-surface px-4 py-2.5 font-normal text-ink-2 shadow-[1px_0_0_var(--color-line)] sm:static sm:max-w-none sm:shadow-none">
                 {r.label}
-                {r.soon ? <span className="ml-2 rounded bg-sunken px-1.5 py-0.5 text-[11px] text-muted">Coming</span> : null}
+                {r.soon ? <span className="ml-2 rounded bg-sunken px-1.5 py-0.5 text-[11px] text-ink-2">Coming</span> : null}
               </th>
               {plans.map((p, i) => {
                 const c = r.cells[i];
@@ -235,6 +239,7 @@ export function FeatureMatrix({ plans }: { plans: Plan[] }) {
           </tr>
         </tfoot>
       </table>
+    </div>
     </div>
   );
 }
