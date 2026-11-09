@@ -15,6 +15,7 @@ export const routes: RouteObject[] = [
       { path: "/login", lazy: lazy(() => import("./auth").then((m) => ({ default: m.LoginPage }))) },
       { path: "/signup", lazy: lazy(() => import("./auth").then((m) => ({ default: m.SignupPage }))) },
       { path: "/forgot-password", lazy: lazy(() => import("./auth").then((m) => ({ default: m.ForgotPasswordPage }))) },
+      { path: "/auth/callback", lazy: lazy(() => import("./auth").then((m) => ({ default: m.AuthCallbackPage }))) },
       { path: "/reset-password", lazy: lazy(() => import("./auth").then((m) => ({ default: m.ResetPasswordPage }))) },
       // Client portal: token-gated, no account. Token is read from the URL fragment.
       { path: "/p", lazy: lazy(() => import("./portal")) },

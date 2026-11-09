@@ -138,23 +138,79 @@ function json(res, status, obj) {
 }
 
 const outbox = new Map();
+// Test switches that mirror the Supabase dashboard: "Confirm email" and CAPTCHA protection.
+// GET /auth/v1/__test/settings?confirm=1|0&captcha=1|0. Both start off, like production today.
+const authSettings = { confirm: false, captcha: false };
+const unconfirmed = new Set();
+const confirmOutbox = new Map(); // email -> { link, sent }
+const captchaLog = []; // { path, token } for every auth call that can carry a CAPTCHA token
+/** Like Supabase with CAPTCHA on: password sign-in, sign-up, resend and recover need a token. */
+function captchaRefused(path, b, res) {
+  const token = b?.gotrue_meta_security?.captcha_token ?? null;
+  captchaLog.push({ path, token });
+  if (!authSettings.captcha || token) return false;
+  json(res, 400, { code: 400, error_code: "captcha_failed", msg: "captcha verification process failed" });
+  return true;
+}
+function sendConfirm(u, redirectTo) {
+  const sn = session(u);
+  const back = redirectTo || "http://localhost:3000/auth/callback";
+  const prev = confirmOutbox.get(u.email);
+  confirmOutbox.set(u.email, {
+    link: `${back}#access_token=${sn.access_token}&expires_at=${sn.expires_at}&expires_in=3600&refresh_token=${sn.refresh_token}&token_type=bearer&type=signup`,
+    sent: (prev?.sent ?? 0) + 1,
+  });
+}
 async function auth(req, res, url) {
   const path = url.pathname.replace("/auth/v1", "");
+  if (path === "/__test/settings" && req.method === "GET") {
+    for (const k of ["confirm", "captcha"]) if (url.searchParams.has(k)) authSettings[k] = url.searchParams.get(k) === "1";
+    return json(res, 200, authSettings);
+  }
+  if (path === "/__test/confirmation" && req.method === "GET") {
+    const mail = confirmOutbox.get(url.searchParams.get("email"));
+    return mail ? json(res, 200, mail) : json(res, 404, { msg: "no confirmation email" });
+  }
+  if (path === "/__test/captcha-log" && req.method === "GET") {
+    const log = captchaLog.splice(0);
+    return json(res, 200, { log });
+  }
   if (path === "/signup" && req.method === "POST") {
     const b = await body(req);
-    const exists = await q("select 1 from auth.users where email = $1", [b.email]);
+    if (captchaRefused(path, b, res)) return;
+    const exists = await q("select * from auth.users where email = $1", [b.email]);
+    if (authSettings.confirm) {
+      // Like Supabase with "Confirm email" on: no session, and an existing address gets a
+      // look-alike user back (no error, no email) so the form can't be used to find accounts.
+      if (exists.rows.length) return json(res, 200, { ...userObj({ ...exists.rows[0], id: randomUUID() }), email_confirmed_at: undefined, identities: [] });
+      const r = await q("insert into auth.users (email, encrypted_password, raw_user_meta_data) values ($1, $2, $3) returning *", [
+        b.email, b.password, JSON.stringify(b.data ?? {}),
+      ]);
+      unconfirmed.add(b.email);
+      sendConfirm(r.rows[0], url.searchParams.get("redirect_to"));
+      return json(res, 200, { ...userObj(r.rows[0]), email_confirmed_at: undefined, confirmation_sent_at: new Date().toISOString() });
+    }
     if (exists.rows.length) return json(res, 422, { code: 422, error_code: "user_already_exists", msg: "User already registered" });
     const r = await q("insert into auth.users (email, encrypted_password, raw_user_meta_data) values ($1, $2, $3) returning *", [
       b.email, b.password, JSON.stringify(b.data ?? {}),
     ]);
     return json(res, 200, session(r.rows[0]));
   }
+  if (path === "/resend" && req.method === "POST") {
+    const b = await body(req);
+    if (captchaRefused(path, b, res)) return;
+    const r = await q("select * from auth.users where email = $1", [String(b.email ?? "").toLowerCase()]);
+    if (b.type === "signup" && r.rows.length && unconfirmed.has(r.rows[0].email)) sendConfirm(r.rows[0], url.searchParams.get("redirect_to"));
+    return json(res, 200, {}); // same answer for every address
+  }
   if (path === "/token") {
     const grant = url.searchParams.get("grant_type");
     const b = await body(req);
     if (grant === "password") {
+      if (captchaRefused("/token?grant_type=password", b, res)) return;
       const r = await q("select * from auth.users where email = $1 and encrypted_password = $2", [b.email, b.password]);
       if (!r.rows.length) return json(res, 400, { code: 400, error_code: "invalid_credentials", msg: "Invalid login credentials" });
+      if (unconfirmed.has(r.rows[0].email)) return json(res, 400, { code: 400, error_code: "email_not_confirmed", msg: "Email not confirmed" });
       return json(res, 200, session(r.rows[0]));
     }
     if (grant === "id_token") {
@@ -182,11 +238,13 @@ async function auth(req, res, url) {
     if (!claims?.sub) return json(res, 401, { code: 401, error_code: "bad_jwt", msg: "invalid JWT" });
     const r = await q("select * from auth.users where id = $1", [claims.sub]);
     if (!r.rows.length) return json(res, 404, { code: 404, msg: "User not found" });
+    unconfirmed.delete(r.rows[0].email); // a session exists only after the emailed link was opened
     return json(res, 200, userObj(r.rows[0]));
   }
   if (path === "/logout") { res.writeHead(204, CORS); return res.end(); }
   if (path === "/recover" && req.method === "POST") {
     const b = await body(req);
+    if (captchaRefused(path, b, res)) return;
     const r = await q("select * from auth.users where email = $1", [String(b.email ?? "").toLowerCase()]);
     const back = url.searchParams.get("redirect_to");
     if (r.rows.length && back) {

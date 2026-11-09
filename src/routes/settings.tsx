@@ -17,6 +17,8 @@ import { UPI_ID } from "@/lib/upi";
 import { GSTIN } from "@/lib/invoice";
 import { PASSWORD_RESET_EMAIL } from "@/lib/site";
 import { issuesToFieldErrors, onboardingSchema, type FieldErrors } from "@/lib/validation";
+import { Captcha, captchaSiteKey } from "@/components/captcha";
+import { CAPTCHA_FAILED, captchaBlocks, captchaOptions, isCaptchaError } from "@/lib/auth-flow";
 
 function WorkspaceForm({ profile, onDone, submitLabel }: { profile: Profile; onDone: () => void; submitLabel: string }) {
   const qc = useQueryClient();
@@ -91,6 +93,8 @@ function PasswordForm({ email }: { email: string }) {
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [fe, setFe] = useState<FieldErrors>({});
+  const [captcha, setCaptcha] = useState<string | null>(null);
+  const [attempt, setAttempt] = useState(0);
   async function onSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const form = e.currentTarget;
@@ -99,10 +103,15 @@ function PasswordForm({ email }: { email: string }) {
     setFe({});
     setError(null);
     setPending(true);
-    // Re-verify the current password so a borrowed session can't change it.
-    const check = await supabase.auth.signInWithPassword({ email, password: parsed.data.current });
+    if (captchaBlocks(captchaSiteKey, captcha)) return setError("Please complete the security check.");
+    // Re-verify the current password so a borrowed session can't change it. (With CAPTCHA switched on
+    // in Supabase, every password sign-in needs a token, this one included.)
+    const check = await supabase.auth.signInWithPassword({ email, password: parsed.data.current, options: captchaOptions(captcha) });
+    setCaptcha(null);
+    setAttempt((n) => n + 1);
     if (check.error) {
       setPending(false);
+      if (isCaptchaError(check.error)) return setError(CAPTCHA_FAILED);
       return setFe({ current: "That isn't your current password" });
     }
     const { error } = await supabase.auth.updateUser({ password: parsed.data.next });
@@ -123,7 +132,8 @@ function PasswordForm({ email }: { email: string }) {
       <Field label="Confirm new password" htmlFor="confirm" error={fe.confirm}>
         <Input id="confirm" name="confirm" type="password" autoComplete="new-password" />
       </Field>
-      <SubmitButton variant="secondary" pending={pending}>
+      <Captcha onToken={setCaptcha} attempt={attempt} />
+      <SubmitButton variant="secondary" pending={pending} disabled={captchaBlocks(captchaSiteKey, captcha)}>
         Change password
       </SubmitButton>
     </form>

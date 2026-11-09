@@ -82,8 +82,8 @@ export const PORTAL_HEADERS: Record<string, string> = {
   "Cache-Control": "no-store",
 };
 
-/** Pages that carry one-time secrets in the address (client links, reset links): never indexed or cached. */
-export const PRIVATE_PATHS = ["/p", "/reset-password", "/forgot-password"] as const;
+/** Pages that carry one-time secrets in the address (client links, reset and confirmation links): never indexed or cached. */
+export const PRIVATE_PATHS = ["/p", "/reset-password", "/forgot-password", "/auth/callback"] as const;
 
 /**
  * Sign-in and sign-up: useful pages but nothing to find in search, and both are the same app shell,

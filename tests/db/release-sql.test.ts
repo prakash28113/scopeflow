@@ -70,7 +70,13 @@ describe("release automation against a real database", () => {
     expect((await db.query("select name from scopeflow_admin.applied_migrations")).rows).toEqual(migrations.map((m) => ({ name: m.name })));
     expect((await db.query("select email from public.beta_allowlist")).rows).toEqual([{ email: "owner@example.com" }]);
     const auth = api.calls.find((c) => c.path.endsWith("/config/auth"));
-    expect(auth?.body).toMatchObject({ mailer_autoconfirm: true, password_min_length: 8, external_email_enabled: true });
+    expect(auth?.body).toMatchObject({ password_min_length: 8, external_email_enabled: true });
+    // "Confirm email" and CAPTCHA are set by the owner in the Supabase dashboard; no release call touches them.
+    for (const c of api.calls) {
+      const b = JSON.stringify(c.body ?? {});
+      expect(b).not.toContain("mailer_autoconfirm");
+      expect(b).not.toContain("security_captcha");
+    }
   });
 
   it("is idempotent: a second run applies nothing and changes nothing", async () => {
