@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 // @ts-expect-error — plain ESM script
-import { run, publicSupabaseConfig, signupsOpen, parseEmails, parseDomains, billingConfig, purchasableSql, blogAuthors, blogAuthorsSql, complimentaryPlans } from "../../scripts/ci/release.mjs";
+import { run, publicSupabaseConfig, signupsOpen, parseEmails, parseDomains, billingConfig, purchasableSql, blogAuthors, blogAuthorsSql, complimentaryPlans, googleAuthConfig, googleClientId, googleSignInEnabled } from "../../scripts/ci/release.mjs";
 
 const REF = "abcdefghijklmnopqrst";
 const SUPA = `https://${REF}.supabase.co`;
@@ -103,8 +103,13 @@ describe("release automation — deploy and live checks", () => {
     expect(build.env.VITE_SUPABASE_PUBLISHABLE_KEY).toBe("sb_publishable_live123");
     expect(w.execs.map((e) => e.args[0])).toEqual(["run", "scripts/predeploy-check.mjs", "wrangler"]);
     const deploy = w.execs.find((e) => e.args[0] === "wrangler")!;
-    expect(deploy.args).toEqual(["wrangler", "deploy", "--var", `SUPABASE_URL:${SUPA}`, "--var", "SUPABASE_ANON_KEY:sb_publishable_live123", "--var", "TURNSTILE_ENABLED:false", "--var", "GOOGLE_SIGNIN_ENABLED:false", "--var", "BILLING_ENABLED:false"]);
+    expect(deploy.args).toEqual(["wrangler", "deploy", "--var", `SUPABASE_URL:${SUPA}`, "--var", "SUPABASE_ANON_KEY:sb_publishable_live123", "--var", "TURNSTILE_ENABLED:false", "--var", `GOOGLE_SIGNIN_ENABLED:${googleSignInEnabled()}`, "--var", "BILLING_ENABLED:false"]);
     expect(deploy.env.CLOUDFLARE_ACCOUNT_ID).toBe("acc0");
+    // Google sign-in: switched on in Supabase (client ID, nonce checked, no secret) before the build shows the button.
+    const googleCall = w.calls.find((c) => (c.body as { external_google_enabled?: boolean })?.external_google_enabled);
+    expect(Boolean(googleCall)).toBe(googleSignInEnabled());
+    if (googleCall) expect(googleCall.body).toEqual({ external_google_enabled: true, external_google_client_id: googleClientId(), external_google_skip_nonce_check: false });
+    expect(build.env.VITE_GOOGLE_CLIENT_ID).toBe(googleClientId());
     // No Razorpay keys: nothing on sale, no billing function, checkout hidden. The blog API is always deployed.
     expect(build.env.VITE_BILLING_PROVIDER).toBe("");
     expect(w.calls.filter((c) => c.url.includes("/functions/deploy")).map((c) => new URL(c.url).searchParams.get("slug"))).toEqual(["blog"]);
@@ -308,5 +313,16 @@ describe("complimentary plans", () => {
     expect(complimentaryPlans("{}")).toEqual([]);
     expect(() => complimentaryPlans(JSON.stringify({ complimentaryPlans: [{ email: "me@example.com", plan: "free" }] }))).toThrow(/Invalid complimentary/);
     expect(() => complimentaryPlans(JSON.stringify({ complimentaryPlans: [{ email: "x'; drop table plans; --", plan: "studio" }] }))).toThrow();
+  });
+});
+
+describe("Sign in with Google in Supabase", () => {
+  it("switches Google on with the public client ID and keeps the nonce check", () => {
+    const id = "123456789-abc123def.apps.googleusercontent.com";
+    expect(googleClientId(JSON.stringify({ googleClientId: id }))).toBe(id);
+    expect(googleClientId(JSON.stringify({ googleClientId: "not-a-client-id" }))).toBe("");
+    expect(googleAuthConfig(id, undefined)).toEqual({ external_google_enabled: true, external_google_client_id: id, external_google_skip_nonce_check: false });
+    expect(googleAuthConfig(id, "s3cret")).toMatchObject({ external_google_secret: "s3cret" });
+    expect(googleAuthConfig("", "s3cret")).toBeNull();
   });
 });
