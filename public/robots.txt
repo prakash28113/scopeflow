@@ -1,6 +1,7 @@
 # ScopeFlow: only the public pages are for search engines.
 # Client project links (/p) and reset pages stay crawlable so link previews work,
 # but they send "X-Robots-Tag: noindex" so they never appear in search results.
+# Sign-in and sign-up also send noindex (nothing to search for there).
 User-agent: *
 Allow: /
 Disallow: /dashboard

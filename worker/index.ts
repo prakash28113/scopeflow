@@ -12,7 +12,7 @@
  *    (assets.run_worker_first) and are rendered with the posts from the database (worker/blog.ts);
  *  - `scheduled` pings Supabase twice a day so a free project isn't paused.
  */
-import { PORTAL_HEADERS, PRIVATE_PATHS, pageHeaders } from "../build/security-headers";
+import { PORTAL_HEADERS, PRIVATE_PATHS, SIGN_IN_HEADERS, SIGN_IN_PATHS, pageHeaders } from "../build/security-headers";
 import { isKnownPath } from "../src/lib/known-routes";
 import { blogRoute, fillShell, getPost, listPage, listPosts, notFoundPage, postPage, rss, sitemap } from "./blog";
 
@@ -80,6 +80,7 @@ export async function servePage(request: Request, env: Env): Promise<Response> {
   const url = new URL(request.url);
   if ((PRIVATE_PATHS as readonly string[]).includes(url.pathname)) for (const [k, v] of Object.entries(PORTAL_HEADERS)) s.headers.set(k, v);
   else s.headers.set("Cache-Control", "no-cache");
+  if ((SIGN_IN_PATHS as readonly string[]).includes(url.pathname)) for (const [k, v] of Object.entries(SIGN_IN_HEADERS)) s.headers.set(k, v);
   return new Response(request.method === "HEAD" ? null : s.html.body, { status: 200, headers: s.headers });
 }
 

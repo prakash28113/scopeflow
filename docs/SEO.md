@@ -11,7 +11,8 @@
 - Titles, descriptions, canonical addresses and schema.org data (Organization, WebSite, WebPage, SoftwareApplication,
   FAQPage) come from `src/lib/seo.ts`. `dist/sitemap.xml` is generated from the same list.
 - Unknown addresses show "Page not found" with `noindex`. App pages are disallowed in `public/robots.txt`;
-  client links and reset pages send `X-Robots-Tag: noindex`.
+  client links and reset pages send `X-Robots-Tag: noindex`; sign-in and sign-up send `X-Robots-Tag: noindex` too
+  (both are the same app shell, which Google reported as duplicates).
 - Checks: `tests/unit/seo.test.ts`, the e2e step "search engines", `scripts/predeploy-check.mjs`, and the release's
   live check that `/` is the prerendered, indexable page.
 
