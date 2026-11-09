@@ -151,6 +151,8 @@ jobs:
           RAZORPAY_KEY_SECRET: ${{ secrets.RAZORPAY_KEY_SECRET }}
           RAZORPAY_WEBHOOK_SECRET: ${{ secrets.RAZORPAY_WEBHOOK_SECRET }}
           BILLING_TESTERS: ${{ vars.BILLING_TESTERS }}
+          # Optional: only for Supabase's Google redirect flow. ScopeFlow's ID-token sign-in doesn't need it.
+          GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
 
   rollback:
     name: Rollback

@@ -97,14 +97,34 @@ export function publicSupabaseConfig(env) {
 
 const HOSTNAME = /^(?=.{4,253}$)([a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/;
 
-/** True when config/public-site.json has a Google client ID (Sign in with Google is shown). */
-export function googleSignInEnabled(text) {
+/** Whether this release ships "Continue with Google" (set during the release). */
+let googleOn = false;
+const GOOGLE_CLIENT_ID_RE = /^[0-9]+-[a-z0-9]+\.apps\.googleusercontent\.com$/;
+/** The public Google client ID from config/public-site.json, or "" (no Google button). */
+export function googleClientId(text) {
   try {
     const site = JSON.parse(text ?? readFileSync(join(ROOT, "config/public-site.json"), "utf8"));
-    return /^[0-9]+-[a-z0-9]+\.apps\.googleusercontent\.com$/.test(String(site.googleClientId ?? ""));
+    const id = String(site.googleClientId ?? "");
+    return GOOGLE_CLIENT_ID_RE.test(id) ? id : "";
   } catch {
-    return false;
+    return "";
   }
+}
+/** True when config/public-site.json has a Google client ID (Sign in with Google is shown). */
+export function googleSignInEnabled(text) {
+  return Boolean(googleClientId(text));
+}
+/**
+ * Supabase Auth settings for "Continue with Google". ScopeFlow signs in with Google ID tokens
+ * (signInWithIdToken), which Supabase checks against this client ID and the nonce; no redirect
+ * flow and no client secret are needed. GOOGLE_CLIENT_SECRET (a GitHub secret) is passed on
+ * only if it was set, for Supabase's optional redirect flow.
+ */
+export function googleAuthConfig(clientId, secret) {
+  if (!clientId) return null;
+  const body = { external_google_enabled: true, external_google_client_id: clientId, external_google_skip_nonce_check: false };
+  if (secret) body.external_google_secret = secret;
+  return body;
 }
 
 /** Supabase redirect allow-list: only the reset page on ScopeFlow's own addresses. */
@@ -217,6 +237,9 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
  *   migrations: [{ name, body }], allowlistFile: string, wait(ms)
  */
 export async function run(deps) {
+  // "Continue with Google" ships only when Supabase accepts it (setUpSupabase can turn it off);
+  // an app-only release keeps the configured value.
+  googleOn = googleSignInEnabled();
   const { env, fetch, exec, log, summary, migrations, allowlistFile, wait = sleep } = deps;
   const report = [];
   const ok = (m) => { report.push(`- ✅ ${m}`); log(`✓ ${m}`); };
@@ -330,6 +353,21 @@ revoke all on all tables in schema scopeflow_admin from public, anon, authentica
     password_min_length: 8,
     disable_signup: false,
   });
+
+  // Sign in with Google: switched on in Supabase before the button ships. A failure stops the
+  // release here, before deploying, so the site never shows a Google button that can't work.
+  const google = googleAuthConfig(googleClientId(), env.GOOGLE_CLIENT_SECRET);
+  if (google) {
+    try {
+      await sb(`/projects/${ref}/config/auth`, { method: "PATCH", body: google });
+      ok("Sign in with Google switched on in Supabase (ID-token sign-in, nonce checked)");
+    } catch (e) {
+      if (!/\((401|403)\)/.test(String(e.message))) throw e;
+      googleOn = false;
+      log("::notice::Sign in with Google — not switched on: the token has no Auth config permission. The Google button is left out of this release.");
+      report.push("- ⏭️ Sign in with Google — left out (token not scoped for Auth config)");
+    }
+  }
 
   const allowText = [allowlistFile ?? "", env.BETA_EMAILS ?? ""].join("\n");
   if (signupsOpen(allowText)) {
@@ -497,6 +535,7 @@ revoke all on all tables in schema scopeflow_admin from public, anon, authentica
     VITE_SUPABASE_URL: supabaseUrl,
     VITE_SUPABASE_PUBLISHABLE_KEY: publishable,
     VITE_TURNSTILE_SITE_KEY: env.VITE_TURNSTILE_SITE_KEY ?? "",
+    VITE_GOOGLE_CLIENT_ID: googleOn ? googleClientId() : "",
     SUPABASE_URL: supabaseUrl,
     SUPABASE_ANON_KEY: publishable,
   };
@@ -505,7 +544,7 @@ revoke all on all tables in schema scopeflow_admin from public, anon, authentica
   ok("Built the app and passed the pre-deploy check");
 
   const domainArgs = domains.flatMap((d) => ["--domain", d]);
-  const out = exec("npx", ["wrangler", "deploy", "--var", `SUPABASE_URL:${supabaseUrl}`, "--var", `SUPABASE_ANON_KEY:${publishable}`, "--var", `TURNSTILE_ENABLED:${env.VITE_TURNSTILE_SITE_KEY ? "true" : "false"}`, "--var", `GOOGLE_SIGNIN_ENABLED:${googleSignInEnabled() ? "true" : "false"}`, "--var", `BILLING_ENABLED:${billingOn ? "true" : "false"}`, ...domainArgs], {
+  const out = exec("npx", ["wrangler", "deploy", "--var", `SUPABASE_URL:${supabaseUrl}`, "--var", `SUPABASE_ANON_KEY:${publishable}`, "--var", `TURNSTILE_ENABLED:${env.VITE_TURNSTILE_SITE_KEY ? "true" : "false"}`, "--var", `GOOGLE_SIGNIN_ENABLED:${googleOn ? "true" : "false"}`, "--var", `BILLING_ENABLED:${billingOn ? "true" : "false"}`, ...domainArgs], {
     env: { ...buildEnv, CLOUDFLARE_API_TOKEN: cfToken, CLOUDFLARE_ACCOUNT_ID: accountId, WRANGLER_SEND_METRICS: "false" },
   });
   const workersUrl = (String(out).match(/https:\/\/scopeflow\.[a-z0-9-]+\.workers\.dev/) ?? [`https://scopeflow.${subdomain}.workers.dev`])[0];
