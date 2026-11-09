@@ -6,6 +6,7 @@
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { join } from "node:path";
+import { checkSpelling } from "./spelling-check.mjs";
 
 const ROOT = fileURLToPath(new URL("..", import.meta.url));
 const errors = [];
@@ -23,6 +24,8 @@ if (!vars.key || /YOUR-|your-/.test(vars.key)) fail("SUPABASE_ANON_KEY is still 
 if (/sb_secret_|service_role/.test(wrangler)) fail("wrangler.jsonc must never contain a secret or service-role key");
 
 const dist = join(ROOT, "dist");
+// Brand and owner-name spelling, in the source and in what was built.
+for (const p of checkSpelling([join(ROOT, "src"), dist], ROOT)) fail(`Misspelling: ${p} (write "ScopeFlow" and "Mummidisetti")`);
 if (!existsSync(join(dist, "index.html"))) fail("dist/ is missing — run the build first");
 else {
   const headers = existsSync(join(dist, "_headers")) ? readFileSync(join(dist, "_headers"), "utf8") : "";
