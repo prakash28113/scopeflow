@@ -1,4 +1,5 @@
 import { PRICE_TAX_NOTE } from "@/lib/business";
+import { FREE_REMINDERS_LINE } from "@/lib/plan-copy";
 import { Link } from "react-router";
 import { BILLING_ENABLED } from "@/lib/billing";
 import { planSale, type Sale } from "@/lib/sale";
@@ -27,8 +28,8 @@ export function IntervalToggle({ value, onChange }: { value: Interval; onChange:
 }
 
 /** What each plan offers, honestly: features that aren't built yet say "Coming". */
-const HIGHLIGHTS: Record<PlanId, string[]> = {
-  free: ["Scope agreements, approvals, revision tracking", "Change orders, quotes and GST invoices", "Payment tracking and reminders"],
+export const HIGHLIGHTS: Record<PlanId, string[]> = {
+  free: ["Scope agreements, approvals, revision tracking", "Change orders, quotes and GST invoices", FREE_REMINDERS_LINE],
   solo: ["Everything in Free", "Unlimited projects and clients", "Analytics, expenses and profit", "Approval record PDF export"],
   studio: ["Everything in Solo", "Up to 3 team members — coming", "White-label client portal — coming"],
 };
@@ -158,7 +159,7 @@ export function PlanCards({
 }
 
 type Cell = string | ((p: Plan) => string);
-const ROWS: { label: string; cells: [Cell, Cell, Cell]; soon?: boolean }[] = [
+export const ROWS: { label: string; cells: [Cell, Cell, Cell]; soon?: boolean }[] = [
   { label: "Active projects", cells: [(p) => limitText(p.max_active_projects, ""), (p) => limitText(p.max_active_projects, ""), (p) => limitText(p.max_active_projects, "")] },
   { label: "Clients", cells: [(p) => limitText(p.max_clients, ""), (p) => limitText(p.max_clients, ""), (p) => limitText(p.max_clients, "")] },
   { label: "Scope agreements, exclusions, terms, locked versions", cells: ["✓", "✓", "✓"] },
