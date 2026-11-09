@@ -57,6 +57,8 @@ describe("password reset", () => {
     const file = buildHeadersFile({ supabaseUrl: "https://x.supabase.co", turnstile: false });
     expect([...PRIVATE_PATHS]).toEqual(["/p", "/reset-password", "/forgot-password"]);
     for (const p of PRIVATE_PATHS) expect(file).toContain(`\n${p}\n  X-Robots-Tag: noindex, nofollow\n  Cache-Control: no-store\n`);
+    // Sign-in and sign-up stay out of search (Google saw them as duplicate app shells) but stay cacheable.
+    for (const p of ["/login", "/signup"]) expect(file).toContain(`\n${p}\n  X-Robots-Tag: noindex\n`);
   });
 });
 

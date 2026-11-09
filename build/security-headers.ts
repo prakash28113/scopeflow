@@ -85,6 +85,13 @@ export const PORTAL_HEADERS: Record<string, string> = {
 /** Pages that carry one-time secrets in the address (client links, reset links): never indexed or cached. */
 export const PRIVATE_PATHS = ["/p", "/reset-password", "/forgot-password"] as const;
 
+/**
+ * Sign-in and sign-up: useful pages but nothing to find in search, and both are the same app shell,
+ * so Google reported them as duplicates. Kept out of the index; links on them are still followed.
+ */
+export const SIGN_IN_PATHS = ["/login", "/signup"] as const;
+export const SIGN_IN_HEADERS: Record<string, string> = { "X-Robots-Tag": "noindex" };
+
 const block = (h: Record<string, string>) => Object.entries(h).map(([k, v]) => `  ${k}: ${v}`).join("\n");
 
 export function buildHeadersFile(opts: HeaderOptions): string {
@@ -92,6 +99,7 @@ export function buildHeadersFile(opts: HeaderOptions): string {
 ${block(pageHeaders(opts))}
 
 ${PRIVATE_PATHS.map((p) => `${p}\n${block(PORTAL_HEADERS)}\n`).join("\n")}
+${SIGN_IN_PATHS.map((p) => `${p}\n${block(SIGN_IN_HEADERS)}\n`).join("\n")}
 /assets/*
   Cache-Control: public, max-age=31536000, immutable
 `;
