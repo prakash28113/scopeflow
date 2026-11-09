@@ -1,8 +1,9 @@
-import { useState, type FormEvent, type ReactNode } from "react";
+import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 import { takeSource } from "@/lib/signup-source";
 import { DEFAULT_SAC, GST_STATES_SORTED, SAC_SUGGESTIONS } from "@/lib/gst";
 import { financialYear } from "@/lib/format";
-import { useNavigate } from "react-router";
+import { useNavigate, useSearchParams } from "react-router";
+import { afterOnboarding, parseIntent, rememberIntent, takeIntent } from "@/lib/plan-intent";
 import { useQueryClient } from "@tanstack/react-query";
 import { z } from "zod";
 import { Alert, Card, Field, Input, Logo, PageHeader, Select, Textarea } from "@/components/ui";
@@ -62,6 +63,14 @@ function WorkspaceForm({ profile, onDone, submitLabel }: { profile: Profile; onD
 export function OnboardingPage() {
   const profile = useProfile();
   const navigate = useNavigate();
+  // A plan picked on the pricing page rides along (address or this browser's memory); after set-up
+  // they land on Plan & usage with it selected instead of the first-project screen.
+  const [params] = useSearchParams();
+  const fromUrl = parseIntent(params);
+  useEffect(() => {
+    if (fromUrl) rememberIntent(fromUrl);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fromUrl?.interval]);
   if (!profile.data) return <PageSpinner />;
   return (
     <div className="flex min-h-dvh flex-col">
@@ -73,7 +82,7 @@ export function OnboardingPage() {
           <p className="text-[13px] font-medium text-accent">Step 1 of 2</p>
           <h1 className="display mt-2 text-[28px] font-semibold leading-tight">Set up your workspace</h1>
           <p className="mb-8 mt-1.5 text-sm text-muted">Two quick details, then you'll create your first project.</p>
-          <WorkspaceForm profile={profile.data} submitLabel="Continue" onDone={() => navigate("/projects/new?welcome=1", { replace: true })} />
+          <WorkspaceForm profile={profile.data} submitLabel="Continue" onDone={() => navigate(afterOnboarding(takeIntent() ?? fromUrl), { replace: true })} />
         </div>
       </main>
     </div>

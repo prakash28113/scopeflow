@@ -3,7 +3,7 @@
 //   PGlite (real Postgres 17) over the wire protocol -> real PostgREST 12 -> gateway at :54321
 //   plus a minimal GoTrue-compatible auth shim (password grant, /user, signup, refresh, logout,
 //   password recovery). Recovery "emails" are kept in memory and read by the walkthrough via
-//   GET /auth/v1/__test/recovery?email=… and GET /auth/v1/__test/plan?email=…&plan=… (local test
+//   GET /auth/v1/__test/recovery?email=…, /__test/plan?email=…&plan=… and /__test/purchasable?plan=…&on=1|0 (local test
 //   stand-ins only; never part of the app).
 import { PGlite } from "@electric-sql/pglite";
 import { PGLiteSocketServer } from "@electric-sql/pglite-socket";
@@ -259,6 +259,11 @@ async function auth(req, res, url) {
     return link ? json(res, 200, { link }) : json(res, 404, { msg: "no recovery email" });
   }
   // Local test stand-in only: put an account on a plan, like the SQL editor's admin_set_plan.
+  if (path === "/__test/purchasable" && req.method === "GET") {
+    // What the release does for a plan with live keys: marks it on sale.
+    await q("update public.plans set purchasable = $2 where id = $1 returning id", [url.searchParams.get("plan"), url.searchParams.get("on") === "1"]);
+    return json(res, 200, {});
+  }
   if (path === "/__test/plan" && req.method === "GET") {
     const plan = url.searchParams.get("plan");
     if (plan === "free") await q("select public.admin_set_plan($1, 'free', 'free', null, null, 'e2e')", [url.searchParams.get("email")]);

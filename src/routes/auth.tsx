@@ -12,6 +12,7 @@ import { PASSWORD_RESET_EMAIL, SUPPORT_EMAIL, supportMailto } from "@/lib/site";
 import { BetaBadge } from "@/components/site-footer";
 import { issuesToFieldErrors, newPasswordSchema, resetRequestSchema, signInSchema, signUpSchema, type FieldErrors } from "@/lib/validation";
 import { readAuthHash, readRecoveryHash } from "@/lib/recovery";
+import { onboardingUrl, parseIntent, readIntent, rememberIntent } from "@/lib/plan-intent";
 import { CAPTCHA_FAILED, RESEND_WAIT_S, captchaBlocks, captchaOptions, confirmRedirect, isCaptchaError, resendError, signInError, signUpOutcome } from "@/lib/auth-flow";
 import { GoogleSignIn } from "@/components/google-signin";
 
@@ -207,8 +208,16 @@ export function SignupPage() {
   const handed = (useLocation().state ?? {}) as { name?: unknown; email?: unknown };
   const preName = typeof handed.name === "string" ? handed.name.slice(0, 120) : "";
   const preEmail = typeof handed.email === "string" ? handed.email.slice(0, 254) : "";
-  const redirectTo = confirmRedirect(window.location.origin, "/onboarding");
-  if (session) return <Navigate to="/onboarding" replace />;
+  // Came from the pricing page's Solo button (?plan=solo&interval=…): keep that through set-up.
+  const [params] = useSearchParams();
+  const fromUrl = parseIntent(params);
+  useEffect(() => {
+    if (fromUrl) rememberIntent(fromUrl);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fromUrl?.interval]);
+  const setUp = onboardingUrl(fromUrl ?? readIntent());
+  const redirectTo = confirmRedirect(window.location.origin, setUp);
+  if (session) return <Navigate to={setUp} replace />;
 
   async function onSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -227,7 +236,7 @@ export function SignupPage() {
     f.resetCaptcha();
     const outcome = signUpOutcome(data, error, SUPPORT_EMAIL);
     if (outcome.kind === "error") return f.setError(outcome.message);
-    if (outcome.kind === "signed-in") return navigate("/onboarding", { replace: true });
+    if (outcome.kind === "signed-in") return navigate(setUp, { replace: true });
     setSentTo(parsed.data.email);
   }
 
@@ -252,7 +261,7 @@ export function SignupPage() {
       <div className="mb-4">
         <GoogleSignIn
           context="signup"
-          onSignedIn={() => navigate("/onboarding", { replace: true })}
+          onSignedIn={() => navigate(setUp, { replace: true })}
           onError={f.setError}
           note={
             <>

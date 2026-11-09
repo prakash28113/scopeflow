@@ -1,5 +1,6 @@
-import { useState } from "react";
-import { Link } from "react-router";
+import { useEffect, useRef, useState } from "react";
+import { Link, useSearchParams } from "react-router";
+import { clearIntent, parseIntent } from "@/lib/plan-intent";
 import { useQueryClient } from "@tanstack/react-query";
 import { Alert, Card, CardHeader, PageHeader, Tag } from "@/components/ui";
 import { FeatureMatrix, IntervalToggle, PlanCards, UsageMeter } from "@/components/plans";
@@ -20,11 +21,27 @@ export default function PlanPage() {
   const invoices = useInvoices();
   const qc = useQueryClient();
   const toast = useToast();
-  const [interval, setInterval] = useState<Interval>("month");
+  // Arriving from the pricing page (?plan=solo&interval=…): Solo and the interval are picked for
+  // them and shown, but nothing is bought until they press Upgrade.
+  const [params] = useSearchParams();
+  const intent = parseIntent(params);
+  const [interval, setInterval] = useState<Interval>(intent?.interval ?? "month");
+  const plansSection = useRef<HTMLElement>(null);
   const [joining, setJoining] = useState<PlanId | null>(null);
   const [buying, setBuying] = useState<PlanId | null>(null);
   const [activating, setActivating] = useState(false);
   const billing = useBillingStatus();
+  const ready = !(plans.isLoading || mine.isLoading || (BILLING_ENABLED && billing.isLoading));
+  useEffect(() => {
+    if (!intent || !ready) return;
+    clearIntent(); // used: don't send them here again after a later set-up or sign-in
+    const section = plansSection.current;
+    if (!section) return;
+    section.scrollIntoView({ block: "start", behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
+    section.querySelector<HTMLElement>(`[data-upgrade="${intent.plan}"]`)?.focus({ preventScroll: true });
+    // Once, when the page has its data.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ready]);
 
   // Wait for the billing check too, so a plan never shows "on sale" and "early access" at once.
   if (plans.isLoading || mine.isLoading || (BILLING_ENABLED && billing.isLoading)) return <PageSpinner />;
@@ -167,7 +184,7 @@ export default function PlanPage() {
         </Card>
       </div>
 
-      <section className="mt-10">
+      <section className="mt-10 scroll-mt-20" ref={plansSection} data-testid="plans-section">
         <div className="mb-5 flex flex-wrap items-end justify-between gap-4">
           <div>
             <h2 className="text-lg font-semibold tracking-[-0.02em]">Plans</h2>
@@ -201,6 +218,7 @@ export default function PlanPage() {
           onBuy={buy}
           buying={buying}
           testMode={testMode}
+          selected={intent && effective.id === "free" ? intent.plan : null}
         />
         <details className="mt-6">
           <summary className="cursor-pointer text-[13px] font-medium text-accent">Compare all features</summary>

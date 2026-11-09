@@ -133,9 +133,89 @@ try {
     await settings("confirm=0");
   }
 
+  // ------------------------------------------------------------------ T1-02
+  step("T1-02 signed out: the Solo button carries the plan through sign-up and set-up to Plan & usage");
+  {
+    await settings("confirm=0&captcha=0");
+    await fetch(`${AUTH}/__test/purchasable?plan=solo&on=1`); // Solo on sale, as on the live site
+    const ctx = await newCtx();
+    const p = await newPage(ctx, "t1-02 new");
+    // The prerendered page carries the build-time plan list for 10 minutes; a later clock makes it re-read.
+    await p.clock.install({ time: Date.now() + 11 * 60_000 });
+    await p.goto(`${BASE}/pricing`);
+    const cta = p.getByTestId("solo-cta");
+    await cta.waitFor();
+    assert.equal(await cta.getAttribute("href"), "/signup?plan=solo&interval=monthly");
+    await p.getByRole("radio", { name: /Yearly/ }).click();
+    assert.equal(await cta.getAttribute("href"), "/signup?plan=solo&interval=yearly");
+    await cta.click();
+    await p.waitForURL(/\/signup\?plan=solo&interval=yearly$/);
+    await p.getByLabel("Your name").fill("Chitra Nair");
+    await p.getByLabel("Email").fill("chitra@fixes.test");
+    await p.getByLabel("Password").fill(PASSWORD);
+    await p.getByRole("button", { name: "Create account" }).click();
+    await p.waitForURL(/\/onboarding\?plan=solo&interval=yearly$/);
+    await p.reload(); // the intent survives a reload during set-up
+    await p.getByLabel("Default currency").selectOption("INR");
+    await p.getByRole("button", { name: "Continue" }).click();
+    await p.waitForURL(/\/plan\?plan=solo&interval=yearly$/);
+    await p.locator('[data-plan="solo"][data-selected="true"]').waitFor();
+    assert.equal(await p.getByRole("radio", { name: /Yearly/ }).getAttribute("aria-checked"), "true", "the yearly toggle is carried over");
+    assert.equal(await p.evaluate(() => localStorage.getItem("sf-plan-intent")), null, "cleared after use");
+    assert.equal(await p.locator(".razorpay-container, iframe[src*='razorpay']").count(), 0, "no payment opens by itself");
+    await shot(p, "t1-02-plan-selected");
+
+    step("T1-02 signed in on Free: the Solo button goes to Plan & usage, never to sign-up");
+    await p.goto(`${BASE}/pricing`);
+    const signedIn = p.getByTestId("solo-cta");
+    await p.waitForFunction(() => document.querySelector('[data-testid="solo-cta"]')?.getAttribute("href")?.startsWith("/plan?"));
+    assert.equal(await signedIn.getAttribute("href"), "/plan?plan=solo&interval=monthly");
+    await p.getByRole("radio", { name: /Yearly/ }).click();
+    assert.equal(await signedIn.getAttribute("href"), "/plan?plan=solo&interval=yearly");
+    await p.getByRole("radio", { name: /Monthly/ }).click();
+    await signedIn.click();
+    await p.waitForURL(/\/plan\?plan=solo&interval=monthly$/);
+    await p.locator('[data-plan="solo"][data-selected="true"]').waitFor();
+    assert.equal(await p.getByRole("radio", { name: /Monthly/ }).getAttribute("aria-checked"), "true");
+
+    step("T1-02 already on Solo: the button says so and opens the plan page");
+    await fetch(`${AUTH}/__test/plan?email=chitra@fixes.test&plan=solo`);
+    await p.goto(`${BASE}/pricing`);
+    await p.getByTestId("solo-cta").getByText("You're on Solo").waitFor();
+    assert.equal(await p.getByTestId("solo-cta").getAttribute("href"), "/plan");
+    await fetch(`${AUTH}/__test/plan?email=chitra@fixes.test&plan=free`);
+    await ctx.close();
+  }
+
+  step("T1-02 with Confirm email on, the emailed link still ends on Plan & usage with Solo selected");
+  {
+    await settings("confirm=1");
+    const ctx = await newCtx();
+    const p = await newPage(ctx, "t1-02 confirm");
+    await p.goto(`${BASE}/signup?plan=solo&interval=monthly`);
+    await p.getByLabel("Your name").fill("Divya Menon");
+    await p.getByLabel("Email").fill("divya@fixes.test");
+    await p.getByLabel("Password").fill(PASSWORD);
+    await p.getByRole("button", { name: "Create account" }).click();
+    await p.getByTestId("check-inbox").waitFor();
+    const mail = await (await fetch(`${AUTH}/__test/confirmation?email=divya@fixes.test`)).json();
+    assert.match(mail.link, /\/auth\/callback\?next=%2Fonboarding%3Fplan%3Dsolo%26interval%3Dmonthly#access_token=/);
+    await p.goto(mail.link);
+    await p.waitForURL(/\/onboarding\?plan=solo&interval=monthly$/);
+    await p.getByLabel("Default currency").selectOption("INR");
+    await p.getByRole("button", { name: "Continue" }).click();
+    await p.waitForURL(/\/plan\?plan=solo&interval=monthly$/);
+    await p.locator('[data-plan="solo"][data-selected="true"]').waitFor();
+    await ctx.close();
+    await settings("confirm=0");
+    await fetch(`${AUTH}/__test/purchasable?plan=solo&on=0`);
+  }
+
+
   if (errors.length) throw new Error(`Browser errors:\n${errors.join("\n")}`);
   console.log("✓ fix-list checks passed with no browser errors");
 } finally {
   await settings("confirm=0&captcha=0").catch(() => {});
+  await fetch(`${AUTH}/__test/purchasable?plan=solo&on=0`).catch(() => {});
   await browser.close();
 }

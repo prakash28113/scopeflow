@@ -4,7 +4,8 @@ import { Alert } from "@/components/ui";
 import { BetaBadge, SiteFooter } from "@/components/site-footer";
 import { FeatureMatrix, IntervalToggle, PlanCards } from "@/components/plans";
 import { PageSpinner } from "@/components/app-shell";
-import { usePlans, type Interval } from "@/lib/plans";
+import { useMyPlan, usePlans, type Interval } from "@/lib/plans";
+import { soloCta } from "@/lib/plan-intent";
 import { useAuth } from "@/lib/auth";
 import { PRICING_FAQ as FAQ } from "@/lib/faq";
 import { PublicHeader } from "@/components/public-header";
@@ -17,6 +18,10 @@ export default function PricingPage() {
   const plans = usePlans();
   const { session } = useAuth();
   const [interval, setInterval] = useState<Interval>("month");
+  // Signed in: the Solo button goes to Plan & usage (or says which plan they're on), not to sign-up.
+  const mine = useMyPlan(Boolean(session));
+  const effective = mine.data?.effective_plan;
+  const solo = soloCta({ signedIn: Boolean(session), effectivePlan: effective, planName: plans.data?.find((p) => p.id === effective)?.name }, interval);
 
   return (
     <div className="min-h-dvh">
@@ -38,7 +43,7 @@ export default function PricingPage() {
           <Alert>Couldn't load plans. Please refresh.</Alert>
         ) : (
           <>
-            <PlanCards plans={plans.data} interval={interval} />
+            <PlanCards plans={plans.data} interval={interval} soloLink={solo} />
             <p className="mx-auto mt-6 max-w-2xl text-center text-[13px] text-muted">
               {anyOnSale(plans.data, BILLING_ENABLED)
                 ? "Prices in Indian rupees, billed monthly or yearly until you cancel. Payments are handled by Razorpay (UPI, cards, netbanking). Plans marked “Not on sale yet” are in early access."
