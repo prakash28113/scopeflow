@@ -500,6 +500,16 @@ function Handles() {
     io.observe(el);
     return () => io.disconnect();
   }, []);
+  const [active, setActive] = useState(0);
+  const onScroll = () => {
+    const el = track.current;
+    const card = el?.querySelector("li");
+    if (!el || !card) return;
+    // The slide nearest the left edge; the last one once the scroller reaches its end.
+    const atEnd = el.scrollLeft + el.clientWidth >= el.scrollWidth - 4;
+    const i = atEnd ? SLIDES.length - 1 : Math.round(el.scrollLeft / (card.clientWidth + 16));
+    setActive(Math.max(0, Math.min(SLIDES.length - 1, i)));
+  };
   const step = (dir: number) => {
     const el = track.current;
     if (!el) return;
@@ -513,7 +523,9 @@ function Handles() {
         <br />
         handles
       </h2>
-      <ul ref={track} className="hm-carousel" aria-label="What ScopeFlow handles" tabIndex={0}>
+      {/* The section is the labelled region. Inside it: a focusable scroller (swipe, trackpad, arrow keys or the buttons), and dots that say there's more. */}
+      <div data-testid="handles-carousel">
+      <ul ref={track} className="hm-carousel" tabIndex={0} aria-label="What ScopeFlow handles" onScroll={onScroll}>
         {SLIDES.map((s) => (
           <li key={s.label} className="hm-slide">
             <p className="hm-slide-label">{s.label}</p>
@@ -524,7 +536,14 @@ function Handles() {
           </li>
         ))}
       </ul>
-      <div className="hm-wrap mt-8 flex justify-center gap-3.5">
+      <div className="hm-dots" data-testid="handles-dots" aria-hidden>
+        {SLIDES.map((s, i) => (
+          <span key={s.label} className="hm-dot" data-active={i === active} />
+        ))}
+      </div>
+      <p className="sr-only" aria-live="polite">{`${active + 1} of ${SLIDES.length}: ${SLIDES[active].label}`}</p>
+      </div>
+      <div className="hm-wrap mt-6 flex justify-center gap-3.5">
         <button type="button" className="hm-round" onClick={() => step(-1)} aria-label="Previous">
           <Chevron dir="left" />
         </button>
