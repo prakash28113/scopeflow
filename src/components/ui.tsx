@@ -219,7 +219,7 @@ export function Segmented<T extends string>({
   className?: string;
 }) {
   return (
-    <div role="tablist" aria-label={label} className={cx("inline-flex max-w-full gap-0.5 overflow-x-auto rounded-lg bg-sunken p-0.5", className)}>
+    <div role="tablist" aria-label={label} className={cx("inline-flex max-w-full flex-wrap gap-0.5 rounded-lg bg-sunken p-0.5", className)}>
       {options.map((o) => (
         <button
           key={o.value}
