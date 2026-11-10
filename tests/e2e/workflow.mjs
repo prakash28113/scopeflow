@@ -924,7 +924,7 @@ try {
   await f.getByRole("link", { name: "New project for Arjun" }).click();
   await f.waitForURL(/\/projects\/new\?client=/);
   // This account is at the Free plan's 2 active projects, so the form explains the limit instead.
-  await f.getByText("You've reached the Free plan's active projects").waitFor();
+  await f.getByText("Your 3rd active project needs Solo: ₹499/month. One approved extra of ₹2,500 (example) covers 5 months.").waitFor();
 
   step("clients: archive hides a client and frees a plan slot, restore brings it back, delete removes one added by mistake");
   await f.goto(`${BASE}/clients`);
@@ -1308,12 +1308,12 @@ document.body.appendChild(d)}`,
 
   step("plans: the Free limit is reached at 2 active projects");
   await f.goto(`${BASE}/projects/new`);
-  await f.getByText("You've reached the Free plan's active projects").waitFor();
+  await f.getByText("Your 3rd active project needs Solo: ₹499/month. One approved extra of ₹2,500 (example) covers 5 months.").waitFor();
   await f.getByText("Your existing projects and client links keep working.").waitFor();
   assert.equal(await f.getByRole("button", { name: "Create project" }).count(), 0);
   await shot(f, "17-plan-limit", false);
-  await f.getByRole("link", { name: "See plans" }).click();
-  await f.waitForURL("**/plan");
+  await f.getByRole("link", { name: "Upgrade to Solo" }).click();
+  await f.waitForURL("**/plan?plan=solo&interval=monthly");
   await f.getByRole("heading", { name: "Plan & usage" }).waitFor();
   await f.getByText("2 of 2").first().waitFor();
   // Not a blog author: no Blog item, and the writing page says so.

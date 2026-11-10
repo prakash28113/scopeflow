@@ -1,3 +1,5 @@
+import { LIMIT_LATER_LABEL, LIMIT_UPGRADE_LABEL, limitPrompt } from "@/lib/plan-copy";
+import { planUrl } from "@/lib/plan-intent";
 import { intentProps } from "@/lib/prefetch";
 import { useState, type FormEvent } from "react";
 import { methodLabel } from "@/lib/payments";
@@ -5,7 +7,7 @@ import { invoiceStatus } from "@/lib/invoice";
 import { localToday } from "@/lib/upcoming";
 import { received } from "@/lib/pricing";
 import { OUTSTANDING_LABEL } from "@/lib/outstanding";
-import { Link, useNavigate, useParams } from "react-router";
+import { Link, useNavigate, useParams, useSearchParams } from "react-router";
 import { z } from "zod";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Alert, Button, Card, CardHeader, EmptyState, Field, Input, LinkButton, PageHeader, Select, StatusBadge, Tag, Textarea, buttonClass } from "@/components/ui";
@@ -82,7 +84,8 @@ export const clientsQuery = {
 };
 
 export function ClientsPage() {
-  const [adding, setAdding] = useState(false);
+  const [params] = useSearchParams();
+  const [adding, setAdding] = useState(params.get("new") === "1"); // the Get started checklist opens the form
   const [showArchived, setShowArchived] = useState(false);
   const q = useQuery(clientsQuery);
   const plan = useMyPlan();
@@ -107,14 +110,16 @@ export function ClientsPage() {
       {adding && atLimit ? (
         <Card className="mb-6" data-testid="client-limit">
           <div className="space-y-3 p-5">
-            <p className="text-[15px] font-semibold text-ink">You've reached your plan's {limit} clients</p>
+            <p className="text-[15px] font-semibold text-ink" data-testid="limit-prompt">
+              {limitPrompt("clients", limit ?? 0)}
+            </p>
             <p className="text-[13px] text-ink-2">
-              Archive a client you no longer work with (their records are kept), delete one you added by mistake, or see plans to get more.
+              You have {limit} clients on Free. You can also archive a client you no longer work with (their records are kept), or delete one you added by mistake.
             </p>
             <div className="flex flex-wrap gap-2">
-              <LinkButton to="/plan">See plans</LinkButton>
+              <LinkButton to={planUrl({ plan: "solo", interval: "month" })}>{LIMIT_UPGRADE_LABEL}</LinkButton>
               <button type="button" className={buttonClass("ghost")} onClick={() => setAdding(false)}>
-                Close
+                {LIMIT_LATER_LABEL}
               </button>
             </div>
           </div>
