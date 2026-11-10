@@ -59,11 +59,13 @@ async function pdfText(bytes) {
   const r = spawnSync("pdftotext", ["-", "-"], { input: bytes });
   return r.status === 0 ? r.stdout.toString() : null;
 }
-const IN_14_DAYS = (() => { const d = new Date(Date.now() + 14 * 86_400_000); d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); return d.toISOString().slice(0, 10); })();
+// The app's calendar is India's (T2-09), whatever zone this machine or the browser is in.
+const indiaDate = (plusDays = 0) => new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kolkata", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date(Date.now() + plusDays * 86_400_000));
+const IN_14_DAYS = indiaDate(14);
 const longDate = (iso) => new Intl.DateTimeFormat("en", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" }).format(new Date(`${iso}T00:00:00Z`));
 /** Confirms the in-app dialog that destructive actions open. */
 const confirmDialog = (p) => p.getByRole("alertdialog").getByRole("button").last().click();
-const SOON = (() => { const d = new Date(Date.now() + 3 * 86_400_000); d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); return d.toISOString().slice(0, 10); })();
+const SOON = indiaDate(3);
 
 try {
   // ---------------------------------------------------------- freelancer onboarding
@@ -864,7 +866,7 @@ try {
   await fu.getByRole("button", { name: "Save follow-up" }).click();
   await fu.getByText("Write what to follow up on.").waitFor();
   await fu.getByLabel("Remind me to").fill("Send Dana the final files");
-  const todayLocal = await f.evaluate(() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; });
+  const todayLocal = indiaDate();
   await fu.getByLabel("Remind me on").fill(todayLocal);
   await fu.getByLabel("Project (optional)").selectOption({ label: "Menu card for Northwind" });
   await fu.getByRole("button", { name: "Save follow-up" }).click();
