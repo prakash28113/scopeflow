@@ -698,6 +698,19 @@ try {
   // The invoices list, then void (the number is never reused).
   await f.goto(`${BASE}/invoices`);
   await f.getByTestId("invoice-list").getByText(`RS-${year}-001`).waitFor();
+  // RT4-04: on a phone each row is number + status, then client (cut with …) + amount; nothing wraps mid-word.
+  for (const width of [360, 400]) {
+    await f.setViewportSize({ width, height: 800 });
+    const row = f.getByTestId("invoice-list").locator("a").first();
+    const [num, tag, client, amt] = await Promise.all([".inv-num", ".inv-tag", ".inv-client", ".inv-amt"].map((sel) => row.locator(sel).boundingBox()));
+    assert.ok(Math.abs(num.y - tag.y) < 12 && client.y > num.y + 8 && Math.abs(client.y - amt.y) < 8, `two rows @${width}`);
+    assert.ok(num.height < 26 && amt.height < 26 && tag.height < 30 && client.height < 26, `one line each @${width}`);
+    assert.ok(amt.x + amt.width <= width && tag.x + tag.width <= width && client.x + client.width <= amt.x + 1, `inside the screen, client stops before the amount @${width}`);
+    assert.equal(await row.locator(".inv-client").evaluate((el) => getComputedStyle(el).textOverflow), "ellipsis");
+    assert.equal(await f.evaluate(() => document.documentElement.scrollWidth > window.innerWidth), false, `no sideways scroll @${width}`);
+    await shot(f, `rt4-04-invoices-${width}`, false);
+  }
+  await f.setViewportSize({ width: 1280, height: 900 });
   await f.goto(invoiceUrl);
   await f.getByRole("button", { name: "Void invoice" }).click();
   await confirmDialog(f);
@@ -1056,8 +1069,8 @@ try {
     // Returning: sign out, then Continue with Google on the sign-in page goes straight in.
     await gp.goto(`${BASE}/dashboard`);
     await gp.getByRole("button", { name: "Open menu" }).click(); // on a phone the account menu is in the drawer
-    await gp.getByTestId("nav-drawer").locator('summary[aria-label="Account menu"]').click();
-    await gp.getByRole("button", { name: "Sign out" }).click();
+    await gp.getByTestId("nav-drawer").getByRole("button", { name: "Account menu" }).click();
+    await gp.getByRole("menuitem", { name: "Sign out" }).click();
     await gp.waitForURL(/\/login/);
     await gp.getByTestId("google-stub").click();
     await gp.waitForURL("**/dashboard");
@@ -1329,8 +1342,8 @@ document.body.appendChild(d)}`,
 
   step("sign out / sign in again");
   await f.goto(`${BASE}/dashboard`);
-  await f.locator("summary[aria-label=\"Account menu\"]").click();
-  await f.getByRole("button", { name: "Sign out" }).click();
+  await f.getByRole("button", { name: "Account menu" }).first().click();
+  await f.getByRole("menuitem", { name: "Sign out" }).click();
   await f.waitForURL(/\/login/);
   await f.getByLabel("Email").fill("priya@studio.test");
   await f.getByLabel("Password").fill("correct-horse-9"); // the old password no longer works
