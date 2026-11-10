@@ -264,6 +264,11 @@ async function auth(req, res, url) {
     rzpStatus = url.searchParams.get("status") === "authenticated" ? "authenticated" : "active";
     return json(res, 200, { status: rzpStatus });
   }
+  if (path === "/__test/reset-rate-limits" && req.method === "GET") {
+    // The walkthrough ends by locking this machine's IP out of client links; later scripts start clean.
+    await q("delete from public.portal_rate_limits returning bucket");
+    return json(res, 200, {});
+  }
   if (path === "/__test/purchasable" && req.method === "GET") {
     // What the release does for a plan with live keys: marks it on sale.
     await q("update public.plans set purchasable = $2 where id = $1 returning id", [url.searchParams.get("plan"), url.searchParams.get("on") === "1"]);

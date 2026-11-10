@@ -58,6 +58,7 @@ async function signUp(p, name, email, { business = "", after = /\/projects\/new\
 }
 
 try {
+  await fetch(`${AUTH}/__test/reset-rate-limits`);
   // ------------------------------------------------------------------ T1-01
   step("T1-01 Confirm email off (today): sign-up still goes straight to set-up; no CAPTCHA widget, no token sent");
   {
