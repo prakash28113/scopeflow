@@ -531,6 +531,36 @@ window.Razorpay.prototype.open=function(){var o=this.o;window.__rzp=o;window.__r
     await ctx.close();
   }
 
+  // ------------------------------------------------------------------ T2-13
+  step("T2-13 a new account sees Get started at 0 of 4; adding a client ticks the first step; Dismiss removes it");
+  {
+    const ctx = await newCtx();
+    const p = await newPage(ctx, "t2-13");
+    await signUp(p, "Indu Varma", "indu@fixes.test");
+    await p.goto(`${BASE}/dashboard`);
+    const card = p.getByTestId("get-started");
+    await card.waitFor();
+    assert.equal(await p.getByTestId("get-started-progress").innerText(), "0 of 4 done");
+    assert.deepEqual(await card.locator("li").evaluateAll((els) => els.map((el) => el.dataset.done)), ["false", "false", "false", "false"]);
+    assert.deepEqual(await axe(p, '[data-testid="get-started"]'), [], "axe on the checklist");
+    await shot(p, "t2-13-get-started");
+    await card.getByRole("link", { name: "Start" }).click();
+    await p.waitForURL(/\/clients\?new=1$/);
+    await p.getByLabel("Name", { exact: true }).fill("First Client");
+    await p.getByLabel("Email").fill("first@client.test");
+    await p.getByRole("button", { name: "Add client" }).last().click();
+    await p.getByText("First Client").first().waitFor();
+    await p.goto(`${BASE}/dashboard`);
+    await p.getByTestId("get-started-progress").getByText("1 of 4 done").waitFor();
+    assert.equal(await card.locator('li[data-step="client"]').getAttribute("data-done"), "true");
+    await card.getByRole("button", { name: "Dismiss" }).click();
+    assert.equal(await card.count(), 0);
+    await p.reload();
+    await p.getByRole("heading", { name: /Hello, Indu|Overview/ }).waitFor();
+    assert.equal(await p.getByTestId("get-started").count(), 0, "stays dismissed");
+    await ctx.close();
+  }
+
   if (errors.length) throw new Error(`Browser errors:\n${errors.join("\n")}`);
   console.log("✓ fix-list checks passed with no browser errors");
 } finally {

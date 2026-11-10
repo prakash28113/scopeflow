@@ -1,3 +1,4 @@
+import { GetStarted } from "@/components/get-started";
 import { useEffect, type ReactNode } from "react";
 import { timeEnd } from "@/lib/timing";
 import { Link } from "react-router";
@@ -71,6 +72,8 @@ export default function Dashboard() {
           </>
         }
       />
+
+      {profile.data ? <GetStarted userId={profile.data.id} projects={projects} linksSent={q.data.snapshots.length} /> : null}
 
       {projects.length === 0 ? (
         <Card>
