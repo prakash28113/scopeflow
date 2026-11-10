@@ -37,7 +37,7 @@ async function axe(p, selector = null) {
   await p.evaluate(AXE);
   return p.evaluate(async (sel) => {
     const r = await window.axe.run(sel ? document.querySelector(sel) : document, { resultTypes: ["violations"] });
-    return r.violations.filter((v) => v.impact === "serious" || v.impact === "critical").map((v) => `${v.id} ×${v.nodes.length}: ${v.nodes[0].target.join(" ")}`);
+    return r.violations.filter((v) => v.impact === "serious" || v.impact === "critical").map((v) => `${v.id} ×${v.nodes.length}: ${v.nodes[0].target.join(" ")} (${v.nodes[0].any?.[0]?.message ?? ""})`);
   }, selector);
 }
 const overlap = (a, b) => a && b && a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height;
@@ -559,6 +559,150 @@ window.Razorpay.prototype.open=function(){var o=this.o;window.__rzp=o;window.__r
     await p.getByRole("heading", { name: /Hello, Indu|Overview/ }).waitFor();
     assert.equal(await p.getByTestId("get-started").count(), 0, "stays dismissed");
     await ctx.close();
+  }
+
+  // ------------------------------------------------------------------ RT4-01
+  step("RT4-01 home \"What ScopeFlow handles\": a labelled, focusable scroller with dots that follow it (360/400/414 px)");
+  {
+    for (const width of [360, 400, 414]) {
+      const ctx = await newCtx({ ...PHONE, viewport: { width, height: 844 } });
+      const p = await newPage(ctx, `rt4-01 ${width}`);
+      await p.goto(`${BASE}/`);
+      await p.waitForFunction(() => document.documentElement.dataset.app === "ready");
+      assert.equal(await p.getByRole("region", { name: "What ScopeFlow handles" }).count(), 1, "one labelled region");
+      const region = p.getByTestId("handles-carousel");
+      await region.scrollIntoViewIfNeeded();
+      const list = region.locator("ul");
+      assert.equal(await list.getAttribute("tabindex"), "0", "keyboard focusable");
+      assert.equal(await list.evaluate((el) => getComputedStyle(el).scrollSnapType), "x mandatory");
+      const dots = p.getByTestId("handles-dots").locator("span");
+      const slides = await list.locator("li").count();
+      assert.equal(await dots.count(), slides);
+      assert.ok(await dots.first().isVisible(), "a visible cue that there's more");
+      const activeDot = () => dots.evaluateAll((els) => els.findIndex((el) => el.dataset.active === "true"));
+      assert.equal(await activeDot(), 0);
+      // The first card's text is whole; the next card is the cue, not a cut-off sentence in the first.
+      const first = await list.locator("li").first().boundingBox();
+      assert.ok(first.x >= 0 && first.x + first.width <= width, `the first card fits (${Math.round(first.x)}..${Math.round(first.x + first.width)} of ${width})`);
+      await list.evaluate((el) => el.scrollTo({ left: el.scrollWidth, behavior: "instant" }));
+      await p.waitForFunction(([n]) => document.querySelectorAll('[data-testid="handles-dots"] span')[n - 1]?.dataset.active === "true", [slides]);
+      await list.focus();
+      await p.keyboard.press("Home");
+      await shot(p, `rt4-01-handles-${width}`);
+      assert.deepEqual(await axe(p, '[data-testid="handles-carousel"]'), [], `axe @${width}`);
+      await ctx.close();
+    }
+  }
+
+  // ------------------------------------------------------------------ RT4-03, RT4-05, RT4-06
+  step("RT4-03 /projects tabs all visible at 360 px; RT4-05 dark skeleton and no layout shift on /expenses; RT4-06 account menu is a real button");
+  {
+    const ctx = await newCtx({ ...PHONE, viewport: { width: 360, height: 800 } });
+    const p = await newPage(ctx, "rt4 app");
+    await signUp(p, "Jaya Menon", "jaya@fixes.test", { business: "Jaya Studio" });
+    await p.getByLabel("Project title").fill("Tabs project");
+    await p.getByLabel("Client name").fill("Tab Client");
+    await p.getByLabel("Client email").fill("tab@client.test");
+    await p.getByLabel("Deliverable 1", { exact: true }).fill("Logo");
+    await p.getByLabel("Agreed budget").fill("1000");
+    await p.getByRole("button", { name: "Create project" }).click();
+    await p.waitForURL(/\/projects\/[0-9a-f-]{36}$/);
+    await p.goto(`${BASE}/projects`);
+    const tabs = p.getByRole("tablist", { name: "Filter projects" }).getByRole("tab");
+    await tabs.first().waitFor();
+    assert.deepEqual((await tabs.allInnerTexts()).map((t) => t.replace(/\s*\d+$/, "").trim()), ["Open", "In progress", "With client", "Drafts", "Closed", "All"]);
+    for (const box of await tabs.evaluateAll((els) => els.map((el) => el.getBoundingClientRect().toJSON()))) {
+      assert.ok(box.left >= 0 && box.right <= 360, `every tab is on screen (${Math.round(box.left)}..${Math.round(box.right)})`);
+    }
+    await tabs.first().focus();
+    for (let i = 0; i < 5; i++) await p.keyboard.press("Tab");
+    assert.match(await p.evaluate(() => document.activeElement.textContent), /^All/, "every tab is reachable with Tab");
+    await p.keyboard.press("Enter");
+    assert.equal(await tabs.last().getAttribute("aria-selected"), "true");
+    assert.equal(await p.evaluate(() => document.documentElement.scrollWidth > window.innerWidth), false);
+    await shot(p, "rt4-03-projects-360");
+    await ctx.close();
+
+    const wide = await newCtx();
+    const w = await newPage(wide, "rt4 desktop");
+    await w.goto(`${BASE}/login`);
+    await w.getByLabel("Email").fill("jaya@fixes.test");
+    await w.getByLabel("Password").fill(PASSWORD);
+    await w.getByRole("button", { name: "Sign in" }).click();
+    await w.waitForURL("**/dashboard");
+    // RT4-05: placeholders on the dark panel are dark.
+    const band = await w.evaluate(() => {
+      const el = document.createElement("div");
+      el.className = "skeleton";
+      document.querySelector(".app-console main, .app-console").appendChild(el);
+      const bg = getComputedStyle(el).backgroundImage;
+      el.remove();
+      return bg;
+    });
+    const lum = [...band.matchAll(/rgb\((\d+), (\d+), (\d+)\)/g)].map((m) => (Number(m[1]) + Number(m[2]) + Number(m[3])) / 3);
+    assert.ok(lum.length >= 2 && lum.every((v) => v < 80), `skeleton colours are dark (${band})`);
+    await w.addInitScript(() => {
+      window.__cls = 0;
+      new PerformanceObserver((list) => {
+        for (const e of list.getEntries()) if (!e.hadRecentInput) window.__cls += e.value;
+      }).observe({ type: "layout-shift", buffered: true });
+    });
+    await w.goto(`${BASE}/expenses`);
+    await w.getByRole("heading", { name: "Expenses" }).first().waitFor();
+    await w.waitForTimeout(1500);
+    const cls = await w.evaluate(() => window.__cls);
+    assert.ok(cls < 0.01, `no layout shift while /expenses loads (CLS ${cls.toFixed(4)})`);
+
+    // RT4-06: keyboard only.
+    const button = w.getByTestId("account-menu-button");
+    assert.equal(await button.evaluate((el) => `${el.tagName} ${el.type} ${el.getAttribute("aria-haspopup")} ${el.getAttribute("aria-expanded")}`), "BUTTON button menu false");
+    await button.focus();
+    await w.keyboard.press("Enter");
+    const menu = w.getByRole("menu", { name: "Account" });
+    await menu.waitFor();
+    assert.equal(await button.getAttribute("aria-expanded"), "true");
+    assert.deepEqual(await menu.getByRole("menuitem").allInnerTexts(), ["Settings", "Plan & usage", "Send feedback", "Sign out"]);
+    // The business name once; the person's name under it because it's different.
+    assert.deepEqual((await w.getByTestId("account-name").innerText()).split(/\n+/), ["Jaya Studio", "Jaya Menon"]);
+    assert.deepEqual(await axe(w, "header"), [], "axe on the top bar with the menu open");
+    assert.deepEqual(await axe(w, "aside"), [], "axe on the navigation");
+    await w.keyboard.press("Escape");
+    assert.equal(await menu.count(), 0);
+    assert.equal(await w.evaluate(() => document.activeElement?.getAttribute("data-testid")), "account-menu-button", "focus returns to the button");
+    await w.keyboard.press("Space");
+    await menu.waitFor();
+    await w.getByRole("heading", { name: "Expenses" }).first().click(); // a click elsewhere closes it
+    assert.equal(await menu.count(), 0);
+    await wide.close();
+  }
+
+  // ------------------------------------------------------------------ RT4-07
+  step("RT4-07 Google Identity is initialised once per page load on /login and /signup (desktop and 400 px)");
+  {
+    for (const opts of [{}, { ...PHONE, viewport: { width: 400, height: 844 } }]) {
+      const ctx = await newCtx(opts);
+      const p = await ctx.newPage();
+      const noise = [];
+      p.on("console", (m) => /initialize\(\) is called multiple times|blocked by CORS/i.test(m.text()) && noise.push(m.text()));
+      await p.goto(`${BASE}/login`);
+      await p.getByTestId("google-stub").waitFor();
+      await p.getByRole("link", { name: "Create an account" }).click();
+      await p.waitForURL("**/signup");
+      await p.getByTestId("google-stub").waitFor();
+      await p.getByRole("link", { name: "Sign in" }).last().click();
+      await p.waitForURL("**/login");
+      await p.getByTestId("google-stub").waitFor();
+      assert.equal(await p.evaluate(() => window.__gsiInits), 1, "one initialize() across login → sign-up → login");
+      assert.deepEqual(noise, []);
+      // Google sign-in still works after moving between the pages.
+      await p.evaluate(() => (window.__googleAs = "kavya@fixes.test:Kavya Nair"));
+      await p.getByTestId("google-stub").click();
+      await p.waitForURL(/\/(onboarding|dashboard)/);
+      const csp = (await fetch(`${BASE}/login`)).headers.get("content-security-policy");
+      assert.ok(csp.includes("https://accounts.google.com/gsi/style") && /connect-src[^;]*https:\/\/accounts\.google\.com\/gsi\//.test(csp), "the policy allows Google's stylesheet and gsi/ calls");
+      assert.equal((await fetch(`${BASE}/login`)).headers.get("cross-origin-opener-policy"), "same-origin-allow-popups");
+      await ctx.close();
+    }
   }
 
   if (errors.length) throw new Error(`Browser errors:\n${errors.join("\n")}`);
