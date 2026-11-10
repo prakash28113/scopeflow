@@ -56,6 +56,43 @@ async function sha256Hex(text: string): Promise<string> {
 
 export const googleSignInAvailable = Boolean(GOOGLE_CLIENT_ID);
 
+type Handlers = { onCredential: (credential: string | undefined, rawNonce: string) => void };
+/** Whichever Google button is on screen now. Google's one callback hands the result to it. */
+let active: Handlers | null = null;
+let setup: Promise<void> | null = null;
+
+/**
+ * Loads Google's script and calls google.accounts.id.initialize() exactly once per page load,
+ * however many times the button mounts (route changes, React StrictMode, the login and sign-up
+ * pages in turn). One nonce per page load: Google gets its SHA-256, Supabase checks the raw value.
+ */
+export function initGoogleOnce(clientId: string, context: "signin" | "signup", deps: { load: () => Promise<void>; id: () => GoogleId | undefined } = { load: loadGoogle, id: () => window.google?.accounts?.id }): Promise<void> {
+  setup ??= (async () => {
+    const raw = randomNonce();
+    const [hashed] = await Promise.all([sha256Hex(raw), deps.load()]);
+    const id = deps.id();
+    if (!id) throw new Error("Google sign-in couldn't load");
+    id.initialize({
+      client_id: clientId,
+      nonce: hashed,
+      ux_mode: "popup",
+      auto_select: false,
+      itp_support: true,
+      context,
+      callback: ({ credential }) => active?.onCredential(credential, raw),
+    });
+  })().catch((e) => {
+    setup = null; // a failed load can be tried again
+    throw e;
+  });
+  return setup;
+}
+/** Tests only. */
+export function resetGoogleForTests() {
+  setup = null;
+  active = null;
+}
+
 export function GoogleSignIn({
   context,
   onSignedIn,
@@ -69,41 +106,34 @@ export function GoogleSignIn({
 }) {
   const box = useRef<HTMLDivElement>(null);
   const [state, setState] = useState<"loading" | "ready" | "unavailable" | "signing-in">("loading");
+  // The latest callbacks, without re-running the set-up below.
+  const latest = useRef({ onSignedIn, onError });
+  latest.current = { onSignedIn, onError };
 
   useEffect(() => {
     if (!GOOGLE_CLIENT_ID) return;
     let cancelled = false;
-    const raw = randomNonce();
+    const mine: Handlers = {
+      onCredential: async (credential, rawNonce) => {
+        const { onSignedIn, onError } = latest.current;
+        if (!credential) return onError("Google sign-in was cancelled. Please try again.");
+        setState("signing-in");
+        const { error } = await supabase.auth.signInWithIdToken({ provider: "google", token: credential, nonce: rawNonce });
+        if (error) {
+          setState("ready");
+          const msg = error.message ?? "";
+          if (/database error saving new user/i.test(msg)) return onError("Sign-ups are invite-only right now.");
+          if (/provider is not enabled|unsupported provider/i.test(msg)) return onError("Google sign-in isn't switched on yet. Please use email and password.");
+          return onError("Couldn't sign in with Google. Please try again, or use email and password.");
+        }
+        onSignedIn();
+      },
+    };
+    active = mine;
     (async () => {
       try {
-        const [hashed] = await Promise.all([sha256Hex(raw), loadGoogle()]);
+        await initGoogleOnce(GOOGLE_CLIENT_ID, context);
         if (cancelled || !box.current || !window.google) return;
-        window.google.accounts.id.initialize({
-          client_id: GOOGLE_CLIENT_ID,
-          nonce: hashed,
-          ux_mode: "popup",
-          auto_select: false,
-          itp_support: true,
-          context,
-          callback: async ({ credential }) => {
-            if (!credential) return onError("Google sign-in was cancelled. Please try again.");
-            setState("signing-in");
-            const { error } = await supabase.auth.signInWithIdToken({
-              provider: "google",
-              token: credential,
-              nonce: raw,
-            });
-            if (error) {
-              setState("ready");
-              const msg = error.message ?? "";
-              if (/database error saving new user/i.test(msg)) return onError("Sign-ups are invite-only right now.");
-              if (/provider is not enabled|unsupported provider/i.test(msg))
-                return onError("Google sign-in isn't switched on yet. Please use email and password.");
-              return onError("Couldn't sign in with Google. Please try again, or use email and password.");
-            }
-            onSignedIn();
-          },
-        });
         const width = Math.min(400, Math.max(240, Math.round(box.current.getBoundingClientRect().width)));
         window.google.accounts.id.renderButton(box.current, {
           type: "standard",
@@ -121,9 +151,8 @@ export function GoogleSignIn({
     })();
     return () => {
       cancelled = true;
+      if (active === mine) active = null;
     };
-    // The callback reads the latest onSignedIn/onError through closure on each render's effect run; one setup per mount is intended.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [context]);
 
   if (!GOOGLE_CLIENT_ID || state === "unavailable") return null;
