@@ -157,7 +157,7 @@ try {
   assert.equal(await f.getByRole("radio", { name: "Monthly" }).getAttribute("aria-checked"), "true");
   await f.getByText("₹499").first().waitFor();
   await f.getByRole("radio", { name: /Yearly/ }).click();
-  await f.getByText("₹4,999").waitFor();
+  await f.getByText("₹4,999").first().waitFor();
   await f.getByRole("radio", { name: "Monthly" }).click();
   await f.getByText("₹499").first().waitFor();
   await f.getByText("Not on sale yet — no payment taken.").first().waitFor();
