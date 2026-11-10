@@ -9,6 +9,7 @@ import { call } from "@/lib/use-action";
 import { localToday } from "@/lib/upcoming";
 import { addDays } from "@/lib/invoice";
 import type { Reminder } from "@/lib/reminders";
+import { NudgeButton } from "./nudge";
 
 const DOT = { danger: "bg-[#f04438]", warning: "bg-[#f79009]", info: "bg-accent" } as const;
 /** Urgency in words as well as colour. */
@@ -114,6 +115,7 @@ export function RemindersCard({ reminders, projects, className = "mb-8" }: { rem
                 <p className="text-[12px] text-muted">{r.detail}</p>
               </Link>
               <span className={cx("mt-0.5 hidden shrink-0 text-[12px] font-medium sm:block", URGENCY[r.tone].cls)}>{URGENCY[r.tone].label}</span>
+              {r.nudge ? <NudgeButton invoice={r.nudge} compact className="-my-1.5" /> : null}
               {r.followUpId ? (
                 <ActionButton
                   size="sm"

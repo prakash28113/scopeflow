@@ -83,3 +83,47 @@ describe("N-02 when the Nudge button shows", () => {
     expect(canNudge(inv(null), false, 1000, "2026-11-10")).toBe(false);
   });
 });
+
+import { readFileSync } from "node:fs";
+import { recordNudge } from "@/components/nudge";
+import { buildReminders } from "@/lib/reminders";
+
+describe("N-02 the sheet and where the button appears", () => {
+  it("records the nudge through record_nudge and never throws", async () => {
+    const calls: unknown[] = [];
+    expect(await recordNudge("inv-1", "whatsapp", "firm", async (fn, args) => (calls.push([fn, args]), { error: null }))).toBe(true);
+    expect(calls).toEqual([["record_nudge", { p_invoice_id: "inv-1", p: { channel: "whatsapp", tone: "firm" } }]]);
+    expect(await recordNudge("inv-1", "email", "gentle", async () => ({ error: { message: "no" } }))).toBe(false);
+    expect(await recordNudge("inv-1", "email", "gentle", () => Promise.reject(new Error("offline")))).toBe(false);
+  });
+  it("the links are real anchors that open the person's own app; nothing is sent by ScopeFlow", () => {
+    const src = readFileSync("src/components/nudge.tsx", "utf8");
+    expect(src.match(/<a href=\{(mail|wa)\} target="_blank" rel="noopener"/g)).toHaveLength(2);
+    expect(src).toContain("void recordNudge(invoice.id, channel, tone).then(");
+    expect(src).toContain("Nudge recorded. We'll remind you to check in 3 days.");
+    expect(src).toContain("Add the client's phone to nudge on WhatsApp");
+    expect(src).toContain('const disabled = t === "firm" && !overdue;');
+    expect(src).not.toMatch(/fetch\(|sendMail|smtp|api\.whatsapp/i);
+    // Nothing here is tied to a plan.
+    expect(src).not.toMatch(/useMyPlan|FeatureLock|effective_plan/);
+  });
+  it("overdue invoices in Reminders carry what the nudge needs, with the balance still owed", () => {
+    const r = buildReminders({
+      today: "2026-11-10", now: new Date("2026-11-10T06:00:00Z"),
+      projects: [{ id: "p1", title: "Brand kit", status: "active", due_date: null, extra_days: 0, client: "Dana", currency: "INR" }],
+      scopeSent: [], changeOrders: [], payments: [], links: [], followUps: [], deliverables: [],
+      invoices: [
+        { id: "i1", number: "INV-001", due_date: "2026-11-07", amount_cents: 1032500, currency: "INR", project_id: "p1", voided_at: null, paid: false, paid_cents: 500000 },
+        { id: "i2", number: "INV-002", due_date: "2026-11-20", amount_cents: 1000, currency: "INR", project_id: "p1", voided_at: null, paid: false, paid_cents: 0 },
+        { id: "i3", number: "INV-003", due_date: "2026-11-01", amount_cents: 1000, currency: "INR", project_id: "p1", voided_at: null, paid: true, paid_cents: 1000 },
+      ],
+    } as never);
+    expect(r.filter((x) => x.nudge).map((x) => x.nudge)).toEqual([{ id: "i1", number: "INV-001", due_date: "2026-11-07", currency: "INR", balanceCents: 532500 }]);
+  });
+  it("is on the invoice page, each matching row of the list, and the Reminders card", () => {
+    const invoices = readFileSync("src/routes/invoices.tsx", "utf8");
+    expect(invoices.match(/<NudgeButton /g)).toHaveLength(2);
+    expect(invoices.match(/canNudge\(/g)).toHaveLength(2);
+    expect(readFileSync("src/components/reminders.tsx", "utf8")).toContain("{r.nudge ? <NudgeButton invoice={r.nudge} compact");
+  });
+});
