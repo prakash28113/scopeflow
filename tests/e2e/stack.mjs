@@ -3,7 +3,7 @@
 //   PGlite (real Postgres 17) over the wire protocol -> real PostgREST 12 -> gateway at :54321
 //   plus a minimal GoTrue-compatible auth shim (password grant, /user, signup, refresh, logout,
 //   password recovery). Recovery "emails" are kept in memory and read by the walkthrough via
-//   GET /auth/v1/__test/recovery?email=… and GET /auth/v1/__test/plan?email=…&plan=… (local test
+//   GET /auth/v1/__test/recovery?email=…, /__test/plan?email=…&plan=… and /__test/purchasable?plan=…&on=1|0 (local test
 //   stand-ins only; never part of the app).
 import { PGlite } from "@electric-sql/pglite";
 import { PGLiteSocketServer } from "@electric-sql/pglite-socket";
@@ -138,23 +138,79 @@ function json(res, status, obj) {
 }
 
 const outbox = new Map();
+// Test switches that mirror the Supabase dashboard: "Confirm email" and CAPTCHA protection.
+// GET /auth/v1/__test/settings?confirm=1|0&captcha=1|0. Both start off, like production today.
+const authSettings = { confirm: false, captcha: false };
+const unconfirmed = new Set();
+const confirmOutbox = new Map(); // email -> { link, sent }
+const captchaLog = []; // { path, token } for every auth call that can carry a CAPTCHA token
+/** Like Supabase with CAPTCHA on: password sign-in, sign-up, resend and recover need a token. */
+function captchaRefused(path, b, res) {
+  const token = b?.gotrue_meta_security?.captcha_token ?? null;
+  captchaLog.push({ path, token });
+  if (!authSettings.captcha || token) return false;
+  json(res, 400, { code: 400, error_code: "captcha_failed", msg: "captcha verification process failed" });
+  return true;
+}
+function sendConfirm(u, redirectTo) {
+  const sn = session(u);
+  const back = redirectTo || "http://localhost:3000/auth/callback";
+  const prev = confirmOutbox.get(u.email);
+  confirmOutbox.set(u.email, {
+    link: `${back}#access_token=${sn.access_token}&expires_at=${sn.expires_at}&expires_in=3600&refresh_token=${sn.refresh_token}&token_type=bearer&type=signup`,
+    sent: (prev?.sent ?? 0) + 1,
+  });
+}
 async function auth(req, res, url) {
   const path = url.pathname.replace("/auth/v1", "");
+  if (path === "/__test/settings" && req.method === "GET") {
+    for (const k of ["confirm", "captcha"]) if (url.searchParams.has(k)) authSettings[k] = url.searchParams.get(k) === "1";
+    return json(res, 200, authSettings);
+  }
+  if (path === "/__test/confirmation" && req.method === "GET") {
+    const mail = confirmOutbox.get(url.searchParams.get("email"));
+    return mail ? json(res, 200, mail) : json(res, 404, { msg: "no confirmation email" });
+  }
+  if (path === "/__test/captcha-log" && req.method === "GET") {
+    const log = captchaLog.splice(0);
+    return json(res, 200, { log });
+  }
   if (path === "/signup" && req.method === "POST") {
     const b = await body(req);
-    const exists = await q("select 1 from auth.users where email = $1", [b.email]);
+    if (captchaRefused(path, b, res)) return;
+    const exists = await q("select * from auth.users where email = $1", [b.email]);
+    if (authSettings.confirm) {
+      // Like Supabase with "Confirm email" on: no session, and an existing address gets a
+      // look-alike user back (no error, no email) so the form can't be used to find accounts.
+      if (exists.rows.length) return json(res, 200, { ...userObj({ ...exists.rows[0], id: randomUUID() }), email_confirmed_at: undefined, identities: [] });
+      const r = await q("insert into auth.users (email, encrypted_password, raw_user_meta_data) values ($1, $2, $3) returning *", [
+        b.email, b.password, JSON.stringify(b.data ?? {}),
+      ]);
+      unconfirmed.add(b.email);
+      sendConfirm(r.rows[0], url.searchParams.get("redirect_to"));
+      return json(res, 200, { ...userObj(r.rows[0]), email_confirmed_at: undefined, confirmation_sent_at: new Date().toISOString() });
+    }
     if (exists.rows.length) return json(res, 422, { code: 422, error_code: "user_already_exists", msg: "User already registered" });
     const r = await q("insert into auth.users (email, encrypted_password, raw_user_meta_data) values ($1, $2, $3) returning *", [
       b.email, b.password, JSON.stringify(b.data ?? {}),
     ]);
     return json(res, 200, session(r.rows[0]));
   }
+  if (path === "/resend" && req.method === "POST") {
+    const b = await body(req);
+    if (captchaRefused(path, b, res)) return;
+    const r = await q("select * from auth.users where email = $1", [String(b.email ?? "").toLowerCase()]);
+    if (b.type === "signup" && r.rows.length && unconfirmed.has(r.rows[0].email)) sendConfirm(r.rows[0], url.searchParams.get("redirect_to"));
+    return json(res, 200, {}); // same answer for every address
+  }
   if (path === "/token") {
     const grant = url.searchParams.get("grant_type");
     const b = await body(req);
     if (grant === "password") {
+      if (captchaRefused("/token?grant_type=password", b, res)) return;
       const r = await q("select * from auth.users where email = $1 and encrypted_password = $2", [b.email, b.password]);
       if (!r.rows.length) return json(res, 400, { code: 400, error_code: "invalid_credentials", msg: "Invalid login credentials" });
+      if (unconfirmed.has(r.rows[0].email)) return json(res, 400, { code: 400, error_code: "email_not_confirmed", msg: "Email not confirmed" });
       return json(res, 200, session(r.rows[0]));
     }
     if (grant === "id_token") {
@@ -182,11 +238,13 @@ async function auth(req, res, url) {
     if (!claims?.sub) return json(res, 401, { code: 401, error_code: "bad_jwt", msg: "invalid JWT" });
     const r = await q("select * from auth.users where id = $1", [claims.sub]);
     if (!r.rows.length) return json(res, 404, { code: 404, msg: "User not found" });
+    unconfirmed.delete(r.rows[0].email); // a session exists only after the emailed link was opened
     return json(res, 200, userObj(r.rows[0]));
   }
   if (path === "/logout") { res.writeHead(204, CORS); return res.end(); }
   if (path === "/recover" && req.method === "POST") {
     const b = await body(req);
+    if (captchaRefused(path, b, res)) return;
     const r = await q("select * from auth.users where email = $1", [String(b.email ?? "").toLowerCase()]);
     const back = url.searchParams.get("redirect_to");
     if (r.rows.length && back) {
@@ -201,6 +259,15 @@ async function auth(req, res, url) {
     return link ? json(res, 200, { link }) : json(res, 404, { msg: "no recovery email" });
   }
   // Local test stand-in only: put an account on a plan, like the SQL editor's admin_set_plan.
+  if (path === "/__test/razorpay-status" && req.method === "GET") {
+    rzpStatus = url.searchParams.get("status") === "authenticated" ? "authenticated" : "active";
+    return json(res, 200, { status: rzpStatus });
+  }
+  if (path === "/__test/purchasable" && req.method === "GET") {
+    // What the release does for a plan with live keys: marks it on sale.
+    await q("update public.plans set purchasable = $2 where id = $1 returning id", [url.searchParams.get("plan"), url.searchParams.get("on") === "1"]);
+    return json(res, 200, {});
+  }
   if (path === "/__test/plan" && req.method === "GET") {
     const plan = url.searchParams.get("plan");
     if (plan === "free") await q("select public.admin_set_plan($1, 'free', 'free', null, null, 'e2e')", [url.searchParams.get("email")]);
@@ -223,7 +290,7 @@ async function auth(req, res, url) {
 export const E2E_RAZORPAY = { keyId: "rzp_test_e2estandin01", keySecret: "e2e-razorpay-key-secret", webhookSecret: "e2e-razorpay-webhook-secret" };
 const BILLING = {
   ...E2E_RAZORPAY,
-  testers: ["buyer@studio.test"],
+  testers: ["buyer@studio.test", "payer@fixes.test"],
   origins: ["http://localhost:3000", "http://127.0.0.1:3000"],
   supabaseUrl: "http://127.0.0.1:54321",
   anonKey: ANON,
@@ -232,6 +299,8 @@ const BILLING = {
 };
 let rzpSeq = 0;
 const rzpSubs = new Map();
+// What the fake reports for a subscription after checkout: "active" (charged) or "authenticated" (mandate only).
+let rzpStatus = "active";
 async function fakeRazorpay(url, init = {}) {
   const u = new URL(url);
   const body = init.body ? JSON.parse(init.body) : {};
@@ -252,7 +321,7 @@ async function fakeRazorpay(url, init = {}) {
     // After the checkout payment the subscription is active for one period.
     const start = now();
     const year = sub.notes?.billing_interval === "year";
-    return ok({ ...sub, status: "active", current_start: start, current_end: start + (year ? 365 : 30) * 86400 });
+    return ok({ ...sub, status: rzpStatus, current_start: start, current_end: start + (year ? 365 : 30) * 86400 });
   }
   return new Response(JSON.stringify({ error: { description: `fake razorpay: ${init.method} ${u.pathname}` } }), { status: 404 });
 }

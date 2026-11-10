@@ -93,7 +93,7 @@ describe("webhook events", () => {
     const u = await createUser(db, "pay@example.com", "P", { plan: "free" });
     await checkout(u, "sub_pay");
     // Authorised but not yet charged: no access.
-    expect(await send(event("subscription.authenticated", "sub_pay", { status: "authenticated" }))).toBe("ignored");
+    expect(await send(event("subscription.authenticated", "sub_pay", { status: "authenticated" }))).toBe("pending");
     expect((await myPlan(u)).effective_plan).toBe("free");
 
     const end = now() + 30 * DAY;
@@ -108,6 +108,62 @@ describe("webhook events", () => {
     expect(inv).toEqual([{ provider_invoice_id: "inv_1", amount_cents: 49900, currency: "INR", status: "paid" }]);
     const [{ n }] = (await db.query<Json>("select count(*)::int as n from subscription_changes where owner_id = $1 and source = 'provider'", [u.id])).rows;
     expect(n).toBe(2);
+  });
+
+  it("T1-04: 'authenticated' never switches a plan on; 'active' or a captured payment does", async () => {
+    await sell(["solo"]);
+    const free = async (u: Role) => expect(await myPlan(u)).toMatchObject({ plan: "free", effective_plan: "free" });
+    const pay = (id: string, status = "captured") => ({ id, invoice_id: `inv_${id}`, amount: 49900, currency: "INR", status, created_at: now() });
+
+    // Mandate set up, first charge not taken: every event shape with status 'authenticated' is pending.
+    const a = await createUser(db, "auth-only@example.com", "A", { plan: "free" });
+    await checkout(a, "sub_auth");
+    expect(await send(event("subscription.authenticated", "sub_auth", { status: "authenticated" }))).toBe("pending");
+    expect(await send(event("subscription.activated", "sub_auth", { status: "authenticated" }))).toBe("pending");
+    expect(await send(event("subscription.charged", "sub_auth", { status: "authenticated" }))).toBe("pending");
+    expect(await send(event("subscription.charged", "sub_auth", { status: "authenticated", pay: pay("pay_fail", "failed") }))).toBe("pending");
+    await free(a);
+    // The state is recorded for the account, with no plan change.
+    const [{ n }] = (await db.query<Json>("select count(*)::int as n from billing_events where owner_id = $1", [a.id])).rows;
+    expect(n).toBe(4);
+    expect((await db.query("select 1 from subscription_changes where owner_id = $1 and source = 'provider'", [a.id])).rows).toEqual([]);
+    // Then Razorpay reports it active: Solo.
+    expect(await send(event("subscription.activated", "sub_auth", { status: "active" }))).toBe("applied");
+    expect((await myPlan(a)).effective_plan).toBe("solo");
+
+    // subscription.charged with a captured payment → Solo, even if the status field lags behind.
+    const b = await createUser(db, "charged@example.com", "B", { plan: "free" });
+    await checkout(b, "sub_charged");
+    expect(await send(event("subscription.charged", "sub_charged", { status: "authenticated", pay: pay("pay_b") }))).toBe("applied");
+    expect((await myPlan(b)).effective_plan).toBe("solo");
+    expect(await as<Json>(db, b, "select provider_invoice_id, status from invoices")).toEqual([{ provider_invoice_id: "inv_pay_b", status: "paid" }]);
+
+    // payment.captured naming the checkout's subscription → Solo for one billing interval; a replay does nothing.
+    const c = await createUser(db, "captured@example.com", "C", { plan: "free" });
+    await checkout(c, "sub_captured", "solo", "year");
+    const captured = { entity: "event", event: "payment.captured", payload: { payment: { entity: { ...pay("pay_c"), subscription_id: "sub_captured" } } } };
+    expect(await send(captured, "live", "evt_cap_1")).toBe("applied");
+    expect(await send(captured, "live", "evt_cap_1")).toBe("duplicate");
+    const p = await myPlan(c);
+    expect(p).toMatchObject({ plan: "solo", effective_plan: "solo", billing_interval: "year" });
+    const days = (Date.parse(p.current_period_end as string) - Date.now()) / 86_400_000;
+    expect(days).toBeGreaterThan(364);
+    expect(days).toBeLessThan(367);
+    expect((await db.query("select 1 from subscription_changes where owner_id = $1 and source = 'provider'", [c.id])).rows.length).toBe(1);
+    // A later bare payment event keeps the running period instead of moving it.
+    expect(await send({ ...captured, payload: { payment: { entity: { ...pay("pay_c"), subscription_id: "sub_captured" } } } }, "live", "evt_cap_2")).toBe("applied");
+    expect((await myPlan(c)).current_period_end).toBe(p.current_period_end);
+    expect((await as<Json>(db, c, "select 1 as x from invoices")).length).toBe(1);
+
+    // Not captured, not this site's subscription, or the wrong mode: nothing.
+    const d = await createUser(db, "nothing@example.com", "D", { plan: "free" });
+    await checkout(d, "sub_nothing");
+    expect(await send({ event: "payment.captured", payload: { payment: { entity: { ...pay("pay_d", "authorized"), subscription_id: "sub_nothing" } } } })).toBe("ignored");
+    expect(await send({ event: "payment.captured", payload: { payment: { entity: pay("pay_e") } } })).toBe("unknown_subscription");
+    expect(await send({ event: "payment.captured", payload: { payment: { entity: { ...pay("pay_f"), subscription_id: "sub_stranger_2" } } } })).toBe("unknown_subscription");
+    expect(await send({ event: "payment.captured", payload: { payment: { entity: { ...pay("pay_g"), subscription_id: "sub_nothing" } } } }, "test")).toBe("ignored");
+    expect(await send(event("subscription.activated", "sub_nothing", { status: "active" }), "test")).toBe("ignored");
+    await free(d);
   });
 
   it("matches events only through ScopeFlow's checkout records, and keeps test and live apart", async () => {
@@ -181,6 +237,27 @@ describe("webhook events", () => {
 });
 
 describe("rollback", () => {
+  it("T1-04's rollback restores the earlier event handling, and the migration re-applies", async () => {
+    const name = "20261120000000_billing_activation_needs_payment";
+    const down = readFileSync(new URL(`../../supabase/rollback/${name}_down.sql`, import.meta.url), "utf8");
+    const up = readFileSync(new URL(`../../supabase/migrations/${name}.sql`, import.meta.url), "utf8");
+    const original = readFileSync(new URL("../../supabase/migrations/20261112000000_razorpay_billing.sql", import.meta.url), "utf8");
+    const body = (sql: string) => sql.slice(sql.indexOf("create or replace function public.process_razorpay_event"), sql.indexOf("$$;", sql.indexOf("create or replace function public.process_razorpay_event")));
+    expect(body(down)).toBe(body(original));
+    const fresh = await createDb();
+    const src = async () => (await fresh.query<{ s: string }>("select prosrc as s from pg_proc where proname = 'process_razorpay_event'")).rows[0].s;
+    const now_ = await src();
+    expect(now_).toContain("return 'pending'");
+    await fresh.exec(down);
+    await fresh.exec(down);
+    expect(await src()).toContain("not in ('active', 'authenticated')");
+    await fresh.exec(up);
+    await fresh.exec(up);
+    expect(await src()).toBe(now_);
+    const grants = (await fresh.query<Json>("select has_function_privilege('anon', 'public.process_razorpay_event(text,text,jsonb)', 'EXECUTE') as anon, has_function_privilege('authenticated', 'public.process_razorpay_event(text,text,jsonb)', 'EXECUTE') as auth, has_function_privilege('service_role', 'public.process_razorpay_event(text,text,jsonb)', 'EXECUTE') as svc")).rows[0];
+    expect(grants).toEqual({ anon: false, auth: false, svc: true });
+  });
+
   it("restores dollar prices and removes the billing objects; the migration re-applies", async () => {
     const fresh = await createDb();
     await fresh.exec(DOWN);

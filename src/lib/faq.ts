@@ -1,3 +1,4 @@
+import { PRICE_TAX_NOTE } from "./business";
 /** Questions and answers shown on the public pages, and repeated as FAQPage structured data for search engines. */
 
 export const HOME_FAQ: [string, string][] = [
@@ -37,6 +38,7 @@ export const HOME_FAQ_EARLY: [string, string][] = [
 
 export const PRICING_FAQ: [string, string][] = [
   ["Can I use ScopeFlow for free?", "Yes. Free includes 2 active projects and 5 clients with scopes, approvals, revision tracking, change orders, quotes, invoices and payment tracking. Analytics, expenses and the approval record PDF are on Solo (₹499/month). Completed and cancelled projects don't count toward the limit; drafts do."],
+  ["Do prices include GST?", `Solo is ${PRICE_TAX_NOTE} The price you see is the price you pay.`],
   ["Can I change plans later?", "Yes. You can cancel from Plan & usage at any time; when the paid period ends you can choose another plan. Downgrading never deletes anything."],
   ["What happens to my projects if I downgrade?", "Nothing is deleted. Every project, approval and client link keeps working, and your past expenses stay viewable. You can't start new projects beyond the lower plan's limit, and analytics, new expenses and the record PDF need Solo again."],
   ["Can clients approve projects without an account?", "Yes, on every plan. Clients open a private link, review the scope and approve — no sign-up."],

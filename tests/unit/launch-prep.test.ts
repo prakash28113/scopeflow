@@ -46,7 +46,7 @@ describe("password reset", () => {
   });
   it("reset links may only return to ScopeFlow's own reset page", () => {
     expect(authReturnUrls(["https://scopeflow.in", "https://www.scopeflow.in", "https://scopeflow.in", "http://evil.test", "https://x.test/path", ""])).toBe(
-      "https://scopeflow.in/reset-password,https://www.scopeflow.in/reset-password",
+      "https://scopeflow.in/reset-password,https://scopeflow.in/auth/callback,https://scopeflow.in/auth/callback?**,https://www.scopeflow.in/reset-password,https://www.scopeflow.in/auth/callback,https://www.scopeflow.in/auth/callback?**",
     );
   });
   it("reset email is on (Brevo SMTP is set up in Supabase; see docs/EMAIL-SETUP.md)", () => {
@@ -55,7 +55,7 @@ describe("password reset", () => {
   });
   it("reset pages and client links are never indexed or cached", () => {
     const file = buildHeadersFile({ supabaseUrl: "https://x.supabase.co", turnstile: false });
-    expect([...PRIVATE_PATHS]).toEqual(["/p", "/reset-password", "/forgot-password"]);
+    expect([...PRIVATE_PATHS]).toEqual(["/p", "/reset-password", "/forgot-password", "/auth/callback"]);
     for (const p of PRIVATE_PATHS) expect(file).toContain(`\n${p}\n  X-Robots-Tag: noindex, nofollow\n  Cache-Control: no-store\n`);
     // Sign-in and sign-up stay out of search (Google saw them as duplicate app shells) but stay cacheable.
     for (const p of ["/login", "/signup"]) expect(file).toContain(`\n${p}\n  X-Robots-Tag: noindex\n`);

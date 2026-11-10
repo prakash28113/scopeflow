@@ -127,9 +127,13 @@ export function googleAuthConfig(clientId, secret) {
   return body;
 }
 
-/** Supabase redirect allow-list: only the reset page on ScopeFlow's own addresses. */
+/**
+ * Supabase redirect allow-list: only the reset page and the email-confirmation landing page
+ * (which may carry ?next=…) on ScopeFlow's own addresses.
+ */
 export function authReturnUrls(urls) {
-  return [...new Set(urls.filter((u) => /^https:\/\/[a-z0-9.-]+$/i.test(u ?? "")).map((u) => `${u}/reset-password`))].join(",");
+  const own = [...new Set(urls.filter((u) => /^https:\/\/[a-z0-9.-]+$/i.test(u ?? "")))];
+  return own.flatMap((u) => [`${u}/reset-password`, `${u}/auth/callback`, `${u}/auth/callback?**`]).join(",");
 }
 
 /** Custom domains from config/public-site.json, e.g. "scopeflow.in, www.scopeflow.in". First = primary. */
@@ -347,9 +351,10 @@ revoke all on all tables in schema scopeflow_admin from public, anon, authentica
   }
   ok(`Security check passed: ${EXPECTED.tables} tables, RLS on all, ${EXPECTED.public_functions} public functions, sign-up trigger present`);
 
-  await optional("Sign-in configured: email + password, no confirmation email, minimum 8 characters", `/projects/${ref}/config/auth`, {
+  // "Confirm email" and CAPTCHA are the owner's switches in the Supabase dashboard; a release never
+  // changes them (it used to turn confirmation off every time). The app works with either setting.
+  await optional("Sign-in configured: email + password, minimum 8 characters (email confirmation and CAPTCHA left as set in Supabase)", `/projects/${ref}/config/auth`, {
     external_email_enabled: true,
-    mailer_autoconfirm: true,
     password_min_length: 8,
     disable_signup: false,
   });

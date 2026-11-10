@@ -10,6 +10,7 @@ const PATTERNS: RegExp[] = [
   "/signup",
   "/forgot-password",
   "/reset-password",
+  "/auth/callback",
   "/onboarding",
   "/p",
   "/pricing",

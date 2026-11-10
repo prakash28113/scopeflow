@@ -19,7 +19,7 @@ const cfg = (o: Partial<BillingConfig> = {}): BillingConfig => ({
 });
 
 type Call = { url: string; init: RequestInit; body: Record<string, unknown> | null };
-function world(o: { user?: { id: string; email: string } | null; prepared?: Record<string, unknown>; dbError?: { code: string; message: string }; current?: unknown; rzpFail?: boolean } = {}) {
+function world(o: { user?: { id: string; email: string } | null; prepared?: Record<string, unknown>; dbError?: { code: string; message: string }; current?: unknown; rzpFail?: boolean; subStatus?: string } = {}) {
   const calls: Call[] = [];
   const json = (status: number, data: unknown) => new Response(JSON.stringify(data), { status, headers: { "content-type": "application/json" } });
   const f = async (url: string, init: RequestInit = {}) => {
@@ -44,7 +44,7 @@ function world(o: { user?: { id: string; email: string } | null; prepared?: Reco
       if (url === `${RZP}/plans`) return json(200, { id: "plan_new" });
       if (url === `${RZP}/subscriptions`) return json(200, { id: "sub_new", status: "created" });
       if (url.endsWith("/cancel")) return json(200, { id: "sub_cur", status: "active" });
-      if (url === `${RZP}/subscriptions/sub_new` && init.method === "GET") return json(200, { id: "sub_new", status: "active", current_end: 1900000000 });
+      if (url === `${RZP}/subscriptions/sub_new` && init.method === "GET") return json(200, { id: "sub_new", status: o.subStatus ?? "active", current_end: 1900000000 });
     }
     return json(404, { unmocked: url });
   };
@@ -99,9 +99,15 @@ describe("webhook", () => {
     const w = world();
     await handleBilling(req("/webhook", { method: "POST", body, headers: { "x-razorpay-signature": sign(body) } }), cfg({ keyId: "rzp_test_x" }), w.f);
     expect(w.calls[0].body).toMatchObject({ p_event_id: expect.stringMatching(/^sha256:[0-9a-f]{64}$/), p_mode: "test" });
-    const other = JSON.stringify({ event: "payment.captured" });
+    const other = JSON.stringify({ event: "payment.failed" });
     const r = await handleBilling(req("/webhook", { method: "POST", body: other, headers: { "x-razorpay-signature": sign(other) } }), cfg(), w.f);
     expect(await r.json()).toEqual({ result: "not_subscription" });
+    expect(w.rpcCalls()).toEqual(["process_razorpay_event"]); // only the first, subscription event
+    // T1-04: a captured payment is passed on; the database matches it to an account through its subscription.
+    const captured = JSON.stringify({ event: "payment.captured", payload: { payment: { entity: { id: "pay_1", status: "captured" } } } });
+    const c = await handleBilling(req("/webhook", { method: "POST", body: captured, headers: { "x-razorpay-signature": sign(captured) } }), cfg(), w.f);
+    expect(await c.json()).toEqual({ result: "applied" });
+    expect(w.calls.at(-1)!.body).toMatchObject({ p_event: { event: "payment.captured" } });
   });
 
   it("asks Razorpay to retry when the database fails", async () => {
@@ -179,17 +185,25 @@ describe("checkout", () => {
 });
 
 describe("verify (Checkout's success callback)", () => {
-  const pay = (body: Record<string, unknown>, w = world()) =>
+  const pay = (body: Record<string, unknown>, w: ReturnType<typeof world> = world()) =>
     handleBilling(req("/verify", { method: "POST", body: JSON.stringify(body) }), cfg(), w.f).then(async (r) => ({ status: r.status, body: await r.json(), w }));
   const genuine = createHmac("sha256", "key_secret_value").update("pay_abc|sub_new").digest("hex");
 
   it("applies the subscription from Razorpay when the signature is genuine", async () => {
     const r = await pay({ razorpay_payment_id: "pay_abc", razorpay_subscription_id: "sub_new", razorpay_signature: genuine });
-    expect(r).toMatchObject({ status: 200, body: { verified: true, result: "applied" } });
+    expect(r).toMatchObject({ status: 200, body: { verified: true, status: "active", result: "applied" } });
     expect(r.w.calls.find((c) => c.url.endsWith("/rpc/process_razorpay_event"))!.body).toMatchObject({
       p_event_id: "verify:pay_abc",
       p_event: { event: "subscription.activated", payload: { subscription: { entity: { id: "sub_new", status: "active" } } } },
     });
+  });
+
+  it("T1-04: 'authenticated' (mandate set up, nothing charged yet) is pending and activates nothing", async () => {
+    for (const subStatus of ["authenticated", "created", "pending"]) {
+      const r = await pay({ razorpay_payment_id: "pay_abc", razorpay_subscription_id: "sub_new", razorpay_signature: genuine }, world({ subStatus }));
+      expect(r).toMatchObject({ status: 200, body: { verified: true, status: "pending", result: "pending" } });
+      expect(r.w.rpcCalls()).toEqual([]); // no process_razorpay_event, so no activation
+    }
   });
 
   it("changes nothing for a wrong signature or missing fields", async () => {

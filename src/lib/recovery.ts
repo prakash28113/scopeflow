@@ -15,3 +15,18 @@ export function readRecoveryHash(hash: string): RecoveryLink {
   if (accessToken && refreshToken && p.get("type") === "recovery") return { kind: "tokens", accessToken, refreshToken };
   return { kind: "none" };
 }
+
+/** Reads the fragment Supabase adds when any emailed link is opened (confirm sign-up, reset, …). */
+export type AuthLink =
+  | { kind: "tokens"; accessToken: string; refreshToken: string; type: string }
+  | { kind: "error"; expired: boolean }
+  | { kind: "none" };
+
+export function readAuthHash(hash: string): AuthLink {
+  const p = new URLSearchParams(hash.replace(/^#/, ""));
+  if (p.get("error") || p.get("error_code")) return { kind: "error", expired: /expired|otp_expired|invalid/i.test(`${p.get("error_code")} ${p.get("error_description")}`) };
+  const accessToken = p.get("access_token");
+  const refreshToken = p.get("refresh_token");
+  if (accessToken && refreshToken) return { kind: "tokens", accessToken, refreshToken, type: p.get("type") ?? "" };
+  return { kind: "none" };
+}

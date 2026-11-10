@@ -11,7 +11,9 @@ import { safeNext } from "@/lib/safe-redirect";
 import { PASSWORD_RESET_EMAIL, SUPPORT_EMAIL, supportMailto } from "@/lib/site";
 import { BetaBadge } from "@/components/site-footer";
 import { issuesToFieldErrors, newPasswordSchema, resetRequestSchema, signInSchema, signUpSchema, type FieldErrors } from "@/lib/validation";
-import { readRecoveryHash } from "@/lib/recovery";
+import { readAuthHash, readRecoveryHash } from "@/lib/recovery";
+import { onboardingUrl, parseIntent, readIntent, rememberIntent } from "@/lib/plan-intent";
+import { CAPTCHA_FAILED, RESEND_WAIT_S, captchaBlocks, captchaOptions, confirmRedirect, isCaptchaError, resendError, signInError, signUpOutcome } from "@/lib/auth-flow";
 import { GoogleSignIn } from "@/components/google-signin";
 
 function AuthLayout({ children }: { children: ReactNode }) {
@@ -62,7 +64,16 @@ function useAuthForm() {
   const [error, setError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const [captcha, setCaptcha] = useState<string | null>(null);
+  const [attempt, setAttempt] = useState(0);
   return {
+    /** With CAPTCHA configured: no sending until the widget has given a token. */
+    blocked: captchaBlocks(captchaSiteKey, captcha),
+    attempt,
+    /** A CAPTCHA token works once: after every attempt, drop it and show a fresh widget. */
+    resetCaptcha: () => {
+      setCaptcha(null);
+      setAttempt((n) => n + 1);
+    },
     pending,
     setPending,
     error,
@@ -87,16 +98,14 @@ export function LoginPage() {
     e.preventDefault();
     const parsed = signInSchema.safeParse(Object.fromEntries(new FormData(e.currentTarget)));
     if (!parsed.success) return f.setFieldErrors(issuesToFieldErrors(parsed.error));
-    if (captchaSiteKey && !f.captcha) return f.setError("Please complete the security check.");
+    if (f.blocked) return f.setError("Please complete the security check.");
     f.setFieldErrors({});
     f.setError(null);
     f.setPending(true);
-    const { error } = await supabase.auth.signInWithPassword({
-      ...parsed.data,
-      options: f.captcha ? { captchaToken: f.captcha } : undefined,
-    });
+    const { error } = await supabase.auth.signInWithPassword({ ...parsed.data, options: captchaOptions(f.captcha) });
     f.setPending(false);
-    if (error) return f.setError(error.status === 400 ? "Incorrect email or password." : "Couldn't sign in. Please try again.");
+    f.resetCaptcha();
+    if (error) return f.setError(signInError(error));
     navigate(next, { replace: true });
   }
 
@@ -115,8 +124,8 @@ export function LoginPage() {
         <Field label="Password" htmlFor="password" error={f.fieldErrors.password}>
           <Input id="password" name="password" type="password" autoComplete="current-password" required />
         </Field>
-        <Captcha onToken={f.setCaptcha} />
-        <SubmitButton className="w-full" pending={f.pending} pendingLabel="Signing in…">
+        <Captcha onToken={f.setCaptcha} attempt={f.attempt} />
+        <SubmitButton className="w-full" pending={f.pending} pendingLabel="Signing in…" disabled={f.blocked}>
           Sign in
         </SubmitButton>
         <p className="text-[13px] text-muted">
@@ -135,101 +144,128 @@ export function LoginPage() {
   );
 }
 
+/** "Check your inbox": the one screen after sign-up when there's no session, whether the address is new or not. */
+function CheckInbox({ email, redirectTo, onChangeEmail }: { email: string; redirectTo: string; onChangeEmail: () => void }) {
+  const f = useAuthForm();
+  const [wait, setWait] = useState(RESEND_WAIT_S);
+  const [resent, setResent] = useState(false);
+  useEffect(() => {
+    if (wait <= 0) return;
+    const t = setTimeout(() => setWait((w) => w - 1), 1000);
+    return () => clearTimeout(t);
+  }, [wait]);
+
+  async function resend() {
+    if (f.blocked) return f.setError("Please complete the security check.");
+    f.setError(null);
+    f.setPending(true);
+    const { error } = await supabase.auth.resend({ type: "signup", email, options: { emailRedirectTo: redirectTo, ...captchaOptions(f.captcha) } });
+    f.setPending(false);
+    f.resetCaptcha();
+    const message = resendError(error);
+    if (message) return f.setError(message);
+    setResent(true);
+    setWait(RESEND_WAIT_S);
+  }
+
+  return (
+    <div data-testid="check-inbox">
+      <h1 className="display text-[28px] font-semibold leading-tight">Check your inbox</h1>
+      <p className="mt-3 text-[15px] leading-relaxed text-ink-2">
+        We&apos;ve sent a link to <span className="font-medium text-ink">{email}</span>. Open it to finish setting up ScopeFlow.
+      </p>
+      <p className="mt-2 text-[13px] text-muted">It can take a minute. Check your spam folder too.</p>
+      <div className="mt-6 space-y-3">
+        {f.error ? <Alert>{f.error}</Alert> : null}
+        {resent && !f.error ? (
+          <p role="status" className="text-[13px] text-positive">
+            Sent again.
+          </p>
+        ) : null}
+        {wait <= 0 ? <Captcha onToken={f.setCaptcha} attempt={f.attempt} /> : null}
+        <p className="text-[13px] text-muted">
+          Didn&apos;t get it?{" "}
+          <button type="button" onClick={resend} disabled={wait > 0 || f.pending || f.blocked} className="font-medium text-accent hover:underline disabled:cursor-not-allowed disabled:text-muted disabled:no-underline">
+            {f.pending ? "Sending…" : wait > 0 ? `Resend (in ${wait} s)` : "Resend"}
+          </button>{" "}
+          ·{" "}
+          <button type="button" onClick={onChangeEmail} className="font-medium text-accent hover:underline">
+            Use a different email
+          </button>
+        </p>
+      </div>
+    </div>
+  );
+}
+
 export function SignupPage() {
   useTitle("Create your free account");
   const { session } = useAuth();
   const navigate = useNavigate();
   const f = useAuthForm();
-  const [notice, setNotice] = useState<string | null>(null);
+  const [sentTo, setSentTo] = useState<string | null>(null);
   // The home page's "Start free" form hands over a name and email (navigation state); they only prefill the fields.
   const handed = (useLocation().state ?? {}) as { name?: unknown; email?: unknown };
   const preName = typeof handed.name === "string" ? handed.name.slice(0, 120) : "";
   const preEmail = typeof handed.email === "string" ? handed.email.slice(0, 254) : "";
-  if (session) return <Navigate to="/onboarding" replace />;
+  // Came from the pricing page's Solo button (?plan=solo&interval=…): keep that through set-up.
+  const [params] = useSearchParams();
+  const fromUrl = parseIntent(params);
+  useEffect(() => {
+    if (fromUrl) rememberIntent(fromUrl);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fromUrl?.interval]);
+  const setUp = onboardingUrl(fromUrl ?? readIntent());
+  const redirectTo = confirmRedirect(window.location.origin, setUp);
+  if (session) return <Navigate to={setUp} replace />;
 
   async function onSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const parsed = signUpSchema.safeParse(Object.fromEntries(new FormData(e.currentTarget)));
     if (!parsed.success) return f.setFieldErrors(issuesToFieldErrors(parsed.error));
-    if (captchaSiteKey && !f.captcha) return f.setError("Please complete the security check.");
+    if (f.blocked) return f.setError("Please complete the security check.");
     f.setFieldErrors({});
     f.setError(null);
     f.setPending(true);
     const { data, error } = await supabase.auth.signUp({
       email: parsed.data.email,
       password: parsed.data.password,
-      options: {
-        data: { full_name: parsed.data.fullName },
-        captchaToken: f.captcha ?? undefined,
-      },
+      options: { data: { full_name: parsed.data.fullName }, emailRedirectTo: redirectTo, ...captchaOptions(f.captcha) },
     });
     f.setPending(false);
-    if (error) {
-      const msg = error.message ?? "";
-      if (/already registered|already exists/i.test(msg)) return f.setError("An account with this email already exists.");
-      if (/database error saving new user/i.test(msg))
-        return f.setError(`Sign-ups are invite-only right now. Email ${SUPPORT_EMAIL} to request access.`);
-      if (/password/i.test(msg)) return f.setError(msg);
-      return f.setError("Couldn't create the account. Please try again.");
-    }
-    if (data.session) navigate("/onboarding", { replace: true });
-    else setNotice(`Your account was created but needs activation before you can sign in. Please email ${SUPPORT_EMAIL}.`);
+    f.resetCaptcha();
+    const outcome = signUpOutcome(data, error, SUPPORT_EMAIL);
+    if (outcome.kind === "error") return f.setError(outcome.message);
+    if (outcome.kind === "signed-in") return navigate(setUp, { replace: true });
+    setSentTo(parsed.data.email);
+  }
+
+  if (sentTo) {
+    return (
+      <AuthLayout>
+        <CheckInbox email={sentTo} redirectTo={redirectTo} onChangeEmail={() => setSentTo(null)} />
+        <p className="mt-6 text-center text-sm text-muted">
+          Already have an account?{" "}
+          <Link to="/login" className="font-medium text-accent hover:underline">
+            Sign in
+          </Link>
+        </p>
+      </AuthLayout>
+    );
   }
 
   return (
     <AuthLayout>
       <h1 className="display text-[28px] font-semibold leading-tight">Create your account</h1>
       <p className="mb-8 mt-1.5 text-sm text-muted">Start free. No card needed.</p>
-      {notice ? (
-        <Alert tone="info">{notice}</Alert>
-      ) : (
-        <>
-          <div className="mb-4">
-            <GoogleSignIn
-              context="signup"
-              onSignedIn={() => navigate("/onboarding", { replace: true })}
-              onError={f.setError}
-              note={
-                <>
-                  By continuing with Google you agree to the{" "}
-                  <Link to="/terms" className="underline hover:text-ink">
-                    Terms &amp; Conditions
-                  </Link>{" "}
-                  and{" "}
-                  <Link to="/privacy" className="underline hover:text-ink">
-                    Privacy Policy
-                  </Link>
-                  .
-                </>
-              }
-            />
-          </div>
-          <form onSubmit={onSubmit} className="space-y-4" noValidate>
-            {f.error ? <Alert>{f.error}</Alert> : null}
-            <Field label="Your name" htmlFor="fullName" error={f.fieldErrors.fullName}>
-              <Input id="fullName" name="fullName" autoComplete="name" required defaultValue={preName} />
-            </Field>
-            <Field label="Email" htmlFor="email" error={f.fieldErrors.email}>
-              <Input id="email" name="email" type="email" autoComplete="email" required defaultValue={preEmail} />
-            </Field>
-            <Field
-              label="Password"
-              htmlFor="password"
-              error={f.fieldErrors.password}
-              hint={
-                PASSWORD_RESET_EMAIL
-                  ? "At least 8 characters."
-                  : "At least 8 characters. Keep it safe: password resets go through support during the beta."
-              }
-            >
-              <Input id="password" name="password" type="password" autoComplete="new-password" required autoFocus={Boolean(preName && preEmail)} />
-            </Field>
-            <Captcha onToken={f.setCaptcha} />
-            <SubmitButton className="w-full" pending={f.pending} pendingLabel="Creating account…">
-              Create account
-            </SubmitButton>
-            <p className="text-[12px] leading-relaxed text-muted">
-              By creating an account you agree to the{" "}
+      <div className="mb-4">
+        <GoogleSignIn
+          context="signup"
+          onSignedIn={() => navigate(setUp, { replace: true })}
+          onError={f.setError}
+          note={
+            <>
+              By continuing with Google you agree to the{" "}
               <Link to="/terms" className="underline hover:text-ink">
                 Terms &amp; Conditions
               </Link>{" "}
@@ -238,16 +274,112 @@ export function SignupPage() {
                 Privacy Policy
               </Link>
               .
-            </p>
-          </form>
-        </>
-      )}
+            </>
+          }
+        />
+      </div>
+      <form onSubmit={onSubmit} className="space-y-4" noValidate>
+        {f.error ? <Alert>{f.error}</Alert> : null}
+        <Field label="Your name" htmlFor="fullName" error={f.fieldErrors.fullName}>
+          <Input id="fullName" name="fullName" autoComplete="name" required defaultValue={preName} />
+        </Field>
+        <Field label="Email" htmlFor="email" error={f.fieldErrors.email}>
+          <Input id="email" name="email" type="email" autoComplete="email" required defaultValue={preEmail} />
+        </Field>
+        <Field
+          label="Password"
+          htmlFor="password"
+          error={f.fieldErrors.password}
+          hint={
+            PASSWORD_RESET_EMAIL
+              ? "At least 8 characters."
+              : "At least 8 characters. Keep it safe: password resets go through support during the beta."
+          }
+        >
+          <Input id="password" name="password" type="password" autoComplete="new-password" required autoFocus={Boolean(preName && preEmail)} />
+        </Field>
+        <Captcha onToken={f.setCaptcha} attempt={f.attempt} />
+        <SubmitButton className="w-full" pending={f.pending} pendingLabel="Creating account…" disabled={f.blocked}>
+          Create account
+        </SubmitButton>
+        <p className="text-[12px] leading-relaxed text-muted">
+          By creating an account you agree to the{" "}
+          <Link to="/terms" className="underline hover:text-ink">
+            Terms &amp; Conditions
+          </Link>{" "}
+          and{" "}
+          <Link to="/privacy" className="underline hover:text-ink">
+            Privacy Policy
+          </Link>
+          .
+        </p>
+      </form>
       <p className="mt-6 text-center text-sm text-muted">
         Already have an account?{" "}
         <Link to="/login" className="font-medium text-accent hover:underline">
           Sign in
         </Link>
       </p>
+    </AuthLayout>
+  );
+}
+
+/** Where the link in a confirmation email lands: signs the person in, then carries on (to set-up by default). */
+export function AuthCallbackPage() {
+  useTitle("Signing you in");
+  const navigate = useNavigate();
+  const [params] = useSearchParams();
+  const [failed, setFailed] = useState<string | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    const hash = window.location.hash;
+    const link = readAuthHash(hash);
+    const next = safeNext(params.get("next"), "/onboarding");
+    // A reset link belongs on the reset page, which reads the same one-time tokens.
+    if (link.kind === "tokens" && link.type === "recovery") return void navigate(`/reset-password${hash}`, { replace: true });
+    // Remove the one-time tokens from the address bar and history straight away.
+    if (hash) window.history.replaceState(null, "", window.location.pathname + window.location.search);
+    (async () => {
+      if (link.kind === "tokens") {
+        const { error } = await supabase.auth.setSession({ access_token: link.accessToken, refresh_token: link.refreshToken });
+        if (cancelled) return;
+        if (!error) return navigate(next, { replace: true });
+        return setFailed("This link has expired or was already used.");
+      }
+      // Opened again after it was used, in a browser that's already signed in: just carry on.
+      const { data } = await supabase.auth.getSession();
+      if (cancelled) return;
+      if (data.session) return navigate(next, { replace: true });
+      setFailed(link.kind === "error" && !link.expired ? "This link isn't valid." : "This link has expired or was already used.");
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // One run per visit: the link's tokens work once.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  return (
+    <AuthLayout>
+      <h1 className="display text-[28px] font-semibold leading-tight">{failed ? "That link didn't work" : "Signing you in…"}</h1>
+      {failed ? (
+        <div className="mt-6 space-y-4" data-testid="callback-failed">
+          <Alert>{failed}</Alert>
+          <p className="text-sm text-muted">
+            If you&apos;ve already confirmed your email,{" "}
+            <Link to="/login" className="font-medium text-accent hover:underline">
+              sign in
+            </Link>
+            . Otherwise{" "}
+            <Link to="/signup" className="font-medium text-accent hover:underline">
+              sign up again
+            </Link>{" "}
+            to get a new link.
+          </p>
+        </div>
+      ) : (
+        <p className="mt-6 text-sm text-muted">One moment.</p>
+      )}
     </AuthLayout>
   );
 }
@@ -273,15 +405,17 @@ export function ForgotPasswordPage() {
     e.preventDefault();
     const parsed = resetRequestSchema.safeParse(Object.fromEntries(new FormData(e.currentTarget)));
     if (!parsed.success) return f.setFieldErrors(issuesToFieldErrors(parsed.error));
-    if (captchaSiteKey && !f.captcha) return f.setError("Please complete the security check.");
+    if (f.blocked) return f.setError("Please complete the security check.");
     f.setFieldErrors({});
     f.setError(null);
     f.setPending(true);
     const { error } = await supabase.auth.resetPasswordForEmail(parsed.data.email, {
       redirectTo: `${window.location.origin}/reset-password`,
-      captchaToken: f.captcha ?? undefined,
+      ...captchaOptions(f.captcha),
     });
     f.setPending(false);
+    f.resetCaptcha();
+    if (isCaptchaError(error)) return f.setError(CAPTCHA_FAILED);
     // Same answer whether or not the account exists, so the form can't be used to probe for accounts.
     if (error && error.status === 429) return f.setError("Too many reset requests. Please wait a few minutes and try again.");
     if (error && error.status !== 400 && error.status !== 422) return f.setError("Couldn't send the email. Please try again.");
@@ -312,8 +446,8 @@ export function ForgotPasswordPage() {
             <Field label="Email" htmlFor="email" error={f.fieldErrors.email}>
               <Input id="email" name="email" type="email" autoComplete="email" required />
             </Field>
-            <Captcha onToken={f.setCaptcha} />
-            <SubmitButton className="w-full" pending={f.pending} pendingLabel="Sending…">
+            <Captcha onToken={f.setCaptcha} attempt={f.attempt} />
+            <SubmitButton className="w-full" pending={f.pending} pendingLabel="Sending…" disabled={f.blocked}>
               Send reset link
             </SubmitButton>
           </form>
