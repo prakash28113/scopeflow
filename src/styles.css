@@ -87,7 +87,7 @@
 
 /* Loading placeholders: a calm shimmer, static with reduced motion. */
 .skeleton {
-  background: linear-gradient(90deg, var(--color-sunken) 0%, #e9ecf1 50%, var(--color-sunken) 100%);
+  background: linear-gradient(90deg, var(--color-sunken) 0%, var(--color-skeleton, #e9ecf1) 50%, var(--color-sunken) 100%);
   background-size: 200% 100%;
   border-radius: 6px;
 }
@@ -791,6 +791,29 @@ dialog.sf-drawer {
 .hm-carousel::-webkit-scrollbar {
   display: none;
 }
+.hm-carousel:focus-visible {
+  outline: 2px solid var(--hm-text);
+  outline-offset: 4px;
+}
+/* Where you are in the carousel, and that there is more to the right. */
+.hm-dots {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 20px;
+}
+.hm-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: currentColor;
+  opacity: 0.28;
+  transition: opacity 0.2s, width 0.2s;
+}
+.hm-dot[data-active="true"] {
+  width: 22px;
+  opacity: 0.9;
+}
 .hm-slide {
   flex: 0 0 78%;
   max-width: 420px;
@@ -1076,6 +1099,7 @@ dialog.sf-drawer {
   --color-canvas: #2b2d31; /* the content panel */
   --color-surface: #33363b; /* cards, tables, forms */
   --color-sunken: #282a2e; /* wells, hovers */
+  --color-skeleton: #3a3d43; /* the lighter band of a loading placeholder, on the dark panel */
   --color-line: #43474e;
   --color-line-strong: #5a5f67;
   --color-line-hover: #7a808a;
@@ -1173,5 +1197,28 @@ html:has(.app-console) {
   .app-console,
   html:has(.app-console) {
     background: #fff !important;
+  }
+}
+
+/* Invoice list rows (RT4-04). Phones: number + status, then client + amount, then the detail line.
+   From 640px: one line with the detail underneath, amount and status on the right. */
+.inv-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas: "num tag" "client amt" "meta meta";
+  align-items: center;
+  column-gap: 12px;
+  row-gap: 2px;
+}
+.inv-num { grid-area: num; }
+.inv-client { grid-area: client; }
+.inv-amt { grid-area: amt; justify-self: end; }
+.inv-tag { grid-area: tag; justify-self: end; }
+.inv-meta { grid-area: meta; }
+@media (min-width: 640px) {
+  .inv-row {
+    grid-template-columns: auto minmax(0, 1fr) auto auto;
+    grid-template-areas: "num client amt tag" "meta meta amt tag";
+    column-gap: 8px;
   }
 }

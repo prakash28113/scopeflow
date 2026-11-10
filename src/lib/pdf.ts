@@ -153,6 +153,9 @@ async function inlineFontCss(): Promise<string> {
   return out.join("\n");
 }
 
+/** Fetches the two PDF libraries without doing anything with them. */
+export const preloadPdfLibraries = () => Promise.all([import("html-to-image"), import("jspdf")]);
+
 export async function downloadPdf(source: HTMLElement, name: string): Promise<void> {
   const [{ toCanvas }, { jsPDF }] = await Promise.all([import("html-to-image"), import("jspdf")]);
 

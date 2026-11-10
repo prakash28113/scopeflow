@@ -35,8 +35,8 @@ export function PublicHeader({
   const main = action ?? { to: "/signup", label: "Start free" };
   return (
     <header className={className ?? (floating ? "hm-header" : "border-b border-line bg-surface/80 backdrop-blur")} data-testid="public-header">
-      <div className={floating ? "mx-auto flex max-w-[1400px] items-center justify-between gap-1.5 min-[360px]:gap-2" : "mx-auto flex h-16 max-w-6xl items-center justify-between gap-3 px-4 sm:px-6"}>
-        <div className={cx("flex min-w-0 items-center gap-2", floating && "hm-navcard px-3 min-[360px]:px-4 sm:px-6")}>
+      <div className={floating ? "mx-auto flex max-w-[1400px] items-center justify-between gap-1.5 min-[360px]:gap-2" : "mx-auto flex h-16 max-w-6xl items-center justify-between gap-2 px-3 min-[400px]:gap-3 min-[400px]:px-4 sm:px-6"}>
+        <div className={cx("flex shrink-0 items-center gap-1.5 min-[430px]:gap-2", floating && "hm-navcard px-3 min-[360px]:px-4 sm:px-6")}>
           <Link to="/" aria-label="ScopeFlow home" className="inline-flex shrink-0 items-center">
             <LogoFull tone={dark ? "white" : "color"} className="h-5 w-auto min-[360px]:h-[22px] sm:h-8" />
           </Link>
@@ -53,7 +53,8 @@ export function PublicHeader({
           <Link to="/pricing" className={cx(base, "px-1 text-[13px] min-[360px]:px-1.5 min-[360px]:text-[14px] sm:px-3")}>
             Pricing
           </Link>
-          <Link to="/blog" className={cx(link, "hidden min-[400px]:block")}>
+          {/* With the Beta badge beside the logo there's no room for Blog until 480px; it's in the menu. */}
+          <Link to="/blog" className={cx(link, badge ? "hidden min-[480px]:block" : "hidden min-[400px]:block")}>
             Blog
           </Link>
           {signIn ? (

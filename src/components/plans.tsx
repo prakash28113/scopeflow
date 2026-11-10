@@ -1,10 +1,13 @@
 import { PRICE_TAX_NOTE } from "@/lib/business";
+import { FREE_REMINDERS_LINE, LIMIT_LATER_LABEL, LIMIT_UPGRADE_LABEL, SOLO_LINES, SOLO_VALUE_LINE, limitPrompt, soloYearlyNote } from "@/lib/plan-copy";
+import { useEffect } from "react";
+import { logUsage, rememberCheckoutSource } from "@/lib/usage";
 import { Link } from "react-router";
 import { BILLING_ENABLED } from "@/lib/billing";
 import { planSale, type Sale } from "@/lib/sale";
 import { Button, Meter, buttonClass, cx } from "./ui";
-import { SOLO_CTA_LABEL } from "@/lib/plan-intent";
-import { limitText, priceLabel, usePlans, type Interval, type Plan, type PlanId, type PlanLimit } from "@/lib/plans";
+import { SOLO_CTA_LABEL, planUrl } from "@/lib/plan-intent";
+import { formatPrice, limitText, priceLabel, usePlans, type Interval, type Plan, type PlanId, type PlanLimit } from "@/lib/plans";
 
 export function IntervalToggle({ value, onChange }: { value: Interval; onChange: (v: Interval) => void }) {
   const opt = (v: Interval, label: string) => (
@@ -13,7 +16,7 @@ export function IntervalToggle({ value, onChange }: { value: Interval; onChange:
       role="radio"
       aria-checked={value === v}
       onClick={() => onChange(v)}
-      className={cx("rounded-md px-3.5 py-1.5 text-[13px] font-medium transition-colors", value === v ? "bg-surface text-ink shadow-sm" : "text-muted hover:text-ink")}
+      className={cx("rounded-md px-3.5 py-1.5 text-[13px] font-medium transition-colors", value === v ? "bg-surface text-ink shadow-sm" : "text-ink-2 hover:text-ink")}
     >
       {label}
     </button>
@@ -27,9 +30,9 @@ export function IntervalToggle({ value, onChange }: { value: Interval; onChange:
 }
 
 /** What each plan offers, honestly: features that aren't built yet say "Coming". */
-const HIGHLIGHTS: Record<PlanId, string[]> = {
-  free: ["Scope agreements, approvals, revision tracking", "Change orders, quotes and GST invoices", "Payment tracking and reminders"],
-  solo: ["Everything in Free", "Unlimited projects and clients", "Analytics, expenses and profit", "Approval record PDF export"],
+export const HIGHLIGHTS: Record<PlanId, string[]> = {
+  free: ["Scope agreements, approvals, revision tracking", "Change orders, quotes and GST invoices", FREE_REMINDERS_LINE],
+  solo: [...SOLO_LINES],
   studio: ["Everything in Solo", "Up to 3 team members — coming", "White-label client portal — coming"],
 };
 
@@ -45,11 +48,17 @@ export function PlanCards({
   buying,
   testMode,
   soloLink,
+  onSoloIntent,
+  onSoloClick,
   selected,
   sale = (p: Plan) => planSale(p, BILLING_ENABLED),
 }: {
   /** Public pricing page: where the Solo button goes and what it says (src/lib/plan-intent.ts). */
   soloLink?: { to: string; label: string; current: boolean };
+  /** Hover or focus on the Solo button (signed in): a chance to get checkout ready. */
+  onSoloIntent?: () => void;
+  /** The signed-in Solo button was pressed (pricing page). */
+  onSoloClick?: () => void;
   /** Plan & usage, arriving from pricing: the plan to point at. */
   selected?: PlanId | null;
   /** Is the plan on sale (public claim) — the shared answer from planSale. Signed out: build flag + catalogue. */
@@ -75,6 +84,7 @@ export function PlanCards({
         const isCurrent = current === p.id;
         const buyable = Boolean(onBuy && canBuy?.(p));
         const onSale = sale(p).onSale;
+        const unlimitedOnce = p.id === "solo" && p.max_active_projects === null && p.max_clients === null;
         return (
           <section
             key={p.id}
@@ -95,17 +105,25 @@ export function PlanCards({
               <span className="num text-[32px] font-semibold tracking-[-0.03em]">{price.main}</span>
               <span className="text-[13px] text-muted">{price.per}</span>
             </p>
-            <p className="num mt-1 min-h-[18px] text-[12px] text-positive">{price.note}</p>
+            <p className="num mt-1 min-h-[18px] text-[12px] text-positive" data-testid={p.id === "solo" ? "solo-price-note" : undefined}>
+              {p.id === "solo" && interval === "year" ? soloYearlyNote(price.main, formatPrice(p.monthly_price_cents * 12 - p.annual_price_cents, p.currency)) : price.note}
+            </p>
+            {p.id === "solo" ? (
+              <p className="mt-1 text-[12px] text-ink-2" data-testid="solo-value-line">
+                {SOLO_VALUE_LINE}
+              </p>
+            ) : null}
             {p.id === "solo" ? (
               <p className="mt-1 text-[12px] text-muted" data-testid="price-tax-note">
                 {PRICE_TAX_NOTE}
               </p>
             ) : null}
             <ul className="mt-5 space-y-2 text-[13px] text-ink-2">
-              <li className="font-medium text-ink">{limitText(p.max_active_projects, "active projects")}</li>
-              <li className="font-medium text-ink">{limitText(p.max_clients, "clients")}</li>
-              {HIGHLIGHTS[p.id].map((h) => (
-                <li key={h} className={cx(h.endsWith("coming") && "text-muted")}>
+              {/* Solo says "unlimited" once, in its first line. */}
+              {unlimitedOnce ? null : <li className="font-medium text-ink">{limitText(p.max_active_projects, "active projects")}</li>}
+              {unlimitedOnce ? null : <li className="font-medium text-ink">{limitText(p.max_clients, "clients")}</li>}
+              {HIGHLIGHTS[p.id].map((h, i) => (
+                <li key={h} className={cx(h.endsWith("coming") && "text-muted", unlimitedOnce && i === 0 && "font-medium text-ink")}>
                   {h}
                 </li>
               ))}
@@ -128,6 +146,9 @@ export function PlanCards({
                   to={p.id === "solo" && soloLink ? soloLink.to : "/signup"}
                   className={cx(buttonClass(p.id === "solo" && soloLink?.current ? "secondary" : recommended ? "primary" : "secondary"), "w-full")}
                   data-testid={p.id === "solo" ? "solo-cta" : undefined}
+                  onMouseEnter={p.id === "solo" ? onSoloIntent : undefined}
+                  onFocus={p.id === "solo" ? onSoloIntent : undefined}
+                  onClick={p.id === "solo" ? onSoloClick : undefined}
                 >
                   {p.id === "solo" && soloLink ? soloLink.label : SOLO_CTA_LABEL}
                 </Link>
@@ -158,7 +179,7 @@ export function PlanCards({
 }
 
 type Cell = string | ((p: Plan) => string);
-const ROWS: { label: string; cells: [Cell, Cell, Cell]; soon?: boolean }[] = [
+export const ROWS: { label: string; cells: [Cell, Cell, Cell]; soon?: boolean }[] = [
   { label: "Active projects", cells: [(p) => limitText(p.max_active_projects, ""), (p) => limitText(p.max_active_projects, ""), (p) => limitText(p.max_active_projects, "")] },
   { label: "Clients", cells: [(p) => limitText(p.max_clients, ""), (p) => limitText(p.max_clients, ""), (p) => limitText(p.max_clients, "")] },
   { label: "Scope agreements, exclusions, terms, locked versions", cells: ["✓", "✓", "✓"] },
@@ -180,12 +201,16 @@ const ROWS: { label: string; cells: [Cell, Cell, Cell]; soon?: boolean }[] = [
 
 export function FeatureMatrix({ plans }: { plans: Plan[] }) {
   return (
-    <div className="overflow-x-auto rounded-[var(--radius-card)] border border-line bg-surface">
+    <div>
+      <p className="mb-2 text-right text-[12px] font-medium text-ink-2 sm:hidden" data-testid="compare-swipe-hint" aria-hidden>
+        Swipe to compare →
+      </p>
+    <div className="compare-scroll overflow-x-auto rounded-[var(--radius-card)] border border-line bg-surface" tabIndex={0} role="region" aria-label="Compare plans">
       <table className="w-full min-w-[560px] text-left text-[13px]">
         <caption className="sr-only">Compare plans</caption>
         <thead>
           <tr className="border-b border-line">
-            <th scope="col" className="px-4 py-3 font-medium text-muted">Feature</th>
+            <th scope="col" className="sticky left-0 z-[1] max-w-[46vw] bg-surface px-4 py-3 font-medium text-ink-2 sm:static sm:max-w-none">Feature</th>
             {plans.map((p) => (
               <th key={p.id} scope="col" className="px-4 py-3 font-semibold">
                 {p.name}
@@ -196,9 +221,9 @@ export function FeatureMatrix({ plans }: { plans: Plan[] }) {
         <tbody className="divide-y divide-line">
           {ROWS.map((r) => (
             <tr key={r.label}>
-              <th scope="row" className="px-4 py-2.5 font-normal text-ink-2">
+              <th scope="row" className="sticky left-0 z-[1] max-w-[46vw] bg-surface px-4 py-2.5 font-normal text-ink-2 shadow-[1px_0_0_var(--color-line)] sm:static sm:max-w-none sm:shadow-none">
                 {r.label}
-                {r.soon ? <span className="ml-2 rounded bg-sunken px-1.5 py-0.5 text-[11px] text-muted">Coming</span> : null}
+                {r.soon ? <span className="ml-2 rounded bg-sunken px-1.5 py-0.5 text-[11px] text-ink-2">Coming</span> : null}
               </th>
               {plans.map((p, i) => {
                 const c = r.cells[i];
@@ -221,6 +246,7 @@ export function FeatureMatrix({ plans }: { plans: Plan[] }) {
         </tfoot>
       </table>
     </div>
+    </div>
   );
 }
 
@@ -242,9 +268,13 @@ export function UsageMeter({ label, used, limit }: { label: string; used: number
 /** Shown when the database refuses a creation because of the plan. Explains, never nags. */
 export function PlanLimitCard({ limit }: { limit: PlanLimit }) {
   const what = limit.kind === "clients" ? "clients" : "active projects";
+  // Counted once per time the card appears (no names or amounts; see usage_events).
+  useEffect(() => logUsage("limit_hit", limit.kind), [limit.kind]);
   return (
     <div role="alert" className="rounded-[var(--radius-card)] border border-warning/40 bg-warning-soft p-5">
-      <p className="text-sm font-semibold text-ink">You've reached the Free plan's {what}</p>
+      <p className="text-sm font-semibold text-ink" data-testid="limit-prompt">
+        {limitPrompt(limit.kind, limit.limit)}
+      </p>
       <p className="mt-1 text-[13px] leading-relaxed text-ink-2">{limit.message}</p>
       <div className="mt-3 max-w-xs">
         <UsageMeter label={what[0].toUpperCase() + what.slice(1)} used={limit.used} limit={limit.limit} />
@@ -254,11 +284,11 @@ export function PlanLimitCard({ limit }: { limit: PlanLimit }) {
       ) : null}
       <p className="mt-3 text-[13px] text-ink-2">Your existing projects and client links keep working. Nothing is deleted.</p>
       <div className="mt-4 flex flex-wrap gap-2">
-        <Link to="/plan" className={buttonClass("primary", "sm")}>
-          See plans
+        <Link to={planUrl({ plan: "solo", interval: "month" })} onClick={() => rememberCheckoutSource("limit")} className={buttonClass("primary", "sm")} data-testid="limit-upgrade">
+          {LIMIT_UPGRADE_LABEL}
         </Link>
         <Link to="/dashboard" className={buttonClass("secondary", "sm")}>
-          Go to projects
+          {LIMIT_LATER_LABEL}
         </Link>
       </div>
     </div>

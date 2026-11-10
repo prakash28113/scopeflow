@@ -3,7 +3,8 @@
 // Usage: BASE=http://localhost:3000 node tests/e2e/fixes.mjs
 import { chromium } from "playwright";
 import assert from "node:assert/strict";
-import { mkdirSync } from "node:fs";
+import { mkdirSync, readFileSync } from "node:fs";
+import { createRequire } from "node:module";
 
 const BASE = process.env.BASE ?? "http://localhost:3000";
 const AUTH = "http://127.0.0.1:54321/auth/v1";
@@ -17,6 +18,8 @@ async function newCtx(opts = {}) {
   await c.route("https://accounts.google.com/**", (route) =>
     route.request().url().startsWith("https://accounts.google.com/gsi/client") ? route.fulfill({ contentType: "text/javascript", body: GOOGLE_STUB }) : route.abort(),
   );
+  // Razorpay's checkout.js is fetched ahead of a click (T2-03); tests never reach the real one.
+  await c.route("https://checkout.razorpay.com/**", (route) => route.fulfill({ contentType: "text/javascript", body: "window.Razorpay=function(){};window.Razorpay.prototype.on=function(){};window.Razorpay.prototype.open=function(){};" }));
   return c;
 }
 async function newPage(ctx, who) {
@@ -28,6 +31,16 @@ async function newPage(ctx, who) {
 const PHONE = { viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true };
 const shot = (p, name, full = false) => p.screenshot({ path: `${OUT}fix-${name}.png`, fullPage: full });
 const step = (s) => console.log(`• ${s}`);
+const AXE = readFileSync(createRequire(import.meta.url).resolve("axe-core/axe.min.js"), "utf8");
+/** Serious and critical accessibility problems on the page (or inside one element), as short lines. */
+async function axe(p, selector = null) {
+  await p.evaluate(AXE);
+  return p.evaluate(async (sel) => {
+    const r = await window.axe.run(sel ? document.querySelector(sel) : document, { resultTypes: ["violations"] });
+    return r.violations.filter((v) => v.impact === "serious" || v.impact === "critical").map((v) => `${v.id} ×${v.nodes.length}: ${v.nodes[0].target.join(" ")} (${v.nodes[0].any?.[0]?.message ?? ""})`);
+  }, selector);
+}
+const overlap = (a, b) => a && b && a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height;
 const settings = (q) => fetch(`${AUTH}/__test/settings?${q}`).then((r) => r.json());
 const PASSWORD = "correct-horse-9";
 /** Signs up (Confirm email off) and finishes set-up; ends on the first screen after it. */
@@ -45,6 +58,7 @@ async function signUp(p, name, email, { business = "", after = /\/projects\/new\
 }
 
 try {
+  await fetch(`${AUTH}/__test/reset-rate-limits`);
   // ------------------------------------------------------------------ T1-01
   step("T1-01 Confirm email off (today): sign-up still goes straight to set-up; no CAPTCHA widget, no token sent");
   {
@@ -284,6 +298,412 @@ window.Razorpay.prototype.open=function(){var o=this.o;window.__rzp=o;window.__r
     await p.getByRole("heading", { name: "Solo plan" }).waitFor();
     await fetch(`${AUTH}/__test/razorpay-status?status=active`);
     await ctx.close();
+  }
+
+  // ------------------------------------------------------------------ T2-04
+  step("T2-04 a wrong password shows the generic error and the Google line, for any address");
+  {
+    const ctx = await newCtx();
+    const p = await ctx.newPage(); // the refused sign-ins are expected 400s
+    for (const email of ["asha@fixes.test", "nobody-here@fixes.test"]) {
+      await p.goto(`${BASE}/login`);
+      assert.equal(await p.getByTestId("google-hint").count(), 0, "not before an error");
+      await p.getByLabel("Email").fill(email);
+      await p.getByLabel("Password").fill("definitely-wrong-1");
+      await p.getByRole("button", { name: "Sign in" }).click();
+      await p.getByText("Incorrect email or password.").waitFor();
+      assert.equal(await p.getByTestId("google-hint").innerText(), "Signed up with Google? Use 'Continue with Google' above.");
+    }
+    await shot(p, "t2-04-google-hint");
+    await ctx.close();
+  }
+
+  // ------------------------------------------------------------------ T2-06 (and RT4-02)
+  step("T2-06 mobile pricing: Beta badge clear of the nav at 360/400/414 px, compare table swipeable and focusable, no serious a11y issues");
+  {
+    for (const width of [360, 400, 414]) {
+      const ctx = await newCtx({ ...PHONE, viewport: { width, height: 844 } });
+      const p = await newPage(ctx, `t2-06 ${width}`);
+      for (const path of ["/pricing", "/privacy", "/terms", "/refunds"]) {
+        await p.goto(`${BASE}${path}`);
+        const header = p.getByTestId("public-header");
+        const badge = await header.getByTestId("beta-badge").boundingBox();
+        const pricing = await header.getByRole("link", { name: "Pricing" }).boundingBox();
+        const logo = await header.getByRole("link", { name: "ScopeFlow home" }).boundingBox();
+        assert.ok(badge && pricing && logo, `${path} @${width}: badge, logo and Pricing are shown`);
+        assert.ok(!overlap(badge, pricing), `${path} @${width}: the Beta badge and Pricing don't overlap`);
+        assert.ok(pricing.x - (badge.x + badge.width) >= 4, `${path} @${width}: a gap between the badge and Pricing (${Math.round(pricing.x - badge.x - badge.width)}px)`);
+        assert.ok(!overlap(badge, logo), `${path} @${width}: the badge doesn't sit on the logo`);
+        assert.equal(await p.evaluate(() => document.documentElement.scrollWidth > window.innerWidth), false, `${path} @${width}: no sideways page scroll`);
+        if (width !== 414 || path === "/pricing") await shot(p, `t2-06-${path.slice(1)}-${width}`);
+      }
+      assert.equal(await p.getByTestId("public-header").getByTestId("beta-badge").getAttribute("title"), "Beta: new features ship weekly; prices shown are real.");
+      await p.goto(`${BASE}/pricing`);
+      const region = p.getByRole("region", { name: "Compare plans" });
+      await region.scrollIntoViewIfNeeded();
+      assert.equal(await region.getAttribute("tabindex"), "0", "the scroller can be focused from the keyboard");
+      assert.ok(await p.getByTestId("compare-swipe-hint").isVisible(), "a visible swipe hint");
+      const before = await region.locator("tbody th").first().boundingBox();
+      await region.evaluate((el) => (el.scrollLeft = 200));
+      const after = await region.locator("tbody th").first().boundingBox();
+      assert.ok(Math.abs(before.x - after.x) < 2, "the feature names stay put while the plans scroll");
+      assert.deepEqual(await axe(p), [], `/pricing @${width}: axe serious/critical`);
+      await ctx.close();
+    }
+    const ctx = await newCtx();
+    const p = await newPage(ctx, "t2-06 desktop");
+    await p.goto(`${BASE}/pricing`);
+    await p.getByRole("region", { name: "Compare plans" }).waitFor();
+    assert.equal(await p.getByTestId("compare-swipe-hint").isVisible(), false, "no swipe hint on desktop");
+    assert.deepEqual(await axe(p), [], "/pricing desktop: axe serious/critical");
+    // Headings go h1 → h2 → h3 without skipping.
+    const levels = await p.evaluate(() => [...document.querySelectorAll("main h1, main h2, main h3")].map((h) => Number(h.tagName[1])));
+    assert.ok(levels.every((l, i) => i === 0 || l - levels[i - 1] <= 1), `heading order ${levels.join(",")}`);
+    await ctx.close();
+  }
+
+  // ------------------------------------------------------------------ T2-07
+  step("T2-07 /pricing structured data has no Product; trailing slashes, /index.html and /home answer 301");
+  {
+    const html = await (await fetch(`${BASE}/pricing`)).text();
+    const ld = JSON.parse(html.match(/<script type="application\/ld\+json">(.+?)<\/script>/s)[1]);
+    assert.ok(!JSON.stringify(ld).includes('"Product"'), "no Product node");
+    const app = ld["@graph"].find((n) => n["@id"] === "https://scopeflow.in/#app");
+    assert.deepEqual(app["@type"], ["SoftwareApplication", "WebApplication"]);
+    assert.deepEqual(app.offers.map((o) => `${o.price} ${o.priceCurrency}`), ["0 INR", "499 INR", "4999 INR", "999 INR", "9999 INR"]);
+    const hop = async (path) => {
+      const r = await fetch(`${BASE}${path}`, { redirect: "manual" });
+      return [r.status, r.headers.get("location")];
+    };
+    assert.deepEqual(await hop("/pricing/"), [301, `${BASE}/pricing`]);
+    assert.deepEqual(await hop("/privacy/"), [301, `${BASE}/privacy`]);
+    assert.deepEqual(await hop("/index.html"), [301, `${BASE}/`]);
+    assert.deepEqual(await hop("/home"), [301, `${BASE}/`]);
+    assert.deepEqual(await hop("/blog/"), [301, `${BASE}/blog`]);
+    assert.equal((await fetch(`${BASE}/`, { redirect: "manual" })).status, 200, "the home page itself still answers");
+    assert.equal((await fetch(`${BASE}/pricing`, { redirect: "manual" })).status, 200);
+    // Sign-in pages keep their noindex.
+    for (const path of ["/login", "/signup", "/forgot-password"]) assert.match((await fetch(`${BASE}${path}`)).headers.get("x-robots-tag") ?? "", /noindex/, `${path} stays noindex`);
+  }
+
+  // ------------------------------------------------------------------ T2-08
+  step("T2-08 /onboarding has a title, and doesn't reopen once set-up is finished");
+  {
+    const ctx = await newCtx();
+    const p = await newPage(ctx, "t2-08");
+    await p.goto(`${BASE}/signup`);
+    await p.getByLabel("Your name").fill("Farah Khan");
+    await p.getByLabel("Email").fill("farah@fixes.test");
+    await p.getByLabel("Password").fill(PASSWORD);
+    await p.getByRole("button", { name: "Create account" }).click();
+    await p.waitForURL("**/onboarding");
+    await p.getByRole("heading", { name: "Set up your workspace" }).waitFor();
+    assert.equal(await p.title(), "Set up ScopeFlow");
+    await p.getByLabel("Default currency").selectOption("INR");
+    await p.getByRole("button", { name: "Continue" }).click();
+    await p.waitForURL(/\/projects\/new\?welcome=1$/); // finishing set-up still goes to the first project
+    await p.goto(`${BASE}/onboarding`);
+    await p.waitForURL(/\/dashboard$/);
+    assert.equal(await p.getByText("Step 1 of 2").count(), 0);
+    await p.goto(`${BASE}/onboarding?plan=solo&interval=yearly`);
+    await p.waitForURL(/\/plan\?plan=solo&interval=yearly$/);
+    await ctx.close();
+  }
+
+  // ------------------------------------------------------------------ T2-10
+  step("T2-10 home: phones fetch the square hero and no app code before it; the app still takes over");
+  {
+    const ctx = await newCtx({ ...PHONE, viewport: { width: 400, height: 844 } });
+    const p = await newPage(ctx, "t2-10 phone");
+    const order = [];
+    p.on("request", (r) => {
+      const u = new URL(r.url());
+      if (u.origin === BASE && /\.(js|webp)$/.test(u.pathname)) order.push(u.pathname);
+    });
+    await p.goto(`${BASE}/`);
+    const hero = p.locator("section#top picture img");
+    assert.match(await hero.evaluate((el) => el.currentSrc), /\/home\/hero-stamp-m-683\.webp$/, "the square crop on a phone");
+    const box = await hero.boundingBox();
+    assert.ok(Math.abs(box.width - box.height) < 2, "the hero card is square at this width");
+    await p.waitForFunction(() => document.querySelector('script[type="module"][src^="/assets/index-"]'));
+    assert.equal(order[0], "/home/hero-stamp-m-683.webp", `the hero is the first file asked for (${order.slice(0, 3).join(", ")})`);
+    assert.ok(order.indexOf("/boot.js") < order.findIndex((f) => f.startsWith("/assets/index-")), "the app's code starts from boot.js");
+    assert.ok(!order.includes("/home/hero-stamp-1024.webp"), "the wide photo isn't downloaded on a phone");
+    await p.waitForFunction(() => document.documentElement.dataset.app === "ready");
+    // Hydrated: an in-app link moves without a full page load.
+    await p.evaluate(() => (window.__sameDocument = true));
+    await p.getByTestId("public-header").getByRole("link", { name: "Pricing" }).click();
+    await p.waitForURL(`${BASE}/pricing`);
+    assert.equal(await p.evaluate(() => window.__sameDocument === true), true, "client-side navigation after the app took over");
+    await ctx.close();
+    const wide = await newCtx();
+    const w = await newPage(wide, "t2-10 desktop");
+    await w.goto(`${BASE}/`);
+    assert.match(await w.locator("section#top picture img").evaluate((el) => el.currentSrc), /\/home\/hero-stamp-(640|1024)\.webp$/, "the wide photo on desktop");
+    await wide.close();
+  }
+
+  // ------------------------------------------------------------------ T2-11
+  step("T2-11 a Free account at its limit sees the price and reason, and Upgrade to Solo opens the plan page with Solo chosen");
+  {
+    const ctx = await newCtx();
+    const p = await newPage(ctx, "t2-11");
+    await signUp(p, "Gauri Iyer", "gauri@fixes.test");
+    for (const n of [1, 2]) {
+      await p.goto(`${BASE}/projects/new`);
+      await p.getByLabel("Project title").fill(`Limit project ${n}`);
+      await p.getByLabel("Client name").fill(`Client ${n}`);
+      await p.getByLabel("Client email").fill(`client${n}@limit.test`);
+      await p.getByLabel("Deliverable 1", { exact: true }).fill("Logo");
+      await p.getByLabel("Agreed budget").fill("1000");
+      await p.getByRole("button", { name: "Create project" }).click();
+      await p.waitForURL(/\/projects\/[0-9a-f-]{36}$/);
+    }
+    await p.goto(`${BASE}/projects/new`);
+    assert.equal(await p.getByTestId("limit-prompt").innerText(), "Your 3rd active project needs Solo: ₹499/month. One approved extra of ₹2,500 (example) covers 5 months.");
+    assert.equal(await p.getByRole("link", { name: "Not now" }).getAttribute("href"), "/dashboard");
+    await shot(p, "t2-11-limit");
+    await p.getByTestId("limit-upgrade").click();
+    await p.waitForURL(/\/plan\?plan=solo&interval=monthly$/);
+    await p.locator('[data-plan="solo"][data-selected="true"]').waitFor();
+    // Counted for the owner: one limit_hit, nothing personal.
+    const events = await p.evaluate(async () => {
+      const token = Object.values(localStorage).map((v) => { try { return JSON.parse(v)?.access_token; } catch { return null; } }).find(Boolean);
+      const r = await fetch("http://127.0.0.1:54321/rest/v1/usage_events?select=event,detail", { headers: { authorization: `Bearer ${token}`, apikey: token } });
+      return r.json();
+    });
+    assert.deepEqual(events, [{ event: "limit_hit", detail: "active_projects" }]);
+    await ctx.close();
+  }
+
+  // ------------------------------------------------------------------ T2-12
+  step("T2-12 the freelancer gets one email when the client approves; a switched-off type sends none; a failing email provider never blocks the client");
+  {
+    const NOTIFY = "http://127.0.0.1:54321/functions/v1/notify";
+    const emails = async () => (await fetch(`${NOTIFY}/__test`)).json();
+    const startCount = (await emails()).length;
+    const ctx = await newCtx();
+    const p = await newPage(ctx, "t2-12 owner");
+    await signUp(p, "Hema Rao", "hema@fixes.test");
+    const sendScope = async (title) => {
+      await p.goto(`${BASE}/projects/new`);
+      await p.getByLabel("Project title").fill(title);
+      await p.getByLabel("Client name").fill("Dana Client");
+      await p.getByLabel("Client email").fill("dana@client.test");
+      await p.getByLabel("Deliverable 1", { exact: true }).fill("Logo");
+      await p.getByLabel("Agreed budget").fill("1000");
+      await p.getByRole("button", { name: "Create project" }).click();
+      await p.waitForURL(/\/projects\/[0-9a-f-]{36}$/);
+      await p.getByRole("button", { name: "Send to client" }).click();
+      await p.getByRole("heading", { name: "Client link ready" }).waitFor();
+      return p.getByTestId("share-url").innerText();
+    };
+    const approve = async (link, name) => {
+      const c = await newCtx();
+      const cp = await newPage(c, name);
+      await cp.goto(link);
+      await cp.getByRole("button", { name: "Approve scope" }).last().click();
+      await cp.getByRole("checkbox").check();
+      await cp.getByRole("button", { name: "Approve scope" }).last().click();
+      await cp.getByText(/approved by Dana Client/).waitFor();
+      await c.close();
+    };
+    const link1 = await sendScope("Notify one");
+    await approve(link1, "t2-12 client");
+    for (let i = 0; i < 50 && (await emails()).length < startCount + 1; i++) await new Promise((r) => setTimeout(r, 100));
+    assert.equal((await emails()).length, startCount + 1, "exactly one email for one approval");
+    const mail = (await emails()).at(-1);
+    assert.deepEqual(mail.to, [{ email: "hema@fixes.test", name: "Hema Rao" }]);
+    assert.equal(mail.subject, "Dana Client approved the scope: Notify one");
+    assert.match(mail.textContent, /Dana Client approved the scope\.\nProject: Notify one/);
+    assert.match(mail.textContent, /Open the project: http:\/\/localhost:3000\/projects\/[0-9a-f-]{36}/);
+    assert.ok(!("htmlContent" in mail), "plain text only: no tracking pixel");
+    assert.ok(!JSON.stringify(mail).includes("dana@client.test"), "the client's email isn't in the message");
+    assert.ok(!mail.textContent.includes("/p?") && !mail.textContent.includes("/p/"), "no client link in the email");
+
+    // The email provider is down: the client's approval still goes through.
+    await fetch(`${NOTIFY}/__test?fail=1`);
+    const link2 = await sendScope("Notify two");
+    await approve(link2, "t2-12 client, provider down");
+    await fetch(`${NOTIFY}/__test?fail=0`);
+    assert.equal((await emails()).length, startCount + 1, "nothing sent while the provider was down");
+    await fetch(`${NOTIFY}/flush`, { method: "POST" }); // the scheduled job's retry
+    assert.equal((await emails()).at(-1).subject, "Dana Client approved the scope: Notify two");
+    await ctx.close();
+  }
+
+  // ------------------------------------------------------------------ T2-13
+  step("T2-13 a new account sees Get started at 0 of 4; adding a client ticks the first step; Dismiss removes it");
+  {
+    const ctx = await newCtx();
+    const p = await newPage(ctx, "t2-13");
+    await signUp(p, "Indu Varma", "indu@fixes.test");
+    await p.goto(`${BASE}/dashboard`);
+    const card = p.getByTestId("get-started");
+    await card.waitFor();
+    assert.equal(await p.getByTestId("get-started-progress").innerText(), "0 of 4 done");
+    assert.deepEqual(await card.locator("li").evaluateAll((els) => els.map((el) => el.dataset.done)), ["false", "false", "false", "false"]);
+    assert.deepEqual(await axe(p, '[data-testid="get-started"]'), [], "axe on the checklist");
+    await shot(p, "t2-13-get-started");
+    await card.getByRole("link", { name: "Start" }).click();
+    await p.waitForURL(/\/clients\?new=1$/);
+    await p.getByLabel("Name", { exact: true }).fill("First Client");
+    await p.getByLabel("Email").fill("first@client.test");
+    await p.getByRole("button", { name: "Add client" }).last().click();
+    await p.getByText("First Client").first().waitFor();
+    await p.goto(`${BASE}/dashboard`);
+    await p.getByTestId("get-started-progress").getByText("1 of 4 done").waitFor();
+    assert.equal(await card.locator('li[data-step="client"]').getAttribute("data-done"), "true");
+    await card.getByRole("button", { name: "Dismiss" }).click();
+    assert.equal(await card.count(), 0);
+    await p.reload();
+    await p.getByRole("heading", { name: /Hello, Indu|Overview/ }).waitFor();
+    assert.equal(await p.getByTestId("get-started").count(), 0, "stays dismissed");
+    await ctx.close();
+  }
+
+  // ------------------------------------------------------------------ RT4-01
+  step("RT4-01 home \"What ScopeFlow handles\": a labelled, focusable scroller with dots that follow it (360/400/414 px)");
+  {
+    for (const width of [360, 400, 414]) {
+      const ctx = await newCtx({ ...PHONE, viewport: { width, height: 844 } });
+      const p = await newPage(ctx, `rt4-01 ${width}`);
+      await p.goto(`${BASE}/`);
+      await p.waitForFunction(() => document.documentElement.dataset.app === "ready");
+      assert.equal(await p.getByRole("region", { name: "What ScopeFlow handles" }).count(), 1, "one labelled region");
+      const region = p.getByTestId("handles-carousel");
+      await region.scrollIntoViewIfNeeded();
+      const list = region.locator("ul");
+      assert.equal(await list.getAttribute("tabindex"), "0", "keyboard focusable");
+      assert.equal(await list.evaluate((el) => getComputedStyle(el).scrollSnapType), "x mandatory");
+      const dots = p.getByTestId("handles-dots").locator("span");
+      const slides = await list.locator("li").count();
+      assert.equal(await dots.count(), slides);
+      assert.ok(await dots.first().isVisible(), "a visible cue that there's more");
+      const activeDot = () => dots.evaluateAll((els) => els.findIndex((el) => el.dataset.active === "true"));
+      assert.equal(await activeDot(), 0);
+      // The first card's text is whole; the next card is the cue, not a cut-off sentence in the first.
+      const first = await list.locator("li").first().boundingBox();
+      assert.ok(first.x >= 0 && first.x + first.width <= width, `the first card fits (${Math.round(first.x)}..${Math.round(first.x + first.width)} of ${width})`);
+      await list.evaluate((el) => el.scrollTo({ left: el.scrollWidth, behavior: "instant" }));
+      await p.waitForFunction(([n]) => document.querySelectorAll('[data-testid="handles-dots"] span')[n - 1]?.dataset.active === "true", [slides]);
+      await list.focus();
+      await p.keyboard.press("Home");
+      await shot(p, `rt4-01-handles-${width}`);
+      assert.deepEqual(await axe(p, '[data-testid="handles-carousel"]'), [], `axe @${width}`);
+      await ctx.close();
+    }
+  }
+
+  // ------------------------------------------------------------------ RT4-03, RT4-05, RT4-06
+  step("RT4-03 /projects tabs all visible at 360 px; RT4-05 dark skeleton and no layout shift on /expenses; RT4-06 account menu is a real button");
+  {
+    const ctx = await newCtx({ ...PHONE, viewport: { width: 360, height: 800 } });
+    const p = await newPage(ctx, "rt4 app");
+    await signUp(p, "Jaya Menon", "jaya@fixes.test", { business: "Jaya Studio" });
+    await p.getByLabel("Project title").fill("Tabs project");
+    await p.getByLabel("Client name").fill("Tab Client");
+    await p.getByLabel("Client email").fill("tab@client.test");
+    await p.getByLabel("Deliverable 1", { exact: true }).fill("Logo");
+    await p.getByLabel("Agreed budget").fill("1000");
+    await p.getByRole("button", { name: "Create project" }).click();
+    await p.waitForURL(/\/projects\/[0-9a-f-]{36}$/);
+    await p.goto(`${BASE}/projects`);
+    const tabs = p.getByRole("tablist", { name: "Filter projects" }).getByRole("tab");
+    await tabs.first().waitFor();
+    assert.deepEqual((await tabs.allInnerTexts()).map((t) => t.replace(/\s*\d+$/, "").trim()), ["Open", "In progress", "With client", "Drafts", "Closed", "All"]);
+    for (const box of await tabs.evaluateAll((els) => els.map((el) => el.getBoundingClientRect().toJSON()))) {
+      assert.ok(box.left >= 0 && box.right <= 360, `every tab is on screen (${Math.round(box.left)}..${Math.round(box.right)})`);
+    }
+    await tabs.first().focus();
+    for (let i = 0; i < 5; i++) await p.keyboard.press("Tab");
+    assert.match(await p.evaluate(() => document.activeElement.textContent), /^All/, "every tab is reachable with Tab");
+    await p.keyboard.press("Enter");
+    assert.equal(await tabs.last().getAttribute("aria-selected"), "true");
+    assert.equal(await p.evaluate(() => document.documentElement.scrollWidth > window.innerWidth), false);
+    await shot(p, "rt4-03-projects-360");
+    await ctx.close();
+
+    const wide = await newCtx();
+    const w = await newPage(wide, "rt4 desktop");
+    await w.goto(`${BASE}/login`);
+    await w.getByLabel("Email").fill("jaya@fixes.test");
+    await w.getByLabel("Password").fill(PASSWORD);
+    await w.getByRole("button", { name: "Sign in" }).click();
+    await w.waitForURL("**/dashboard");
+    // RT4-05: placeholders on the dark panel are dark.
+    const band = await w.evaluate(() => {
+      const el = document.createElement("div");
+      el.className = "skeleton";
+      document.querySelector(".app-console main, .app-console").appendChild(el);
+      const bg = getComputedStyle(el).backgroundImage;
+      el.remove();
+      return bg;
+    });
+    const lum = [...band.matchAll(/rgb\((\d+), (\d+), (\d+)\)/g)].map((m) => (Number(m[1]) + Number(m[2]) + Number(m[3])) / 3);
+    assert.ok(lum.length >= 2 && lum.every((v) => v < 80), `skeleton colours are dark (${band})`);
+    await w.addInitScript(() => {
+      window.__cls = 0;
+      new PerformanceObserver((list) => {
+        for (const e of list.getEntries()) if (!e.hadRecentInput) window.__cls += e.value;
+      }).observe({ type: "layout-shift", buffered: true });
+    });
+    await w.goto(`${BASE}/expenses`);
+    await w.getByRole("heading", { name: "Expenses" }).first().waitFor();
+    await w.waitForTimeout(1500);
+    const cls = await w.evaluate(() => window.__cls);
+    assert.ok(cls < 0.01, `no layout shift while /expenses loads (CLS ${cls.toFixed(4)})`);
+
+    // RT4-06: keyboard only.
+    const button = w.getByTestId("account-menu-button");
+    assert.equal(await button.evaluate((el) => `${el.tagName} ${el.type} ${el.getAttribute("aria-haspopup")} ${el.getAttribute("aria-expanded")}`), "BUTTON button menu false");
+    await button.focus();
+    await w.keyboard.press("Enter");
+    const menu = w.getByRole("menu", { name: "Account" });
+    await menu.waitFor();
+    assert.equal(await button.getAttribute("aria-expanded"), "true");
+    assert.deepEqual(await menu.getByRole("menuitem").allInnerTexts(), ["Settings", "Plan & usage", "Send feedback", "Sign out"]);
+    // The business name once; the person's name under it because it's different.
+    assert.deepEqual((await w.getByTestId("account-name").innerText()).split(/\n+/), ["Jaya Studio", "Jaya Menon"]);
+    assert.deepEqual(await axe(w, "header"), [], "axe on the top bar with the menu open");
+    assert.deepEqual(await axe(w, "aside"), [], "axe on the navigation");
+    await w.keyboard.press("Escape");
+    assert.equal(await menu.count(), 0);
+    assert.equal(await w.evaluate(() => document.activeElement?.getAttribute("data-testid")), "account-menu-button", "focus returns to the button");
+    await w.keyboard.press("Space");
+    await menu.waitFor();
+    await w.getByRole("heading", { name: "Expenses" }).first().click(); // a click elsewhere closes it
+    assert.equal(await menu.count(), 0);
+    await wide.close();
+  }
+
+  // ------------------------------------------------------------------ RT4-07
+  step("RT4-07 Google Identity is initialised once per page load on /login and /signup (desktop and 400 px)");
+  {
+    for (const opts of [{}, { ...PHONE, viewport: { width: 400, height: 844 } }]) {
+      const ctx = await newCtx(opts);
+      const p = await ctx.newPage();
+      const noise = [];
+      p.on("console", (m) => /initialize\(\) is called multiple times|blocked by CORS/i.test(m.text()) && noise.push(m.text()));
+      await p.goto(`${BASE}/login`);
+      await p.getByTestId("google-stub").waitFor();
+      await p.getByRole("link", { name: "Create an account" }).click();
+      await p.waitForURL("**/signup");
+      await p.getByTestId("google-stub").waitFor();
+      await p.getByRole("link", { name: "Sign in" }).last().click();
+      await p.waitForURL("**/login");
+      await p.getByTestId("google-stub").waitFor();
+      assert.equal(await p.evaluate(() => window.__gsiInits), 1, "one initialize() across login → sign-up → login");
+      assert.deepEqual(noise, []);
+      // Google sign-in still works after moving between the pages.
+      await p.evaluate(() => (window.__googleAs = "kavya@fixes.test:Kavya Nair"));
+      await p.getByTestId("google-stub").click();
+      await p.waitForURL(/\/(onboarding|dashboard)/);
+      const csp = (await fetch(`${BASE}/login`)).headers.get("content-security-policy");
+      assert.ok(csp.includes("https://accounts.google.com/gsi/style") && /connect-src[^;]*https:\/\/accounts\.google\.com\/gsi\//.test(csp), "the policy allows Google's stylesheet and gsi/ calls");
+      assert.equal((await fetch(`${BASE}/login`)).headers.get("cross-origin-opener-policy"), "same-origin-allow-popups");
+      await ctx.close();
+    }
   }
 
   if (errors.length) throw new Error(`Browser errors:\n${errors.join("\n")}`);

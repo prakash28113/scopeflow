@@ -13,6 +13,7 @@ import { spawn } from "node:child_process";
 import http from "node:http";
 import { handleBilling } from "../../supabase/functions/billing/handler.ts";
 import { handleBlogApi } from "../../supabase/functions/blog/handler.ts";
+import { handleNotify } from "../../supabase/functions/notify/handler.ts";
 
 const PROJECT = new URL("../../", import.meta.url).pathname.replace(/\/$/, "");
 const SECRET = "e2e-jwt-secret-that-is-at-least-32-characters-long";
@@ -263,6 +264,11 @@ async function auth(req, res, url) {
     rzpStatus = url.searchParams.get("status") === "authenticated" ? "authenticated" : "active";
     return json(res, 200, { status: rzpStatus });
   }
+  if (path === "/__test/reset-rate-limits" && req.method === "GET") {
+    // The walkthrough ends by locking this machine's IP out of client links; later scripts start clean.
+    await q("delete from public.portal_rate_limits returning bucket");
+    return json(res, 200, {});
+  }
   if (path === "/__test/purchasable" && req.method === "GET") {
     // What the release does for a plan with live keys: marks it on sale.
     await q("update public.plans set purchasable = $2 where id = $1 returning id", [url.searchParams.get("plan"), url.searchParams.get("on") === "1"]);
@@ -340,6 +346,29 @@ async function blogApi(req, res, url) {
   res.end(Buffer.from(await r.arrayBuffer()));
 }
 
+// Owner notification emails: the real "notify" function, with Brevo replaced by a list tests can read.
+//   GET /functions/v1/notify/__test            → the emails "sent" so far
+//   GET /functions/v1/notify/__test?fail=1|0   → make the email provider fail / work
+const ownerEmails = [];
+let brevoFails = false;
+const notifyFetch = async (url, init) => {
+  if (!String(url).startsWith("https://api.brevo.com/")) return fetch(url, init);
+  if (brevoFails) return new Response("{}", { status: 500 });
+  ownerEmails.push({ ...JSON.parse(init.body), apiKeySent: Boolean(init.headers["api-key"]) });
+  return new Response(JSON.stringify({ messageId: "e2e" }), { status: 201 });
+};
+async function notifyApi(req, res, url) {
+  if (url.pathname.endsWith("/__test")) {
+    if (url.searchParams.has("fail")) brevoFails = url.searchParams.get("fail") === "1";
+    res.writeHead(200, { "content-type": "application/json" });
+    return res.end(JSON.stringify(ownerEmails));
+  }
+  const request = new Request(`http://127.0.0.1:54321${url.pathname}`, { method: req.method });
+  const r = await handleNotify(request, { supabaseUrl: "http://127.0.0.1:54321", serviceKey: SERVICE, brevoKey: "e2e-brevo-key", siteUrl: "http://localhost:3000", fromEmail: "no-reply@scopeflow.in", fromName: "ScopeFlow" }, notifyFetch);
+  res.writeHead(r.status, { ...Object.fromEntries(r.headers), "access-control-allow-origin": "*" });
+  res.end(Buffer.from(await r.arrayBuffer()));
+}
+
 // Storage stand-in for the public "blog" bucket: upload (authors only, like the storage policy) and public reads.
 const blobs = new Map();
 async function storage(req, res, url) {
@@ -386,6 +415,7 @@ http
       // Edge Functions answer their own CORS preflight (only for the app's addresses).
       if (url.pathname.startsWith("/functions/v1/billing")) return await billing(req, res, url);
       if (url.pathname.startsWith("/functions/v1/blog")) return await blogApi(req, res, url);
+      if (url.pathname.startsWith("/functions/v1/notify")) return await notifyApi(req, res, url);
       if (url.pathname.startsWith("/storage/v1/") && req.method !== "OPTIONS") return await storage(req, res, url);
       if (req.method === "OPTIONS") {
         // Like Supabase: allow whatever headers the client asks for.

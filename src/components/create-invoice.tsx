@@ -1,3 +1,4 @@
+import { timeEnd, timeStart } from "@/lib/timing";
 import { useState, type FormEvent } from "react";
 import { Link, useNavigate } from "react-router";
 import { Alert, Button, Field, Input, Textarea, buttonClass } from "./ui";
@@ -63,6 +64,7 @@ export function CreateInvoice({
     if (sac.trim() && !/^\d{4,8}$/.test(sac.replace(/\s/g, ""))) return setError("Enter the SAC as 4 to 8 digits, like 998391.");
     setPending(true);
     setError(null);
+    timeStart("invoice-create");
     const r = await call(() =>
       supabase.rpc("create_invoice", {
         p_milestone_id: milestoneId,
@@ -76,6 +78,7 @@ export function CreateInvoice({
         },
       }),
     );
+    timeEnd("invoice-create");
     setPending(false);
     if (!r.ok) return setError(r.message);
     navigate(`/invoices/${r.data as string}`);

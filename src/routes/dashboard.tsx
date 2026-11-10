@@ -1,4 +1,6 @@
-import type { ReactNode } from "react";
+import { GetStarted } from "@/components/get-started";
+import { useEffect, type ReactNode } from "react";
+import { timeEnd } from "@/lib/timing";
 import { Link } from "react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import { intentProps } from "@/lib/prefetch";
@@ -32,6 +34,8 @@ export default function Dashboard() {
   const profile = useProfile();
   const q = useDashboard();
   const plan = useMyPlan();
+  // Sign-in submit → first dashboard render (T2-03 timing; nothing is sent anywhere).
+  useEffect(() => void timeEnd("sign-in"), []);
   if (q.isLoading) return <PageSpinner />;
   if (q.isError || !q.data) return <Alert>Couldn't load your projects. Please refresh.</Alert>;
   const { projects, changeOrders, revisions, activity, payments } = q.data;
@@ -68,6 +72,8 @@ export default function Dashboard() {
           </>
         }
       />
+
+      {profile.data ? <GetStarted userId={profile.data.id} projects={projects} linksSent={q.data.snapshots.length} /> : null}
 
       {projects.length === 0 ? (
         <Card>

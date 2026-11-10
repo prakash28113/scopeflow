@@ -166,7 +166,7 @@ function NavContent({ onNavigate }: { onNavigate?: () => void }) {
                     <>
                       <span className={isActive ? "text-[#d3e3fd]" : "text-chrome-muted group-hover:text-chrome-text"}>{it.icon}</span>
                       <span className="flex-1">{it.label}</span>
-                      {it.tag ? <span className="rounded border border-white/15 px-1.5 text-[10px] font-medium leading-[16px] text-chrome-muted">{it.tag}</span> : null}
+                      {it.tag ? <span className="rounded border border-white/25 px-1.5 text-[10px] font-medium leading-[16px] text-chrome-text">{it.tag}</span> : null}
                       {it.count ? (
                         <span className="num rounded-full bg-accent px-1.5 text-[11px] font-semibold leading-[18px] text-on-accent" aria-label={`${it.count} waiting`}>
                           {it.count}
@@ -188,79 +188,119 @@ function initials(name: string) {
   return name.split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]!.toUpperCase()).join("") || "?";
 }
 
+/** The account's two lines: the business (or the person), then the person only if that adds something. */
+export function accountLines(p: { business_name?: string | null; full_name?: string | null; email: string }): { title: string; sub: string | null } {
+  const business = (p.business_name ?? "").trim();
+  const person = (p.full_name ?? "").trim();
+  const title = business || person || p.email;
+  const sub = business && person && person.toLowerCase() !== business.toLowerCase() ? person : null;
+  return { title, sub };
+}
+
+/**
+ * Open/closed state for a menu button: Enter or Space opens it (it's a real button), Escape closes
+ * it and puts focus back on the button, and so does a click or focus anywhere else.
+ */
+function useMenu() {
+  const [open, setOpen] = useState(false);
+  const wrap = useRef<HTMLDivElement>(null);
+  const button = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const away = (e: Event) => {
+      if (!wrap.current?.contains(e.target as Node)) setOpen(false);
+    };
+    const key = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      setOpen(false);
+      button.current?.focus();
+    };
+    document.addEventListener("pointerdown", away);
+    document.addEventListener("focusin", away);
+    document.addEventListener("keydown", key);
+    return () => {
+      document.removeEventListener("pointerdown", away);
+      document.removeEventListener("focusin", away);
+      document.removeEventListener("keydown", key);
+    };
+  }, [open]);
+  return { open, setOpen, wrap, button };
+}
+
+function AccountMenuItems({ onPick }: { onPick: () => void }) {
+  const location = useLocation();
+  const item = "block w-full rounded-lg px-3 py-2 text-left text-sm hover:bg-sunken focus-visible:bg-sunken";
+  return (
+    <>
+      <Link to="/settings" role="menuitem" className={item} onClick={onPick}>
+        Settings
+      </Link>
+      <Link to="/plan" role="menuitem" className={item} onClick={onPick}>
+        Plan &amp; usage
+      </Link>
+      <a href={feedbackMailto(location.pathname)} role="menuitem" className={item} onClick={onPick}>
+        Send feedback
+      </a>
+      <div className="my-1 border-t border-line" role="separator" />
+      <button type="button" role="menuitem" className={item} onClick={() => supabase.auth.signOut()}>
+        Sign out
+      </button>
+    </>
+  );
+}
+
 /** Who's signed in, with the account menu (settings, plan, feedback, sign out). */
 function AccountMenu({ dark = true, compact = false }: { dark?: boolean; compact?: boolean }) {
   const profile = useProfile();
   const location = useLocation();
-  const name = profile.data ? displayName(profile.data) : "";
-  const business = profile.data?.business_name;
+  const m = useMenu();
+  const { setOpen } = m;
+  useEffect(() => setOpen(false), [location.pathname, setOpen]);
+  const who = profile.data ? accountLines(profile.data) : { title: "", sub: null };
+  const id = compact ? "account-menu-top" : "account-menu-nav";
+  const avatar = (
+    <span className="grid size-8 shrink-0 place-items-center rounded-full bg-accent text-[12px] font-semibold text-on-accent" aria-hidden>
+      {initials(who.title)}
+    </span>
+  );
+  const trigger = { ref: m.button, type: "button" as const, "aria-label": "Account menu", "aria-haspopup": "menu" as const, "aria-expanded": m.open, "aria-controls": m.open ? id : undefined, onClick: () => m.setOpen(!m.open) };
   if (compact) {
     return (
-      <details className="relative" key={location.pathname}>
-        <summary aria-label="Account menu" className="grid size-10 cursor-pointer list-none place-items-center rounded-full hover:bg-chrome-2 [&::-webkit-details-marker]:hidden">
-          <span className="grid size-8 place-items-center rounded-full bg-accent text-[12px] font-semibold text-on-accent" aria-hidden>
-            {initials(business || name)}
-          </span>
-        </summary>
-        <div className="absolute right-0 top-full z-40 mt-2 w-64 rounded-2xl border border-line bg-surface p-1.5 text-ink shadow-[var(--shadow-pop)]">
-          <div className="px-3 pb-2 pt-1.5">
-            <p className="truncate text-[14px] font-semibold">{business || name}</p>
-            {business ? <p className="truncate text-[12px] text-muted">{name}</p> : null}
+      <div className="relative" ref={m.wrap}>
+        <button {...trigger} className="grid size-10 place-items-center rounded-full hover:bg-chrome-2" data-testid="account-menu-button">
+          {avatar}
+        </button>
+        {m.open ? (
+          <div id={id} role="menu" aria-label="Account" className="absolute right-0 top-full z-40 mt-2 w-64 rounded-2xl border border-line bg-surface p-1.5 text-ink shadow-[var(--shadow-pop)]">
+            <div className="px-3 pb-2 pt-1.5" data-testid="account-name">
+              <p className="truncate text-[14px] font-semibold">{who.title}</p>
+              {who.sub ? <p className="truncate text-[12px] text-muted">{who.sub}</p> : null}
+            </div>
+            <div className="mb-1 border-t border-line" />
+            <AccountMenuItems onPick={() => m.setOpen(false)} />
           </div>
-          <div className="mb-1 border-t border-line" />
-          <Link to="/settings" className="block rounded-lg px-3 py-2 text-sm hover:bg-sunken">
-            Settings
-          </Link>
-          <Link to="/plan" className="block rounded-lg px-3 py-2 text-sm hover:bg-sunken">
-            Plan &amp; usage
-          </Link>
-          <a href={feedbackMailto(location.pathname)} className="block rounded-lg px-3 py-2 text-sm hover:bg-sunken">
-            Send feedback
-          </a>
-          <div className="my-1 border-t border-line" />
-          <button type="button" className="block w-full rounded-lg px-3 py-2 text-left text-sm hover:bg-sunken" onClick={() => supabase.auth.signOut()}>
-            Sign out
-          </button>
-        </div>
-      </details>
+        ) : null}
+      </div>
     );
   }
   return (
-    <details className="group relative" key={location.pathname}>
-      <summary
-        aria-label="Account menu"
-        className={cx(
-          "flex cursor-pointer list-none items-center gap-2.5 rounded-lg p-2 transition-colors [&::-webkit-details-marker]:hidden",
-          dark ? "hover:bg-chrome-2" : "hover:bg-sunken",
-        )}
-      >
-        <span className="grid size-8 shrink-0 place-items-center rounded-full bg-accent text-[12px] font-semibold text-on-accent" aria-hidden>
-          {initials(business || name)}
-        </span>
+    <div className="relative" ref={m.wrap}>
+      <button {...trigger} className={cx("flex w-full items-center gap-2.5 rounded-lg p-2 transition-colors", dark ? "hover:bg-chrome-2" : "hover:bg-sunken")}>
+        {avatar}
         <span className="min-w-0 flex-1 text-left">
-          <span className={cx("block truncate text-[13px] font-semibold", dark ? "text-white" : "text-ink")}>{business || name}</span>
-          {business ? <span className={cx("block truncate text-[12px]", dark ? "text-chrome-muted" : "text-muted")}>{name}</span> : null}
+          <span className={cx("block truncate text-[13px] font-semibold", dark ? "text-white" : "text-ink")}>{who.title}</span>
+          {who.sub ? <span className={cx("block truncate text-[12px]", dark ? "text-chrome-muted" : "text-muted")}>{who.sub}</span> : null}
         </span>
-        <svg width="14" height="14" viewBox="0 0 16 16" className={cx("shrink-0 transition-transform group-open:rotate-180", dark ? "text-chrome-muted" : "text-muted")} aria-hidden>
+        <svg width="14" height="14" viewBox="0 0 16 16" className={cx("shrink-0 transition-transform", m.open && "rotate-180", dark ? "text-chrome-muted" : "text-muted")} aria-hidden>
           <path d="m4 10 4-4 4 4" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
         </svg>
-      </summary>
-      <div className="absolute inset-x-0 bottom-full z-40 mb-2 rounded-xl border border-line bg-surface p-1 text-ink shadow-[var(--shadow-pop)]">
-        <Link to="/settings" className="block rounded-lg px-3 py-2 text-sm hover:bg-sunken">
-          Settings
-        </Link>
-        <Link to="/plan" className="block rounded-lg px-3 py-2 text-sm hover:bg-sunken">
-          Plan &amp; usage
-        </Link>
-        <a href={feedbackMailto(location.pathname)} className="block rounded-lg px-3 py-2 text-sm hover:bg-sunken">
-          Send feedback
-        </a>
-        <div className="my-1 border-t border-line" />
-        <button type="button" className="block w-full rounded-lg px-3 py-2 text-left text-sm hover:bg-sunken" onClick={() => supabase.auth.signOut()}>
-          Sign out
-        </button>
-      </div>
-    </details>
+      </button>
+      {m.open ? (
+        <div id={id} role="menu" aria-label="Account" className="absolute inset-x-0 bottom-full z-40 mb-2 rounded-xl border border-line bg-surface p-1 text-ink shadow-[var(--shadow-pop)]">
+          <AccountMenuItems onPick={() => m.setOpen(false)} />
+        </div>
+      ) : null}
+    </div>
   );
 }
 

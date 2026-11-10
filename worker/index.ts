@@ -96,6 +96,23 @@ export function canonicalRedirect(request: Request): Response | null {
   return new Response(null, { status: 301, headers: { location: `https://${LIVE_HOST}${url.pathname}${url.search}`, "cache-control": "public, max-age=86400" } });
 }
 
+/**
+ * One address per page, moved permanently (301) so search engines keep only the canonical one:
+ * a trailing slash is dropped (/pricing/ → /pricing), /index.html and /home (the file the home page
+ * is prerendered to) go to /, and /pricing.html style addresses lose the extension.
+ */
+export function pathRedirect(request: Request): Response | null {
+  if (request.method !== "GET" && request.method !== "HEAD") return null;
+  const url = new URL(request.url);
+  const p = url.pathname;
+  let to: string | null = null;
+  if (/^\/(home|index)(\.html)?\/*$/.test(p)) to = "/";
+  else if (/^\/(pricing|privacy|terms|refunds|contact)\.html$/.test(p)) to = p.slice(0, -5);
+  else if (p.length > 1 && p.endsWith("/") && !p.startsWith("/assets/")) to = p.replace(/\/+$/, "") || "/";
+  if (to === null || to === p) return null;
+  return new Response(null, { status: 301, headers: { location: `${url.origin}${to}${url.search}`, "cache-control": "public, max-age=86400" } });
+}
+
 /** True for an address that looks like a page (no file extension, not a built asset). */
 const isPagePath = (pathname: string) => !pathname.startsWith("/assets/") && !/\.[a-z0-9]+$/i.test(pathname);
 
@@ -175,9 +192,19 @@ export async function serveBlog(request: Request, env: Env, f: Fetcher = fetch):
   }
 }
 
+/** Asks the notify function to send queued owner emails. Quiet on any failure. */
+export async function flushOwnerEmails(env: Env, f: typeof fetch = fetch): Promise<boolean> {
+  try {
+    const res = await f(`${env.SUPABASE_URL.replace(/\/+$/, "")}/functions/v1/notify/flush`, { method: "POST", headers: { apikey: env.SUPABASE_ANON_KEY } });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
-    return canonicalRedirect(request) ?? (await serveBlog(request, env)) ?? serveApp(request, env);
+    return canonicalRedirect(request) ?? pathRedirect(request) ?? (await serveBlog(request, env)) ?? serveApp(request, env);
   },
   async scheduled(_controller: unknown, env: Env, ctx: { waitUntil(p: Promise<unknown>): void }) {
     ctx.waitUntil(
@@ -185,5 +212,7 @@ export default {
         if (!ok) console.error("keep-alive: Supabase health check failed");
       }),
     );
+    // Safety net for owner notification emails the client's page didn't get sent.
+    ctx.waitUntil(flushOwnerEmails(env));
   },
 };

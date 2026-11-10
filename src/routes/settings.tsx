@@ -1,9 +1,11 @@
-import { useEffect, useState, type FormEvent, type ReactNode } from "react";
+import { NOTIFY_TYPES, OWNER_EMAILS_ENABLED, notifyOn, type NotifyKey, type NotifyPrefs } from "@/lib/notify";
+import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
+import { useTitle } from "@/lib/title";
 import { takeSource } from "@/lib/signup-source";
 import { DEFAULT_SAC, GST_STATES_SORTED, SAC_SUGGESTIONS } from "@/lib/gst";
 import { financialYear } from "@/lib/format";
-import { useNavigate, useSearchParams } from "react-router";
-import { afterOnboarding, parseIntent, rememberIntent, takeIntent } from "@/lib/plan-intent";
+import { Navigate, useNavigate, useSearchParams } from "react-router";
+import { afterOnboarding, alreadySetUp, parseIntent, readIntent, rememberIntent, takeIntent } from "@/lib/plan-intent";
 import { useQueryClient } from "@tanstack/react-query";
 import { z } from "zod";
 import { Alert, Card, Field, Input, Logo, PageHeader, Select, Textarea } from "@/components/ui";
@@ -60,6 +62,8 @@ function WorkspaceForm({ profile, onDone, submitLabel }: { profile: Profile; onD
   );
 }
 
+export const ONBOARDING_TITLE = "Set up ScopeFlow";
+
 export function OnboardingPage() {
   const profile = useProfile();
   const navigate = useNavigate();
@@ -71,7 +75,13 @@ export function OnboardingPage() {
     if (fromUrl) rememberIntent(fromUrl);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fromUrl?.interval]);
+  useTitle(ONBOARDING_TITLE, { bare: true });
+  // Whether set-up was already finished when this page opened (not when the form below saves).
+  const startedDone = useRef<string | null | undefined>(undefined);
   if (!profile.data) return <PageSpinner />;
+  if (startedDone.current === undefined) startedDone.current = profile.data.onboarded_at;
+  const away = alreadySetUp(startedDone.current, fromUrl ?? readIntent());
+  if (away) return <Navigate to={away} replace />;
   return (
     <div className="flex min-h-dvh flex-col">
       <header className="px-6 py-5">
@@ -172,6 +182,43 @@ function UpiForm({ current }: { current: string }) {
         Save payment details
       </SubmitButton>
     </form>
+  );
+}
+
+export function NotificationsForm({ prefs }: { prefs: NotifyPrefs }) {
+  const qc = useQueryClient();
+  const toast = useToast();
+  const [saving, setSaving] = useState<NotifyKey | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  async function toggle(key: NotifyKey, on: boolean) {
+    setSaving(key);
+    setError(null);
+    const { error } = await supabase.rpc("set_notification_prefs", { p: { [key]: on } });
+    setSaving(null);
+    if (error) return setError("Couldn't save that. Please try again.");
+    await qc.invalidateQueries({ queryKey: ["profile"] });
+    toast("positive", on ? "You'll get this email." : "This email is off.");
+  }
+  return (
+    <div className="space-y-3" data-testid="notification-prefs">
+      {error ? <Alert>{error}</Alert> : null}
+      {NOTIFY_TYPES.map((t) => (
+        <label key={t.key} className="flex min-h-11 cursor-pointer items-start gap-3">
+          <input
+            type="checkbox"
+            role="switch"
+            className="mt-1 size-4 accent-[var(--color-accent)]"
+            checked={notifyOn(prefs, t.key)}
+            disabled={saving === t.key}
+            onChange={(e) => void toggle(t.key, e.target.checked)}
+          />
+          <span>
+            <span className="block text-sm font-medium text-ink">{t.label}</span>
+            <span className="block text-[13px] text-ink-2">{t.hint}</span>
+          </span>
+        </label>
+      ))}
+    </div>
   );
 }
 
@@ -279,6 +326,11 @@ export function SettingsPage() {
             sacCode={profile.data.sac_code ?? ""}
           />
         </SettingsSection>
+        {OWNER_EMAILS_ENABLED ? (
+          <SettingsSection title="Notifications" description={`An email to ${profile.data.email} when your client acts on a link you sent. Nothing is ever sent to your client.`}>
+            <NotificationsForm prefs={profile.data.notify_prefs ?? {}} />
+          </SettingsSection>
+        ) : null}
         <SettingsSection
           title="Password"
           description={PASSWORD_RESET_EMAIL ? "Change the password you sign in with." : "Password resets go through support during the beta, so keep this somewhere safe."}

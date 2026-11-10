@@ -24,8 +24,16 @@ export function SiteFooter() {
   );
 }
 
+export const BETA_TITLE = "Beta: new features ship weekly; prices shown are real.";
+
 export function BetaBadge() {
   return (
-    <span className="rounded-full border border-accent-line bg-accent-soft px-2 py-0.5 text-[11px] font-medium leading-none text-accent">Beta</span>
+    <span
+      title={BETA_TITLE}
+      data-testid="beta-badge"
+      className="shrink-0 rounded-full border border-accent-line bg-accent-soft px-1.5 py-0.5 text-[10px] font-medium leading-none text-accent min-[430px]:px-2 min-[430px]:text-[11px]"
+    >
+      Beta
+    </span>
   );
 }

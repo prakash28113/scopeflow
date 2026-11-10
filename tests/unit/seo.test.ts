@@ -29,7 +29,7 @@ describe("public page metadata", () => {
     const home = structuredData("/") as { "@context": string; "@graph": Record<string, unknown>[] };
     expect(home["@context"]).toBe("https://schema.org");
     const types = home["@graph"].map((n) => n["@type"]);
-    expect(types).toEqual(["Organization", "WebSite", "WebPage", "SoftwareApplication", "FAQPage"]);
+    expect(types).toEqual(["Organization", "WebSite", "WebPage", ["SoftwareApplication", "WebApplication"], "FAQPage"]);
     const json = JSON.stringify(home);
     expect(json).not.toMatch(/"(aggregateRating|review|reviews|ratingValue|ratingCount)"/);
     expect(json).not.toMatch(/\bAI\b|artificial intelligence/i);

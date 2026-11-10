@@ -98,20 +98,21 @@ export function InvoicesPage() {
               const s = statusOf(r, today);
               return (
                 <li key={r.id}>
-                  <Link to={`/invoices/${r.id}`} className="flex items-center justify-between gap-3 px-5 py-3.5 hover:bg-sunken/60">
-                    <div className="min-w-0">
-                      <p className="num text-[13px] font-medium">
-                        {r.number} <span className="font-normal text-muted">· {r.buyer.company || r.buyer.name}</span>
-                      </p>
-                      <p className="truncate text-[12px] text-muted">
-                        {r.projects?.title ?? r.description} · {formatDate(r.issue_date)}
-                        {r.due_date && s !== "paid" && s !== "void" ? ` · due ${formatDate(r.due_date)}` : ""}
-                      </p>
-                    </div>
-                    <div className="flex shrink-0 items-center gap-2">
-                      <span className={cx("num text-[13px] font-medium", s === "void" && "text-muted line-through")}>{formatMoney(Number(r.amount_cents), r.currency)}</span>
+                  {/* Phones: number + status, then client (cut with …) + amount. Wider: one line, as before. */}
+                  <Link to={`/invoices/${r.id}`} className="inv-row px-5 py-3.5 hover:bg-sunken/60">
+                    <span className="inv-num num whitespace-nowrap text-[13px] font-medium">{r.number}</span>
+                    <span className="inv-client min-w-0 truncate text-[13px] text-muted" data-testid="invoice-client">
+                      <span className="hidden sm:inline">· </span>
+                      {r.buyer.company || r.buyer.name}
+                    </span>
+                    <span className={cx("inv-amt num whitespace-nowrap text-[13px] font-medium", s === "void" && "text-muted line-through")}>{formatMoney(Number(r.amount_cents), r.currency)}</span>
+                    <span className="inv-tag whitespace-nowrap">
                       <Tag tone={TAGS[s].tone}>{TAGS[s].label}</Tag>
-                    </div>
+                    </span>
+                    <span className="inv-meta min-w-0 truncate text-[12px] text-muted">
+                      {r.projects?.title ?? r.description} · {formatDate(r.issue_date)}
+                      {r.due_date && s !== "paid" && s !== "void" ? ` · due ${formatDate(r.due_date)}` : ""}
+                    </span>
                   </Link>
                 </li>
               );

@@ -1,3 +1,4 @@
+import { useRef } from "react";
 import { useSearchParams } from "react-router";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/lib/supabase";
@@ -22,10 +23,14 @@ export default function NewProject() {
       return data as { name: string; email: string; company: string | null } | null;
     },
   });
+  // Decided once, when the page opens: saving the project that fills the plan mustn't flash the
+  // limit card (or count a limit) on the way to the new project's page.
+  const limitAtOpen = useRef<boolean | null>(null);
   if (!profile.data || plan.isLoading || (clientId && client.isLoading)) return <PageSpinner />;
   const m = plan.data;
   // Explain the limit before any typing; the database enforces it either way.
-  const atLimit = m && m.limits.active_projects !== null && m.usage.active_projects >= m.limits.active_projects;
+  if (limitAtOpen.current === null && m) limitAtOpen.current = m.limits.active_projects !== null && m.usage.active_projects >= m.limits.active_projects;
+  const atLimit = limitAtOpen.current === true;
   const initial: FormValues = {
     title: "",
     summary: "",

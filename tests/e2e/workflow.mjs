@@ -23,6 +23,8 @@ async function newCtx(opts = {}) {
       ? route.fulfill({ contentType: "text/javascript", body: GOOGLE_STUB })
       : route.abort(),
   );
+  // Razorpay's checkout.js is fetched ahead of a click (T2-03); tests never reach the real one.
+  await c.route("https://checkout.razorpay.com/**", (route) => route.fulfill({ contentType: "text/javascript", body: "window.Razorpay=function(){};window.Razorpay.prototype.on=function(){};window.Razorpay.prototype.open=function(){};" }));
   return c;
 }
 const desk = await newCtx({ viewport: { width: 1360, height: 900 }, permissions: ["clipboard-read", "clipboard-write"] });
@@ -57,11 +59,13 @@ async function pdfText(bytes) {
   const r = spawnSync("pdftotext", ["-", "-"], { input: bytes });
   return r.status === 0 ? r.stdout.toString() : null;
 }
-const IN_14_DAYS = (() => { const d = new Date(Date.now() + 14 * 86_400_000); d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); return d.toISOString().slice(0, 10); })();
+// The app's calendar is India's (T2-09), whatever zone this machine or the browser is in.
+const indiaDate = (plusDays = 0) => new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kolkata", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date(Date.now() + plusDays * 86_400_000));
+const IN_14_DAYS = indiaDate(14);
 const longDate = (iso) => new Intl.DateTimeFormat("en", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" }).format(new Date(`${iso}T00:00:00Z`));
 /** Confirms the in-app dialog that destructive actions open. */
 const confirmDialog = (p) => p.getByRole("alertdialog").getByRole("button").last().click();
-const SOON = (() => { const d = new Date(Date.now() + 3 * 86_400_000); d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); return d.toISOString().slice(0, 10); })();
+const SOON = indiaDate(3);
 
 try {
   // ---------------------------------------------------------- freelancer onboarding
@@ -155,7 +159,7 @@ try {
   assert.equal(await f.getByRole("radio", { name: "Monthly" }).getAttribute("aria-checked"), "true");
   await f.getByText("₹499").first().waitFor();
   await f.getByRole("radio", { name: /Yearly/ }).click();
-  await f.getByText("₹4,999").waitFor();
+  await f.getByText("₹4,999").first().waitFor();
   await f.getByRole("radio", { name: "Monthly" }).click();
   await f.getByText("₹499").first().waitFor();
   await f.getByText("Not on sale yet — no payment taken.").first().waitFor();
@@ -696,6 +700,19 @@ try {
   // The invoices list, then void (the number is never reused).
   await f.goto(`${BASE}/invoices`);
   await f.getByTestId("invoice-list").getByText(`RS-${year}-001`).waitFor();
+  // RT4-04: on a phone each row is number + status, then client (cut with …) + amount; nothing wraps mid-word.
+  for (const width of [360, 400]) {
+    await f.setViewportSize({ width, height: 800 });
+    const row = f.getByTestId("invoice-list").locator("a").first();
+    const [num, tag, client, amt] = await Promise.all([".inv-num", ".inv-tag", ".inv-client", ".inv-amt"].map((sel) => row.locator(sel).boundingBox()));
+    assert.ok(Math.abs(num.y - tag.y) < 12 && client.y > num.y + 8 && Math.abs(client.y - amt.y) < 8, `two rows @${width}`);
+    assert.ok(num.height < 26 && amt.height < 26 && tag.height < 30 && client.height < 26, `one line each @${width}`);
+    assert.ok(amt.x + amt.width <= width && tag.x + tag.width <= width && client.x + client.width <= amt.x + 1, `inside the screen, client stops before the amount @${width}`);
+    assert.equal(await row.locator(".inv-client").evaluate((el) => getComputedStyle(el).textOverflow), "ellipsis");
+    assert.equal(await f.evaluate(() => document.documentElement.scrollWidth > window.innerWidth), false, `no sideways scroll @${width}`);
+    await shot(f, `rt4-04-invoices-${width}`, false);
+  }
+  await f.setViewportSize({ width: 1280, height: 900 });
   await f.goto(invoiceUrl);
   await f.getByRole("button", { name: "Void invoice" }).click();
   await confirmDialog(f);
@@ -849,7 +866,7 @@ try {
   await fu.getByRole("button", { name: "Save follow-up" }).click();
   await fu.getByText("Write what to follow up on.").waitFor();
   await fu.getByLabel("Remind me to").fill("Send Dana the final files");
-  const todayLocal = await f.evaluate(() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; });
+  const todayLocal = indiaDate();
   await fu.getByLabel("Remind me on").fill(todayLocal);
   await fu.getByLabel("Project (optional)").selectOption({ label: "Menu card for Northwind" });
   await fu.getByRole("button", { name: "Save follow-up" }).click();
@@ -922,7 +939,7 @@ try {
   await f.getByRole("link", { name: "New project for Arjun" }).click();
   await f.waitForURL(/\/projects\/new\?client=/);
   // This account is at the Free plan's 2 active projects, so the form explains the limit instead.
-  await f.getByText("You've reached the Free plan's active projects").waitFor();
+  await f.getByText("Your 3rd active project needs Solo: ₹499/month. One approved extra of ₹2,500 (example) covers 5 months.").waitFor();
 
   step("clients: archive hides a client and frees a plan slot, restore brings it back, delete removes one added by mistake");
   await f.goto(`${BASE}/clients`);
@@ -1054,8 +1071,8 @@ try {
     // Returning: sign out, then Continue with Google on the sign-in page goes straight in.
     await gp.goto(`${BASE}/dashboard`);
     await gp.getByRole("button", { name: "Open menu" }).click(); // on a phone the account menu is in the drawer
-    await gp.getByTestId("nav-drawer").locator('summary[aria-label="Account menu"]').click();
-    await gp.getByRole("button", { name: "Sign out" }).click();
+    await gp.getByTestId("nav-drawer").getByRole("button", { name: "Account menu" }).click();
+    await gp.getByRole("menuitem", { name: "Sign out" }).click();
     await gp.waitForURL(/\/login/);
     await gp.getByTestId("google-stub").click();
     await gp.waitForURL("**/dashboard");
@@ -1107,7 +1124,9 @@ document.body.appendChild(d)}`,
     assert.equal(page.headers()["referrer-policy"], "strict-origin");
     await bp.getByRole("heading", { name: "Plan & usage" }).waitFor();
     await bp.getByText("Test mode: use Razorpay's test card or UPI. No real money moves.").waitFor();
-    assert.equal(checkoutScriptLoads, 0, "checkout.js loads only when someone starts a payment");
+    // T2-03: checkout.js is fetched as the page opens (this account can buy), before any click.
+    await bp.waitForFunction(() => typeof window.Razorpay === "function");
+    assert.equal(checkoutScriptLoads, 1, "checkout.js is ready before the click, and fetched once");
     // Studio stays in early access; Solo can be bought.
     assert.equal(await bp.getByRole("button", { name: "Upgrade to Studio" }).count(), 1); // testers can try both in test mode
     await bp.getByRole("radio", { name: "Monthly" }).click();
@@ -1304,12 +1323,12 @@ document.body.appendChild(d)}`,
 
   step("plans: the Free limit is reached at 2 active projects");
   await f.goto(`${BASE}/projects/new`);
-  await f.getByText("You've reached the Free plan's active projects").waitFor();
+  await f.getByText("Your 3rd active project needs Solo: ₹499/month. One approved extra of ₹2,500 (example) covers 5 months.").waitFor();
   await f.getByText("Your existing projects and client links keep working.").waitFor();
   assert.equal(await f.getByRole("button", { name: "Create project" }).count(), 0);
   await shot(f, "17-plan-limit", false);
-  await f.getByRole("link", { name: "See plans" }).click();
-  await f.waitForURL("**/plan");
+  await f.getByRole("link", { name: "Upgrade to Solo" }).click();
+  await f.waitForURL("**/plan?plan=solo&interval=monthly");
   await f.getByRole("heading", { name: "Plan & usage" }).waitFor();
   await f.getByText("2 of 2").first().waitFor();
   // Not a blog author: no Blog item, and the writing page says so.
@@ -1325,8 +1344,8 @@ document.body.appendChild(d)}`,
 
   step("sign out / sign in again");
   await f.goto(`${BASE}/dashboard`);
-  await f.locator("summary[aria-label=\"Account menu\"]").click();
-  await f.getByRole("button", { name: "Sign out" }).click();
+  await f.getByRole("button", { name: "Account menu" }).first().click();
+  await f.getByRole("menuitem", { name: "Sign out" }).click();
   await f.waitForURL(/\/login/);
   await f.getByLabel("Email").fill("priya@studio.test");
   await f.getByLabel("Password").fill("correct-horse-9"); // the old password no longer works

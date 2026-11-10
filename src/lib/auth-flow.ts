@@ -42,8 +42,12 @@ export function signInError(error: AuthErrorLike): string | null {
   // Supabase says this only when the password was right, so it gives nothing away.
   if (error.code === "email_not_confirmed" || /email not confirmed/i.test(error.message ?? ""))
     return "Confirm your email first: open the link we sent you (check spam too). To get a new link, sign up again with the same email.";
-  return error.status === 400 ? "Incorrect email or password." : "Couldn't sign in. Please try again.";
+  return error.status === 400 ? WRONG_PASSWORD : "Couldn't sign in. Please try again.";
 }
+
+export const WRONG_PASSWORD = "Incorrect email or password.";
+/** Shown under a wrong-password error for everyone, so it says nothing about any one address. */
+export const GOOGLE_HINT = "Signed up with Google? Use 'Continue with Google' above.";
 
 /** Resend never says whether the address has an account either. */
 export function resendError(error: AuthErrorLike): string | null {

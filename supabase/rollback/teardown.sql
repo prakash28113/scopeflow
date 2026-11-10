@@ -15,6 +15,11 @@ begin;
 drop trigger if exists on_auth_user_created on auth.users;
 
 -- Quote numbers (if installed).
+-- Fix-list migrations (20261120…24): usage counts, owner notification emails, spelling, activation.
+drop function if exists public.admin_activation, public.admin_usage_counts, public.log_usage_event,
+  public.set_notification_prefs, public.notify_claim, public.notify_mark, public._queue_owner_email,
+  public._blog_spelling, public._brand_spelling cascade;
+drop table if exists public.usage_events, public.owner_emails cascade;
 drop function if exists public._number_quote, public._next_quote_number cascade;
 -- Brand & growth (if installed).
 drop function if exists public.set_signup_source, public._require_feature, public._has_feature, public._blog_unique_meta, public.admin_signup_sources cascade;

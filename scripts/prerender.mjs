@@ -28,8 +28,30 @@ function replaceOnce(html, pattern, replacement, what) {
   return html.replace(pattern, replacement);
 }
 
-export function pageHtml(template, { path, seo, body, state, jsonLd, fonts, canonical, ogImage }) {
-  let html = template;
+/** Chunks a public page doesn't need to paint: the app's code and other pages. */
+const LATER = ["supabase", "blog", "pricing", "app-shell", "not-found", "toast", "signup-source"];
+
+/**
+ * First paint on phones (T2-10). The page is complete HTML already, so the app's code shouldn't
+ * compete with what the visitor is looking at:
+ *  - every prerendered page stops preloading chunks it doesn't need for first paint;
+ *  - a page with a hero image (heroPreloads) also starts the app only once that image has arrived
+ *    (public/boot.js), and preloads the image from <head>.
+ */
+export function lightenHead(html, { path, heroPreloads = [] }) {
+  const keep = path === "/pricing" ? LATER.filter((n) => n !== "pricing") : LATER;
+  let out = html.replace(new RegExp(`\\s*<link rel="modulepreload"[^>]*href="/assets/(?:${keep.join("|")})-[^"]*"[^>]*>`, "g"), "");
+  if (!heroPreloads.length) return out;
+  const entry = /<script type="module"[^>]*\bsrc="([^"]+)"[^>]*><\/script>/.exec(out);
+  if (!entry) throw new Error("prerender: index.html has no module entry script");
+  out = out.replace(entry[0], `<script defer src="/boot.js" data-entry="${esc(entry[1])}"></script>`);
+  out = out.replace(/\s*<link rel="modulepreload"[^>]*>/g, "");
+  // Straight after the viewport tag, so the browser finds the image before anything else.
+  return replaceOnce(out, /(<meta name="viewport"[^>]*>)/, `$1\n    ${heroPreloads.join("\n    ")}`, "viewport tag");
+}
+
+export function pageHtml(template, { path, seo, body, state, jsonLd, fonts, canonical, ogImage, heroPreloads = [] }) {
+  let html = lightenHead(template, { path, heroPreloads });
   html = replaceOnce(html, /<title>[^<]*<\/title>/, `<title>${esc(seo.title)}</title>`, "<title>");
   html = replaceOnce(html, /<meta name="description" content="[^"]*"\s*\/?>/, `<meta name="description" content="${esc(seo.description)}" />`, "description");
   html = replaceOnce(html, /<meta property="og:title" content="[^"]*"\s*\/?>/, `<meta property="og:title" content="${esc(seo.title)}" />`, "og:title");
@@ -91,6 +113,7 @@ async function main() {
       fonts,
       canonical: mod.canonicalUrl(path),
       ogImage: mod.OG_IMAGE,
+      heroPreloads: path === "/" ? mod.heroPreloads() : [],
     });
     writeFileSync(join(DIST, seo.file), html);
     console.log(`✓ Prerendered ${path} → dist/${seo.file} (${Math.round(html.length / 1024)} KB${state ? ", with data" : ""})`);
