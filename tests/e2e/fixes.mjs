@@ -475,6 +475,62 @@ window.Razorpay.prototype.open=function(){var o=this.o;window.__rzp=o;window.__r
     await ctx.close();
   }
 
+  // ------------------------------------------------------------------ T2-12
+  step("T2-12 the freelancer gets one email when the client approves; a switched-off type sends none; a failing email provider never blocks the client");
+  {
+    const NOTIFY = "http://127.0.0.1:54321/functions/v1/notify";
+    const emails = async () => (await fetch(`${NOTIFY}/__test`)).json();
+    const startCount = (await emails()).length;
+    const ctx = await newCtx();
+    const p = await newPage(ctx, "t2-12 owner");
+    await signUp(p, "Hema Rao", "hema@fixes.test");
+    const sendScope = async (title) => {
+      await p.goto(`${BASE}/projects/new`);
+      await p.getByLabel("Project title").fill(title);
+      await p.getByLabel("Client name").fill("Dana Client");
+      await p.getByLabel("Client email").fill("dana@client.test");
+      await p.getByLabel("Deliverable 1", { exact: true }).fill("Logo");
+      await p.getByLabel("Agreed budget").fill("1000");
+      await p.getByRole("button", { name: "Create project" }).click();
+      await p.waitForURL(/\/projects\/[0-9a-f-]{36}$/);
+      await p.getByRole("button", { name: "Send to client" }).click();
+      await p.getByRole("heading", { name: "Client link ready" }).waitFor();
+      return p.getByTestId("share-url").innerText();
+    };
+    const approve = async (link, name) => {
+      const c = await newCtx();
+      const cp = await newPage(c, name);
+      await cp.goto(link);
+      await cp.getByRole("button", { name: "Approve scope" }).last().click();
+      await cp.getByRole("checkbox").check();
+      await cp.getByRole("button", { name: "Approve scope" }).last().click();
+      await cp.getByText(/approved by Dana Client/).waitFor();
+      await c.close();
+    };
+    const link1 = await sendScope("Notify one");
+    await approve(link1, "t2-12 client");
+    for (let i = 0; i < 50 && (await emails()).length < startCount + 1; i++) await new Promise((r) => setTimeout(r, 100));
+    assert.equal((await emails()).length, startCount + 1, "exactly one email for one approval");
+    const mail = (await emails()).at(-1);
+    assert.deepEqual(mail.to, [{ email: "hema@fixes.test", name: "Hema Rao" }]);
+    assert.equal(mail.subject, "Dana Client approved the scope: Notify one");
+    assert.match(mail.textContent, /Dana Client approved the scope\.\nProject: Notify one/);
+    assert.match(mail.textContent, /Open the project: http:\/\/localhost:3000\/projects\/[0-9a-f-]{36}/);
+    assert.ok(!("htmlContent" in mail), "plain text only: no tracking pixel");
+    assert.ok(!JSON.stringify(mail).includes("dana@client.test"), "the client's email isn't in the message");
+    assert.ok(!mail.textContent.includes("/p?") && !mail.textContent.includes("/p/"), "no client link in the email");
+
+    // The email provider is down: the client's approval still goes through.
+    await fetch(`${NOTIFY}/__test?fail=1`);
+    const link2 = await sendScope("Notify two");
+    await approve(link2, "t2-12 client, provider down");
+    await fetch(`${NOTIFY}/__test?fail=0`);
+    assert.equal((await emails()).length, startCount + 1, "nothing sent while the provider was down");
+    await fetch(`${NOTIFY}/flush`, { method: "POST" }); // the scheduled job's retry
+    assert.equal((await emails()).at(-1).subject, "Dana Client approved the scope: Notify two");
+    await ctx.close();
+  }
+
   if (errors.length) throw new Error(`Browser errors:\n${errors.join("\n")}`);
   console.log("✓ fix-list checks passed with no browser errors");
 } finally {

@@ -28,7 +28,7 @@ const SUPABASE_API = "https://api.supabase.com/v1";
 const CF_API = "https://api.cloudflare.com/client/v4";
 
 /** Expected results of the post-migration security check (see DEPLOYMENT.md §2). */
-export const EXPECTED = { tables: 31, without_rls: 0, public_functions: 5, signup_trigger: 1 };
+export const EXPECTED = { tables: 32, without_rls: 0, public_functions: 5, signup_trigger: 1 };
 /** Keeps sign-ups closed when no invited emails are configured. */
 export const CLOSED_SENTINEL = "invites-closed@scopeflow.invalid";
 const EMAIL = /^[a-z0-9._%+-]+@[a-z0-9-]+(\.[a-z0-9-]+)*\.[a-z]{2,}$/;
@@ -254,9 +254,9 @@ export async function run(deps) {
 
   // ------------------------------------------------------------------ Supabase
   const sbToken = env.SUPABASE_ACCESS_TOKEN;
-  let supabaseUrl, publishable, setSiteUrl, setUpBilling, setUpBlog;
+  let supabaseUrl, publishable, setSiteUrl, setUpBilling, setUpBlog, setUpOwnerEmails;
   if (sbToken) {
-    ({ supabaseUrl, publishable, setSiteUrl, setUpBilling, setUpBlog } = await setUpSupabase());
+    ({ supabaseUrl, publishable, setSiteUrl, setUpBilling, setUpBlog, setUpOwnerEmails } = await setUpSupabase());
   } else if (env.SUPABASE_URL || env.SUPABASE_PUBLISHABLE_KEY) {
     // App-only release: the database was already set up by an earlier run; use its public values.
     ({ supabaseUrl, publishable } = publicSupabaseConfig(env));
@@ -481,11 +481,44 @@ revoke all on all tables in schema scopeflow_admin from public, anon, authentica
     return true;
   }
 
+  /**
+   * Owner notification emails (optional): with a BREVO_API_KEY secret, the key goes into the
+   * "notify" Edge Function's secrets and the function is deployed. Returns true when emails can be
+   * sent; otherwise Settings shows no Notifications section and nothing is promised.
+   */
+  async function setUpOwnerEmails(brevoKey, fromEmail) {
+    const key = String(brevoKey ?? "").trim();
+    if (!key) {
+      report.push("- ⏭️ Owner notification emails off — add a `BREVO_API_KEY` secret to switch them on.");
+      return false;
+    }
+    if (key.length < 20 || /\s/.test(key)) {
+      log("::warning::BREVO_API_KEY doesn't look like a Brevo API key. Owner notification emails stay off.");
+      report.push("- ⏭️ Owner notification emails off — `BREVO_API_KEY` doesn't look like a Brevo API key.");
+      return false;
+    }
+    try {
+      await sb(`/projects/${ref}/secrets`, {
+        method: "POST",
+        body: [{ name: "BREVO_API_KEY", value: key }, ...(fromEmail ? [{ name: "NOTIFY_FROM_EMAIL", value: String(fromEmail).trim() }] : [])],
+      });
+      await deployFunction("notify");
+    } catch (e) {
+      if (!/\((401|403)\)/.test(String(e.message))) throw e;
+      log("::warning::Owner notification emails not switched on: the Supabase token needs Edge Functions and Secrets access.");
+      report.push("- ⏭️ Owner notification emails off — the `SUPABASE_ACCESS_TOKEN` needs **Edge Functions** and **Secrets** write access.");
+      return false;
+    }
+    ok("Owner notification emails on (sent to the freelancer when their client acts; never to clients)");
+    return true;
+  }
+
   return {
     supabaseUrl,
     publishable,
     setUpBilling,
     setUpBlog,
+    setUpOwnerEmails,
     // Password-reset links may only return to ScopeFlow's own addresses.
     setSiteUrl: (appUrl, allUrls = [appUrl]) =>
       optional("Supabase Site URL and sign-in return addresses set to the live addresses", `/projects/${ref}/config/auth`, {
@@ -533,10 +566,12 @@ revoke all on all tables in schema scopeflow_admin from public, anon, authentica
   // Paid plans need the Supabase token (function + secrets); an app-only release leaves them as they are.
   const billingOn = setUpBilling ? await setUpBilling(billingConfig(env), origins) : false;
   if (setUpBlog) await setUpBlog(blogAuthors());
+  const ownerEmailsOn = setUpOwnerEmails ? await setUpOwnerEmails(env.BREVO_API_KEY, env.NOTIFY_FROM_EMAIL) : false;
 
   const buildEnv = {
     ...process.env,
     VITE_BILLING_PROVIDER: billingOn ? "razorpay" : "",
+    VITE_OWNER_EMAILS: ownerEmailsOn ? "on" : "",
     VITE_SUPABASE_URL: supabaseUrl,
     VITE_SUPABASE_PUBLISHABLE_KEY: publishable,
     VITE_TURNSTILE_SITE_KEY: env.VITE_TURNSTILE_SITE_KEY ?? "",

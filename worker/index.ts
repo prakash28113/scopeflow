@@ -192,6 +192,16 @@ export async function serveBlog(request: Request, env: Env, f: Fetcher = fetch):
   }
 }
 
+/** Asks the notify function to send queued owner emails. Quiet on any failure. */
+export async function flushOwnerEmails(env: Env, f: typeof fetch = fetch): Promise<boolean> {
+  try {
+    const res = await f(`${env.SUPABASE_URL.replace(/\/+$/, "")}/functions/v1/notify/flush`, { method: "POST", headers: { apikey: env.SUPABASE_ANON_KEY } });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     return canonicalRedirect(request) ?? pathRedirect(request) ?? (await serveBlog(request, env)) ?? serveApp(request, env);
@@ -202,5 +212,7 @@ export default {
         if (!ok) console.error("keep-alive: Supabase health check failed");
       }),
     );
+    // Safety net for owner notification emails the client's page didn't get sent.
+    ctx.waitUntil(flushOwnerEmails(env));
   },
 };

@@ -1,3 +1,4 @@
+import { flushOwnerEmails } from "@/lib/notify";
 import { useState, type FormEvent } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Alert, Button, Field, Input, Select, Textarea, cx } from "@/components/ui";
@@ -16,6 +17,7 @@ function usePortalAction(token: string) {
   const qc = useQueryClient();
   const toast = useToast();
   const done = async (message?: string) => {
+    flushOwnerEmails(); // the freelancer hears about it by email; never blocks or fails this page
     if (message) toast("positive", message);
     await qc.invalidateQueries({ queryKey: ["portal", token] });
   };

@@ -49,6 +49,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 export const useAuth = () => useContext(AuthContext);
 
 export type Profile = {
+  notify_prefs?: Record<string, boolean> | null;
   id: string;
   email: string;
   full_name: string | null;
@@ -69,7 +70,7 @@ export const profileQuery = (userId: string | undefined) => ({
   queryFn: async () => {
     const { data, error } = await supabase
       .from("profiles")
-      .select("id, email, full_name, business_name, default_currency, onboarded_at, notifications_seen_at, upi_id, business_address, gstin, invoice_prefix, state_code, sac_code")
+      .select("id, email, full_name, business_name, default_currency, onboarded_at, notifications_seen_at, upi_id, business_address, gstin, invoice_prefix, state_code, sac_code, notify_prefs")
       .eq("id", userId!)
       .single();
     if (error) throw error;

@@ -1,3 +1,4 @@
+import { NOTIFY_TYPES, OWNER_EMAILS_ENABLED, notifyOn, type NotifyKey, type NotifyPrefs } from "@/lib/notify";
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { useTitle } from "@/lib/title";
 import { takeSource } from "@/lib/signup-source";
@@ -184,6 +185,43 @@ function UpiForm({ current }: { current: string }) {
   );
 }
 
+export function NotificationsForm({ prefs }: { prefs: NotifyPrefs }) {
+  const qc = useQueryClient();
+  const toast = useToast();
+  const [saving, setSaving] = useState<NotifyKey | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  async function toggle(key: NotifyKey, on: boolean) {
+    setSaving(key);
+    setError(null);
+    const { error } = await supabase.rpc("set_notification_prefs", { p: { [key]: on } });
+    setSaving(null);
+    if (error) return setError("Couldn't save that. Please try again.");
+    await qc.invalidateQueries({ queryKey: ["profile"] });
+    toast("positive", on ? "You'll get this email." : "This email is off.");
+  }
+  return (
+    <div className="space-y-3" data-testid="notification-prefs">
+      {error ? <Alert>{error}</Alert> : null}
+      {NOTIFY_TYPES.map((t) => (
+        <label key={t.key} className="flex min-h-11 cursor-pointer items-start gap-3">
+          <input
+            type="checkbox"
+            role="switch"
+            className="mt-1 size-4 accent-[var(--color-accent)]"
+            checked={notifyOn(prefs, t.key)}
+            disabled={saving === t.key}
+            onChange={(e) => void toggle(t.key, e.target.checked)}
+          />
+          <span>
+            <span className="block text-sm font-medium text-ink">{t.label}</span>
+            <span className="block text-[13px] text-ink-2">{t.hint}</span>
+          </span>
+        </label>
+      ))}
+    </div>
+  );
+}
+
 /** For a new account: the currency where the browser is (India-first), else the stored default. */
 const invoiceSchema = z.object({
   businessAddress: z.string().trim().max(500, "Keep the address under 500 characters"),
@@ -288,6 +326,11 @@ export function SettingsPage() {
             sacCode={profile.data.sac_code ?? ""}
           />
         </SettingsSection>
+        {OWNER_EMAILS_ENABLED ? (
+          <SettingsSection title="Notifications" description={`An email to ${profile.data.email} when your client acts on a link you sent. Nothing is ever sent to your client.`}>
+            <NotificationsForm prefs={profile.data.notify_prefs ?? {}} />
+          </SettingsSection>
+        ) : null}
         <SettingsSection
           title="Password"
           description={PASSWORD_RESET_EMAIL ? "Change the password you sign in with." : "Password resets go through support during the beta, so keep this somewhere safe."}
