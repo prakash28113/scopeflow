@@ -155,7 +155,8 @@ try {
   await f.goto(`${BASE}/pricing`);
   await f.getByRole("heading", { name: /Simple pricing/ }).waitFor();
   await f.getByText("Recommended").waitFor();
-  // Opens on monthly prices; yearly is one tap away.
+  // Opens on monthly prices; yearly is one tap away (once the app has taken over the prerendered page).
+  await f.waitForFunction(() => document.documentElement.dataset.app === "ready");
   assert.equal(await f.getByRole("radio", { name: "Monthly" }).getAttribute("aria-checked"), "true");
   await f.getByText("₹499").first().waitFor();
   await f.getByRole("radio", { name: /Yearly/ }).click();
