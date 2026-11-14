@@ -390,7 +390,7 @@ try {
   await f.goto(`${BASE}/dashboard`);
   assert.match(await f.getByTestId("feedback-link").getAttribute("href"), /^mailto:.+\?subject=ScopeFlow%20feedback&body=.*Page%3A%20%2Fdashboard/);
   await f.getByTestId("upcoming").getByText("50% deposit", { exact: true }).waitFor();
-  await f.getByTestId("upcoming").getByText("Payment for Brand identity for Northwind Coffee").waitFor();
+  await f.getByTestId("upcoming").getByText("Payment for Brand identity for Northwind Coffee").first().waitFor(); // both payments can fall inside the 14-day window
   await f.getByText(/^In 3 days/).waitFor();
 
   // ---------------------------------------------------------- revisions + scope check
