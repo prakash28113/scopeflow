@@ -107,7 +107,7 @@ export default function Dashboard() {
               note={overduePayments ? `${overduePayments} payment${overduePayments === 1 ? "" : "s"} overdue` : "Contract total minus received, on live projects"}
               noteTone={overduePayments ? "danger" : undefined}
             />
-            <Figure label="Collected" tone="positive" value={collected.map(([c, v]) => formatMoney(v, c))} note="Received on live projects" />
+            <Figure label="Collected" tone="positive" value={collected.map(([c, v]) => formatMoney(v, c))} note="Received on live projects" testid="figure-collected" />
           </Figures>
 
           {outOfScope ? (
