@@ -1,3 +1,5 @@
+import { changeOrderMessage } from "@/lib/client-message";
+import { TellClient } from "@/components/tell-client";
 import { quoteExpired } from "@/lib/quote";
 import { stateOf } from "@/lib/gst";
 import { AddPayment } from "@/components/add-payment";
@@ -109,7 +111,7 @@ export default function ProjectPage() {
 
   return (
     <>
-      <ShareLinkDialog link={newLink} clientName={p.clients.name} clientEmail={p.clients.email} projectTitle={p.title} onClose={() => setNewLink(null)} />
+      <ShareLinkDialog link={newLink} clientName={p.clients.name} clientEmail={p.clients.email} clientPhone={p.clients.phone} projectTitle={p.title} onClose={() => setNewLink(null)} />
       <PageHeader
         eyebrow={
           <Link to="/projects" className="hover:text-ink">
@@ -345,6 +347,21 @@ export default function ProjectPage() {
                           </div>
                         </div>
                       </div>
+                      {c.status === "sent" ? (
+                        <TellClient
+                          message={changeOrderMessage({
+                            clientName: p.clients.name,
+                            number: c.number,
+                            title: c.title,
+                            amountCents: Number(c.amount_cents),
+                            currency: p.currency,
+                            additionalDays: c.additional_days,
+                            businessName: profile.data?.business_name || profile.data?.full_name,
+                          })}
+                          phone={p.clients.phone}
+                          email={p.clients.email}
+                        />
+                      ) : null}
                       {c.status === "sent" ? (
                         <ActionButton
                           className="mt-3"

@@ -1,3 +1,4 @@
+import { whatsAppHref } from "@/lib/client-message";
 import { useEffect, useRef } from "react";
 import { Button, buttonClass } from "./ui";
 import { CopyButton } from "./form-bits";
@@ -11,12 +12,15 @@ export function ShareLinkDialog({
   link,
   clientName,
   clientEmail,
+  clientPhone,
   projectTitle,
   onClose,
 }: {
   link: { url: string; expiresAt: string } | null;
   clientName: string;
   clientEmail?: string;
+  /** When known, WhatsApp opens the client's own chat. */
+  clientPhone?: string | null;
   projectTitle: string;
   onClose: () => void;
 }) {
@@ -57,7 +61,7 @@ export function ShareLinkDialog({
           <div className="mt-5 flex flex-wrap gap-2">
             <CopyButton value={link.url} label="Copy link" size="md" variant="primary" />
             <a
-              href={`https://wa.me/?text=${encodeURIComponent(message)}`}
+              href={whatsAppHref(clientPhone, message)}
               target="_blank"
               rel="noreferrer noopener"
               className={buttonClass("secondary")}
