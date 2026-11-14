@@ -150,12 +150,19 @@ function NudgeSheet({ invoice, onClose }: { invoice: NudgeInvoice; onClose: () =
           </div>
           {!overdue ? <p className="mt-1.5 text-[12px] text-ink-2">Firm is for invoices past their due date.</p> : null}
         </fieldset>
-        <div>
-          <label htmlFor={`${title}-msg`} className="mb-1.5 block text-[13px] font-medium">
-            Message
-          </label>
-          <Textarea id={`${title}-msg`} rows={6} value={message} onChange={(e) => setText(e.target.value)} data-testid="nudge-message" />
-        </div>
+        {/* Only once the client's name and contact details are in, so the message never starts "Hi there". */}
+        {contact.isSuccess ? (
+          <div>
+            <label htmlFor={`${title}-msg`} className="mb-1.5 block text-[13px] font-medium">
+              Message
+            </label>
+            <Textarea id={`${title}-msg`} rows={6} value={message} onChange={(e) => setText(e.target.value)} data-testid="nudge-message" />
+          </div>
+        ) : contact.isLoading ? (
+          <p className="text-[13px] text-ink-2" role="status">
+            Getting the message ready…
+          </p>
+        ) : null}
         {contact.isError ? <p className="text-[13px] text-danger">Couldn't load the client's details. Close this and try again.</p> : null}
         {client && !wa ? (
           <p className="text-[13px] text-ink-2" data-testid="nudge-no-phone">
