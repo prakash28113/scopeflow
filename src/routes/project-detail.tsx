@@ -445,7 +445,13 @@ export default function ProjectPage() {
               <dt className="font-medium">Contract total</dt>
               <dd className="text-right font-semibold">{fmt(money.contract)}</dd>
               <dt className="text-muted">Received</dt>
-              <dd className="text-right text-positive">{fmt(money.paid)}</dd>
+              <dd className="text-right text-positive">{fmt(money.cash)}</dd>
+              {money.tds > 0 ? (
+                <>
+                  <dt className="text-muted">TDS deducted by client</dt>
+                  <dd className="text-right" data-testid="totals-tds">{fmt(money.tds)}</dd>
+                </>
+              ) : null}
               <dt className="text-muted">Contract unpaid</dt>
               <dd className="text-right">{fmt(money.outstanding)}</dd>
               {spent ? (
@@ -510,6 +516,7 @@ export default function ProjectPage() {
                               </span>
                               <span className="flex shrink-0 items-center gap-2">
                                 <span className="num">{fmt(Number(x.amount_cents))}</span>
+                                {Number(x.tds_cents ?? 0) > 0 ? <span className="num text-muted" data-testid="payment-tds">TDS {fmt(Number(x.tds_cents))}</span> : null}
                                 {p.status !== "cancelled" ? (
                                   <ActionButton
                                     size="sm"

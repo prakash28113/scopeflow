@@ -17,9 +17,9 @@ import { localToday } from "@/lib/upcoming";
 import { invoiceStatus, type InvoiceRow, type InvoiceStatus } from "@/lib/invoice";
 import NotFound from "./not-found";
 
-type ListedInvoice = InvoiceRow & { milestones: { status: string; paid_at: string | null; paid_cents?: number } | null; projects: { id: string; title: string } | null };
+type ListedInvoice = InvoiceRow & { milestones: { status: string; paid_at: string | null; paid_cents?: number; tds_cents?: number } | null; projects: { id: string; title: string } | null };
 
-const SELECT = "*, milestones(status, paid_at, paid_cents), projects(id, title)";
+const SELECT = "*, milestones(status, paid_at, paid_cents, tds_cents), projects(id, title)";
 
 /** The invoice list (shared with prefetching, so opening Invoices is instant). */
 export const invoicesQuery = {
@@ -198,7 +198,7 @@ export function InvoicePage() {
           {inv.void_reason ? `: ${inv.void_reason}` : ""}. Clients no longer see this invoice.
         </Alert>
       ) : null}
-      <InvoiceDocument inv={inv} status={status} paidAt={inv.milestones?.paid_at} paidCents={Number(inv.milestones?.paid_cents ?? 0)} className="mt-3" />
+      <InvoiceDocument inv={inv} status={status} paidAt={inv.milestones?.paid_at} paidCents={Number(inv.milestones?.paid_cents ?? 0)} tdsCents={Number(inv.milestones?.tds_cents ?? 0)} className="mt-3" />
       <p className="mt-3 text-[12px] text-muted print:hidden">
         Your client sees this invoice on their project page. Paid status updates when you mark the payment as received.
       </p>

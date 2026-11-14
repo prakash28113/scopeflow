@@ -23,6 +23,7 @@ drop table if exists public.usage_events, public.owner_emails cascade;
 -- Payment nudges (if installed).
 drop function if exists public.record_nudge cascade;
 drop table if exists public.nudges cascade;
+-- TDS on payments: the columns go with the tables below.
 drop function if exists public._number_quote, public._next_quote_number cascade;
 -- Brand & growth (if installed).
 drop function if exists public.set_signup_source, public._require_feature, public._has_feature, public._blog_unique_meta, public.admin_signup_sources cascade;

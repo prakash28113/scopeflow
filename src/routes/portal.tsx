@@ -509,7 +509,7 @@ function PortalInvoices({ invoices }: { invoices: NonNullable<import("@/lib/type
             <PrintButton label="Print" />
             <DownloadPdfButton name={`Invoice ${shown.number}`} selector='[data-testid="invoice-document"]' variant="primary" />
           </div>
-          <InvoiceDocument inv={shown} status={invoiceStatus(shown, shown.paid, today, Number(shown.paid_cents ?? 0))} paidAt={shown.paid_at} paidCents={Number(shown.paid_cents ?? 0)} className="border-0 p-0 sm:p-2" />
+          <InvoiceDocument inv={shown} status={invoiceStatus(shown, shown.paid, today, Number(shown.paid_cents ?? 0))} paidAt={shown.paid_at} paidCents={Number(shown.paid_cents ?? 0)} tdsCents={Number(shown.tds_cents ?? 0)} className="border-0 p-0 sm:p-2" />
         </div>
       ) : null}
     </Card>

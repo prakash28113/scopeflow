@@ -4,7 +4,7 @@ import { timeEnd } from "@/lib/timing";
 import { Link } from "react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import { intentProps } from "@/lib/prefetch";
-import { currentDueDate, received } from "@/lib/pricing";
+import { currentDueDate, cashReceived, received } from "@/lib/pricing";
 import { Alert, Card, CardHeader, EmptyState, Figure, Figures, LinkButton, Meter, PageHeader, StatusBadge, cx } from "@/components/ui";
 import { PageSpinner } from "@/components/app-shell";
 import { useProfile } from "@/lib/auth";
@@ -48,7 +48,8 @@ export default function Dashboard() {
   const paidOf = (p: (typeof projects)[number]) => p.milestones.reduce((s, m) => s + received(m), 0);
   const contractOf = (p: (typeof projects)[number]) => Number(p.budget_cents) + Number(p.approved_extras_cents);
   const outstanding = sumByCurrency(live.map((p) => ({ currency: p.currency, amount: contractUnpaid(p) })));
-  const collected = sumByCurrency(live.map((p) => ({ currency: p.currency, amount: paidOf(p) })));
+  // Cash only: TDS the client withheld settles the bill but isn't money in.
+  const collected = sumByCurrency(live.map((p) => ({ currency: p.currency, amount: p.milestones.reduce((s, m) => s + cashReceived(m), 0) })));
   const firstName = (profile.data?.full_name ?? "").split(" ")[0];
   const pendingCount = awaitingScope.length + changeOrders.length;
   const upcoming = upcomingItems(projects, today);
@@ -106,7 +107,7 @@ export default function Dashboard() {
               note={overduePayments ? `${overduePayments} payment${overduePayments === 1 ? "" : "s"} overdue` : "Contract total minus received, on live projects"}
               noteTone={overduePayments ? "danger" : undefined}
             />
-            <Figure label="Collected" tone="positive" value={collected.map(([c, v]) => formatMoney(v, c))} note="Received on live projects" />
+            <Figure label="Collected" tone="positive" value={collected.map(([c, v]) => formatMoney(v, c))} note="Received on live projects" testid="figure-collected" />
           </Figures>
 
           {outOfScope ? (

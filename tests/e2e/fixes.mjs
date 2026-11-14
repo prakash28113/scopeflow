@@ -707,6 +707,72 @@ window.Razorpay.prototype.open=function(){var o=this.o;window.__rzp=o;window.__r
     }
   }
 
+  // ------------------------------------------------------------------ T-01 / T-02 (TDS)
+  step("TDS: ₹9,000 cash + ₹1,000 TDS settles a ₹10,000 invoice; it shows on the invoice and the client page; Collected counts ₹9,000");
+  {
+    const { anon } = JSON.parse(readFileSync(new URL("./keys.json", import.meta.url), "utf8"));
+    const ctx = await newCtx();
+    const p = await newPage(ctx, "tds");
+    await signUp(p, "Kiran Das", "kiran@fixes.test");
+    const token = await p.evaluate(() => Object.values(localStorage).map((v) => { try { return JSON.parse(v)?.access_token; } catch { return null; } }).find(Boolean));
+    const rpc = async (fn, args, bearer = token) => {
+      const r = await fetch(`http://127.0.0.1:54321/rest/v1/rpc/${fn}`, { method: "POST", headers: { apikey: anon, authorization: `Bearer ${bearer}`, "content-type": "application/json" }, body: JSON.stringify(args) });
+      const body = await r.json();
+      if (!r.ok) throw new Error(`${fn}: ${JSON.stringify(body)}`);
+      return body;
+    };
+    const projectId = await rpc("save_project", { p_project_id: null, p: { title: "TDS website", currency: "INR", budget_cents: 1000000, client: { name: "Acme Accounts", email: "accounts@acme.test" }, deliverables: [{ title: "Website", revisions_included: 1 }], milestones: [{ title: "Full payment", amount_cents: 1000000 }] } });
+    const link = (await rpc("send_scope", { p_project_id: projectId, p_link_days: 30 })).link;
+    const view = await rpc("portal_view", { p_token: link.token }, anon);
+    await rpc("portal_decide_scope", { p_token: link.token, p_snapshot_id: view.snapshot.id, p_decision: "approved", p_client_name: "Acme Accounts", p_comment: null }, anon);
+    const milestoneId = (await (await fetch(`http://127.0.0.1:54321/rest/v1/milestones?select=id&project_id=eq.${projectId}`, { headers: { apikey: anon, authorization: `Bearer ${token}` } })).json())[0].id;
+    const invoiceId = await rpc("create_invoice", { p_milestone_id: milestoneId, p: {} });
+    const number = (await (await fetch(`http://127.0.0.1:54321/rest/v1/client_invoices?select=number&id=eq.${invoiceId}`, { headers: { apikey: anon, authorization: `Bearer ${token}` } })).json())[0].number;
+    await fetch(`${AUTH}/__test/invoice-due?number=${number}&days=-5`);
+
+    await p.goto(`${BASE}/dashboard`);
+    await p.getByTestId("reminders").getByText(`Invoice ${number} is overdue`).waitFor();
+    await p.goto(`${BASE}/projects/${projectId}`);
+    await p.getByRole("button", { name: "Record payment" }).first().click();
+    const form = p.getByTestId("record-payment");
+    await form.getByLabel("Amount (INR)").fill("9000");
+    await form.getByTestId("tds-toggle").click();
+    await form.getByLabel("TDS deducted by client (optional)").fill("1000");
+    await form.getByText("Only if your client withheld TDS. ScopeFlow just records it; it doesn't calculate tax.").waitFor();
+    assert.equal(await form.getByTestId("tds-sum").innerText(), "Cash ₹9,000.00 + TDS ₹1,000.00 = ₹10,000.00 of ₹10,000.00 due");
+    // Over the balance is refused before anything is saved.
+    await form.getByLabel("Amount (INR)").fill("9500");
+    await form.getByRole("button", { name: "Save payment" }).click();
+    await form.getByText("That's more than the ₹10,000.00 still due.").waitFor();
+    await form.getByLabel("Amount (INR)").fill("9000");
+    await form.getByRole("button", { name: "Save payment" }).click();
+    await p.getByText("Payment recorded (TDS ₹1,000.00).").waitFor();
+    await p.getByTestId("payment-records").getByTestId("payment-tds").getByText("TDS ₹1,000.00").waitFor();
+    assert.equal(await p.getByTestId("totals-tds").innerText(), "₹1,000.00");
+    await shot(p, "tds-project");
+
+    await p.goto(`${BASE}/invoices/${invoiceId}`);
+    assert.equal(await p.getByTestId("invoice-tds").innerText(), "Received ₹9,000.00 + TDS deducted by client ₹1,000.00");
+    await p.getByTestId("invoice-document").getByText("Paid", { exact: true }).first().waitFor();
+    assert.equal(await p.getByTestId("nudge-button").count(), 0, "a settled invoice has no Nudge");
+    await shot(p, "tds-invoice");
+
+    await p.goto(`${BASE}/dashboard`);
+    await p.getByTestId("figure-collected").waitFor();
+    assert.equal(await p.getByTestId("figure-collected").innerText(), "₹9,000.00", "Collected is cash only");
+    assert.equal(await p.getByTestId("reminders").getByText(`Invoice ${number} is overdue`).count(), 0, "no longer overdue");
+
+    const c = await newCtx({ ...PHONE });
+    const cp = await newPage(c, "tds client");
+    await cp.goto(`${BASE}/p#${link.token}`);
+    await cp.getByTestId("portal-invoices").getByRole("button", { name: "View" }).click();
+    assert.equal(await cp.getByTestId("invoice-tds").innerText(), "Received ₹9,000.00 + TDS deducted by client ₹1,000.00");
+    const pageText = await cp.locator("body").innerText();
+    assert.ok(!/194|advice|\d+\s*% TDS/i.test(pageText), "no rate or advice anywhere the client sees");
+    await c.close();
+    await ctx.close();
+  }
+
   if (errors.length) throw new Error(`Browser errors:\n${errors.join("\n")}`);
   console.log("✓ fix-list checks passed with no browser errors");
 } finally {

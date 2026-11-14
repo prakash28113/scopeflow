@@ -41,25 +41,45 @@ export interface Totals {
   extras: number;
   contract: number;
   scheduled: number;
+  /** Settled: cash + TDS. */
   paid: number;
+  /** Cash received. */
+  cash: number;
+  /** TDS the client withheld. */
+  tds: number;
   outstanding: number;
   unscheduled: number;
 }
 
-/** Money received against a payment milestone (part payments count). */
-export function received(m: { amount_cents: number; status: string; paid_cents?: number | null }): number {
+type Settled = { amount_cents: number; status: string; paid_cents?: number | null; tds_cents?: number | null };
+
+/**
+ * How much of a payment milestone is settled: cash received plus any TDS the client withheld
+ * (part payments count). Use it for what's still due. For money that actually came in, use
+ * cashReceived().
+ */
+export function received(m: Settled): number {
   return m.paid_cents !== undefined && m.paid_cents !== null ? Number(m.paid_cents) : m.status === "paid" ? Number(m.amount_cents) : 0;
 }
+
+/** TDS the client says it withheld on this payment (a record only). */
+export const tdsOf = (m: { tds_cents?: number | null }) => Math.max(0, Number(m.tds_cents ?? 0));
+
+/** Cash actually received: settled minus TDS. Every "money in" figure uses this. */
+export const cashReceived = (m: Settled) => Math.max(0, received(m) - tdsOf(m));
 
 export function projectTotals(
   budgetMinor: number,
   extrasMinor: number,
-  milestones: { amount_cents: number; status: string; paid_cents?: number | null }[],
+  milestones: Settled[],
 ): Totals {
   const contract = budgetMinor + extrasMinor;
   const scheduled = milestones.reduce((s, m) => s + Number(m.amount_cents), 0);
   const paid = milestones.reduce((s, m) => s + received(m), 0);
+  const tds = milestones.reduce((s, m) => s + tdsOf(m), 0);
   return {
+    cash: paid - tds,
+    tds,
     original: budgetMinor,
     extras: extrasMinor,
     contract,
