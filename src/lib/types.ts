@@ -73,6 +73,7 @@ export type Milestone = {
   change_order_id: string | null;
   /** Money received so far (part payments add up). */
   paid_cents?: number;
+  tds_cents?: number;
 };
 
 export type ScopeData = {
@@ -257,7 +258,7 @@ export type PortalView = {
     work_completed_at: string | null;
     decision: null | { client_name: string; comment: string | null; created_at: string };
   }[];
-  milestones: { title: string; amount_cents: number; due_date: string | null; status: "pending" | "paid"; paid_at: string | null; paid_cents?: number; invoice_number?: string | null }[];
+  milestones: { title: string; amount_cents: number; due_date: string | null; status: "pending" | "paid"; paid_at: string | null; paid_cents?: number; tds_cents?: number; invoice_number?: string | null }[];
   /** Invoices the freelancer issued for this project (void ones are hidden). */
-  invoices?: (import("./invoice").InvoiceDoc & { paid: boolean; paid_at: string | null; paid_cents?: number })[];
+  invoices?: (import("./invoice").InvoiceDoc & { paid: boolean; paid_at: string | null; paid_cents?: number; tds_cents?: number })[];
 };

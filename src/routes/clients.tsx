@@ -5,7 +5,7 @@ import { useState, type FormEvent } from "react";
 import { methodLabel } from "@/lib/payments";
 import { invoiceStatus } from "@/lib/invoice";
 import { localToday } from "@/lib/upcoming";
-import { received } from "@/lib/pricing";
+import { cashReceived, received } from "@/lib/pricing";
 import { OUTSTANDING_LABEL } from "@/lib/outstanding";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router";
 import { z } from "zod";
@@ -57,13 +57,14 @@ const OPEN: ProjectStatus[] = ["draft", "awaiting_approval", "changes_requested"
 
 /** Contracted, paid and outstanding per currency (approved work only). */
 function money(projects: ClientProject[]) {
-  const by = new Map<string, { contracted: number; paid: number; count: number }>();
+  const by = new Map<string, { contracted: number; paid: number; cash: number; count: number }>();
   for (const p of projects) {
     if (p.status !== "active" && p.status !== "completed") continue;
-    const t = by.get(p.currency) ?? { contracted: 0, paid: 0, count: 0 };
+    const t = by.get(p.currency) ?? { contracted: 0, paid: 0, cash: 0, count: 0 };
     t.count += 1;
     t.contracted += Number(p.budget_cents) + Number(p.approved_extras_cents);
-    t.paid += p.milestones.reduce((s, m) => s + received(m), 0);
+    t.paid += p.milestones.reduce((s, m) => s + received(m), 0); // settled, for what's unpaid
+    t.cash += p.milestones.reduce((s, m) => s + cashReceived(m), 0); // money in
     by.set(p.currency, t);
   }
   // Same definition as the dashboard (src/lib/outstanding.ts): contract minus received.
@@ -76,7 +77,7 @@ export const clientsQuery = {
   queryFn: async () => {
     const { data, error } = await supabase
       .from("clients")
-      .select("id, name, email, company, phone, notes, billing_address, gstin, state_code, archived_at, created_at, projects(id, title, status, currency, budget_cents, approved_extras_cents, created_at, milestones(title, amount_cents, status, paid_at, payment_note, paid_cents))")
+      .select("id, name, email, company, phone, notes, billing_address, gstin, state_code, archived_at, created_at, projects(id, title, status, currency, budget_cents, approved_extras_cents, created_at, milestones(title, amount_cents, status, paid_at, payment_note, paid_cents, tds_cents))")
       .order("name");
     if (error) throw error;
     return data as unknown as ClientRow[];
@@ -207,7 +208,7 @@ export function ClientPage() {
       const { data, error } = await supabase
         .from("clients")
         .select(
-          "id, name, email, company, phone, notes, billing_address, gstin, state_code, archived_at, created_at, projects(id, title, status, currency, budget_cents, approved_extras_cents, created_at, approved_at, milestones(title, amount_cents, status, paid_at, payment_note, paid_cents), scope_decisions(decision, client_name, created_at), change_orders(number, title, status, amount_cents, decided_at), client_invoices(id, number, issue_date, due_date, amount_cents, voided_at, milestones(status, paid_cents)), payments(id, amount_cents, paid_on, method, reference))",
+          "id, name, email, company, phone, notes, billing_address, gstin, state_code, archived_at, created_at, projects(id, title, status, currency, budget_cents, approved_extras_cents, created_at, approved_at, milestones(title, amount_cents, status, paid_at, payment_note, paid_cents, tds_cents), scope_decisions(decision, client_name, created_at), change_orders(number, title, status, amount_cents, decided_at), client_invoices(id, number, issue_date, due_date, amount_cents, voided_at, milestones(status, paid_cents, tds_cents)), payments(id, amount_cents, paid_on, method, reference))",
         )
         .eq("id", id!)
         .maybeSingle();
@@ -393,7 +394,8 @@ export function ClientPage() {
                 {totals.map((t) => (
                   <div key={t.currency} className="space-y-1">
                     <div className="flex justify-between"><dt className="text-muted">Contracted</dt><dd>{formatMoney(t.contracted, t.currency)}</dd></div>
-                    <div className="flex justify-between"><dt className="text-muted">Received</dt><dd className="text-positive">{formatMoney(t.paid, t.currency)}</dd></div>
+                    <div className="flex justify-between"><dt className="text-muted">Received</dt><dd className="text-positive">{formatMoney(t.cash, t.currency)}</dd></div>
+                    {t.paid > t.cash ? <div className="flex justify-between"><dt className="text-muted">TDS deducted by client</dt><dd>{formatMoney(t.paid - t.cash, t.currency)}</dd></div> : null}
                     <div className="flex justify-between font-semibold"><dt>{OUTSTANDING_LABEL.contract}</dt><dd>{formatMoney(t.outstanding, t.currency)}</dd></div>
                     <div className="flex justify-between"><dt className="text-muted">Average project</dt><dd>{formatMoney(Math.round(t.contracted / t.count), t.currency)}</dd></div>
                   </div>

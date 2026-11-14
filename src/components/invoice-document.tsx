@@ -29,7 +29,7 @@ const STAMP: Record<InvoiceStatus, { text: string; cls: string } | null> = {
 };
 
 /** A printable invoice. Add `data-print-scope` around it (it already has it) and use PrintButton to save as PDF. */
-export function InvoiceDocument({ inv, status, paidAt, paidCents = 0, className }: { inv: InvoiceDoc; status: InvoiceStatus; paidAt?: string | null; paidCents?: number; className?: string }) {
+export function InvoiceDocument({ inv, status, paidAt, paidCents = 0, tdsCents = 0, className }: { inv: InvoiceDoc; status: InvoiceStatus; paidAt?: string | null; paidCents?: number; tdsCents?: number; className?: string }) {
   const fmt = (n: number) => formatMoney(Number(n), inv.currency);
   const taxes = taxRows(inv);
   const words = amountInWords(Number(inv.amount_cents), inv.currency);
@@ -115,6 +115,14 @@ export function InvoiceDocument({ inv, status, paidAt, paidCents = 0, className 
               <td className="pt-3" colSpan={inv.sac_code ? 2 : 1}>Total</td>
               <td className="pt-3 text-right" data-testid="invoice-total">{fmt(inv.amount_cents)}</td>
             </tr>
+            {tdsCents > 0 && status !== "void" ? (
+              <tr>
+                <td className="pt-1 text-muted" colSpan={inv.sac_code ? 2 : 1} data-testid="invoice-tds">
+                  Received {fmt(Math.max(0, paidCents - tdsCents))} + TDS deducted by client {fmt(tdsCents)}
+                </td>
+                <td className="pt-1 text-right" />
+              </tr>
+            ) : null}
             {status !== "paid" && status !== "void" && paidCents > 0 ? (
               <>
                 <tr>

@@ -67,7 +67,7 @@ describe("pricing", () => {
       { amount_cents: 150000, status: "pending" },
       { amount_cents: 27625, status: "pending" },
     ]);
-    expect(t).toEqual({ original: 300000, extras: 27625, contract: 327625, scheduled: 327625, paid: 150000, outstanding: 177625, unscheduled: 0 });
+    expect(t).toEqual({ original: 300000, extras: 27625, contract: 327625, scheduled: 327625, paid: 150000, cash: 150000, tds: 0, outstanding: 177625, unscheduled: 0 });
     expect(increasePercent(300000, 27625)).toBe(9.2);
     expect(increasePercent(0, 100)).toBeNull();
   });
