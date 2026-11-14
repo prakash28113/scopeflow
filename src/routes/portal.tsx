@@ -1,3 +1,4 @@
+import { PORTAL_REFERRAL_URL } from "@/lib/client-message";
 import { useEffect, useState } from "react";
 import { Alert, Card, Logo, Meter, StatusBadge, Tag } from "@/components/ui";
 import { AgreementTerms, RevisionMeter } from "@/components/agreement";
@@ -344,9 +345,11 @@ function Shell({ children, from }: { children: React.ReactNode; from?: string })
         {children}
         <footer className="mt-14 flex flex-wrap items-center justify-between gap-3 border-t border-line pt-6 text-[12px] text-muted">
           <span>{from ? `Shared privately by ${from}. Please don't forward this link.` : ""}</span>
-          <span className="inline-flex items-center gap-1.5">
-            Powered by <Logo className="text-[11px]" />
-          </span>
+          {/* The one way a client discovers ScopeFlow. Opens a fresh page so the visit is counted as from a client link. */}
+          <a href={PORTAL_REFERRAL_URL} target="_blank" rel="noopener" className="inline-flex items-center gap-1.5 rounded hover:text-ink" data-testid="made-with">
+            Made with <Logo className="text-[11px]" />
+            <span className="hidden sm:inline">· free for freelancers</span>
+          </a>
         </footer>
       </div>
     </div>
