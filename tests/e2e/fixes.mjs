@@ -631,6 +631,7 @@ window.Razorpay.prototype.open=function(){var o=this.o;window.__rzp=o;window.__r
     await w.getByLabel("Password").fill(PASSWORD);
     await w.getByRole("button", { name: "Sign in" }).click();
     await w.waitForURL("**/dashboard");
+    await w.locator(".app-console").waitFor(); // the signed-in shell has rendered
     // RT4-05: placeholders on the dark panel are dark.
     const band = await w.evaluate(() => {
       const el = document.createElement("div");

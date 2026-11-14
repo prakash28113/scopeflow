@@ -54,6 +54,18 @@ await db.exec(`
     execute format('with t as (%s) select coalesce(jsonb_agg(t), ''[]''::jsonb) from t', p_sql) into r;
     return r;
   end $fn$;
+  -- Stand-in only: issued invoices are locked, so a test that needs an overdue one moves its dates here.
+  create or replace function public.e2e_set_invoice_due(p_number text, p_days integer) returns integer
+  language plpgsql security definer set search_path = '' as $fn$
+  declare n integer;
+  begin
+    alter table public.client_invoices disable trigger user;
+    update public.client_invoices set issue_date = public._today_india() - 30, due_date = public._today_india() + p_days where number = p_number;
+    get diagnostics n = row_count;
+    alter table public.client_invoices enable trigger user;
+    return n;
+  end $fn$;
+  revoke all on function public.e2e_set_invoice_due(text, integer) from public, anon, authenticated;
   revoke all on function public.e2e_auth_query(text) from public, anon, authenticated;
   grant execute on function public.e2e_auth_query(text) to service_role;
   alter table auth.users add column if not exists encrypted_password text;
@@ -263,6 +275,15 @@ async function auth(req, res, url) {
   if (path === "/__test/razorpay-status" && req.method === "GET") {
     rzpStatus = url.searchParams.get("status") === "authenticated" ? "authenticated" : "active";
     return json(res, 200, { status: rzpStatus });
+  }
+  if (path === "/__test/invoice-due" && req.method === "GET") {
+    // Moves an invoice's dates so tests can have one that's overdue (issued 30 days ago, due ?days from today).
+    await q("select public.e2e_set_invoice_due($1, $2::int) as n", [url.searchParams.get("number"), url.searchParams.get("days")]);
+    return json(res, 200, {});
+  }
+  if (path === "/__test/client-phone" && req.method === "GET") {
+    await q("update public.clients set phone = nullif($2, '') where email = $1 returning id", [url.searchParams.get("email"), url.searchParams.get("phone") ?? ""]);
+    return json(res, 200, {});
   }
   if (path === "/__test/reset-rate-limits" && req.method === "GET") {
     // The walkthrough ends by locking this machine's IP out of client links; later scripts start clean.

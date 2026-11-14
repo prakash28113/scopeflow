@@ -20,6 +20,9 @@ drop function if exists public.admin_activation, public.admin_usage_counts, publ
   public.set_notification_prefs, public.notify_claim, public.notify_mark, public._queue_owner_email,
   public._blog_spelling, public._brand_spelling cascade;
 drop table if exists public.usage_events, public.owner_emails cascade;
+-- Payment nudges (if installed).
+drop function if exists public.record_nudge cascade;
+drop table if exists public.nudges cascade;
 drop function if exists public._number_quote, public._next_quote_number cascade;
 -- Brand & growth (if installed).
 drop function if exists public.set_signup_source, public._require_feature, public._has_feature, public._blog_unique_meta, public.admin_signup_sources cascade;

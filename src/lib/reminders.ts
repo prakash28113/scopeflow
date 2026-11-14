@@ -6,7 +6,8 @@ export const DEADLINE_SOON_DAYS = 3;
 export const LINK_EXPIRY_DAYS = 3;
 
 export type ReminderTone = "danger" | "warning" | "info";
-export type Reminder = { id: string; tone: ReminderTone; title: string; detail: string; href: string; sort: number; followUpId?: string };
+/** nudge: set on overdue invoices, so the card can offer the one-tap payment nudge. */
+export type Reminder = { id: string; tone: ReminderTone; title: string; detail: string; href: string; sort: number; followUpId?: string; nudge?: { id: string; number: string; due_date: string; currency: string; balanceCents: number } };
 
 export type ReminderInput = {
   today: string; // local YYYY-MM-DD
@@ -60,7 +61,7 @@ export function buildReminders(x: ReminderInput): Reminder[] {
   for (const i of x.invoices) {
     if (i.voided_at || i.paid || !i.due_date || i.due_date >= x.today) continue;
     const late = daysBetween(i.due_date, x.today);
-    out.push({ id: `inv-${i.id}`, tone: "danger", title: `Invoice ${i.number} is overdue`, detail: `${formatMoney(i.amount_cents - i.paid_cents, i.currency)} due ${days(late)} ago · ${name(i.project_id)}`, href: `/invoices/${i.id}`, sort: -late });
+    out.push({ id: `inv-${i.id}`, tone: "danger", title: `Invoice ${i.number} is overdue`, detail: `${formatMoney(i.amount_cents - i.paid_cents, i.currency)} due ${days(late)} ago · ${name(i.project_id)}`, href: `/invoices/${i.id}`, sort: -late, nudge: { id: i.id, number: i.number, due_date: i.due_date, currency: i.currency, balanceCents: Math.max(0, i.amount_cents - i.paid_cents) } });
   }
   // 4. Overdue payments without an invoice (invoiced ones are covered above).
   for (const m of x.payments) {

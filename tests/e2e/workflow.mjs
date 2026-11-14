@@ -155,7 +155,8 @@ try {
   await f.goto(`${BASE}/pricing`);
   await f.getByRole("heading", { name: /Simple pricing/ }).waitFor();
   await f.getByText("Recommended").waitFor();
-  // Opens on monthly prices; yearly is one tap away.
+  // Opens on monthly prices; yearly is one tap away (once the app has taken over the prerendered page).
+  await f.waitForFunction(() => document.documentElement.dataset.app === "ready");
   assert.equal(await f.getByRole("radio", { name: "Monthly" }).getAttribute("aria-checked"), "true");
   await f.getByText("₹499").first().waitFor();
   await f.getByRole("radio", { name: /Yearly/ }).click();
@@ -390,7 +391,7 @@ try {
   await f.goto(`${BASE}/dashboard`);
   assert.match(await f.getByTestId("feedback-link").getAttribute("href"), /^mailto:.+\?subject=ScopeFlow%20feedback&body=.*Page%3A%20%2Fdashboard/);
   await f.getByTestId("upcoming").getByText("50% deposit", { exact: true }).waitFor();
-  await f.getByTestId("upcoming").getByText("Payment for Brand identity for Northwind Coffee").waitFor();
+  await f.getByTestId("upcoming").getByText("Payment for Brand identity for Northwind Coffee").first().waitFor(); // both payments can fall inside the 14-day window
   await f.getByText(/^In 3 days/).waitFor();
 
   // ---------------------------------------------------------- revisions + scope check
@@ -713,10 +714,93 @@ try {
     await shot(f, `rt4-04-invoices-${width}`, false);
   }
   await f.setViewportSize({ width: 1280, height: 900 });
+
+  step("payment nudge: one tap opens WhatsApp or email with a ready message; ScopeFlow sends nothing");
+  {
+    const AUTH_TEST = "http://127.0.0.1:54321/auth/v1/__test";
+    const number = `RS-${year}-001`;
+    await f.context().route("https://wa.me/**", (route) => route.fulfill({ contentType: "text/html", body: "<title>WhatsApp</title>" }));
+    // Not due for a while: no Nudge anywhere.
+    await fetch(`${AUTH_TEST}/invoice-due?number=${number}&days=10`);
+    await f.goto(invoiceUrl);
+    await f.getByTestId("invoice-document").waitFor();
+    assert.equal(await f.getByTestId("nudge-button").count(), 0, "no Nudge more than 3 days before the due date");
+    // Due in 2 days: Nudge shows, Firm is disabled, the text says "is due on".
+    await fetch(`${AUTH_TEST}/invoice-due?number=${number}&days=2`);
+    await f.reload();
+    await f.getByTestId("nudge-button").click();
+    const sheet = f.getByTestId("nudge-sheet");
+    await sheet.waitFor();
+    assert.equal(await sheet.getByRole("radio", { name: "Gentle" }).isChecked(), true);
+    assert.equal(await sheet.getByRole("radio", { name: "Firm" }).isDisabled(), true);
+    assert.match(await sheet.getByTestId("nudge-message").inputValue(), new RegExp(`^Hi Dana, a quick reminder: invoice ${number} for ₹206\\.50 is due on \\d{1,2} [A-Z][a-z]{2}\\.`));
+    await sheet.getByRole("button", { name: "Cancel" }).click();
+    // Overdue by 3 days, client without a phone: email only, with a way to add the phone.
+    await fetch(`${AUTH_TEST}/invoice-due?number=${number}&days=-3`);
+    await fetch(`${AUTH_TEST}/client-phone?email=dana@northwind.test&phone=`);
+    await f.reload();
+    await f.getByTestId("nudge-button").click();
+    await sheet.getByTestId("nudge-no-phone").getByRole("link", { name: "Add the client's phone to nudge on WhatsApp" }).waitFor();
+    assert.equal(await sheet.getByTestId("nudge-whatsapp").count(), 0);
+    const mailHref = await sheet.getByTestId("nudge-email").getAttribute("href");
+    assert.ok(mailHref.startsWith("mailto:dana%40northwind.test?subject=") && decodeURIComponent(mailHref).includes(`Reminder: invoice ${number} (₹206.50)`));
+    assert.equal(await sheet.getByRole("radio", { name: "Firm" }).isEnabled(), true);
+    await sheet.getByRole("button", { name: "Cancel" }).click();
+    // With a phone: WhatsApp to +91…, the invoice number and the balance in the text, and no link in it.
+    await fetch(`${AUTH_TEST}/client-phone?email=dana@northwind.test&phone=${encodeURIComponent("98765 43210")}`);
+    await f.reload();
+    await f.getByTestId("nudge-button").click();
+    await sheet.getByTestId("nudge-whatsapp").waitFor();
+    const gentle = await sheet.getByTestId("nudge-message").inputValue();
+    assert.match(gentle, new RegExp(`invoice ${number} for ₹206\\.50 was due on \\d{1,2} [A-Z][a-z]{2}\\. You can pay by UPI to `));
+    assert.ok(!/https?:|\/p[?#]/.test(gentle), "no link in the message");
+    await sheet.getByRole("radio", { name: "Firm" }).check();
+    const firm = await sheet.getByTestId("nudge-message").inputValue();
+    assert.match(firm, /is now 3 days overdue\. Please pay by UPI to .+ or let me know when to expect it\./);
+    const waHref = await sheet.getByTestId("nudge-whatsapp").getAttribute("href");
+    assert.ok(waHref.startsWith("https://wa.me/919876543210?text="), waHref.slice(0, 40));
+    assert.equal(decodeURIComponent(waHref.split("?text=")[1]), firm);
+    for (const href of await sheet.locator("a[href]").evaluateAll((els) => els.map((el) => el.getAttribute("href")))) assert.ok(!decodeURIComponent(href).includes("/p?") && !decodeURIComponent(href).includes("/p#"), "no client link in any nudge link");
+    // Usable on a small phone: no sideways scroll, buttons at least 44px tall.
+    await f.setViewportSize({ width: 360, height: 760 });
+    const box = await sheet.boundingBox();
+    assert.ok(box.x >= 0 && box.x + box.width <= 360, "the sheet fits a 360px screen");
+    for (const id of ["nudge-whatsapp", "nudge-email"]) assert.ok((await sheet.getByTestId(id).boundingBox()).height >= 44, `${id} is at least 44px tall`);
+    await shot(f, "31-nudge-sheet-mobile", false);
+    await f.setViewportSize({ width: 1280, height: 900 });
+    {
+      const { readFileSync } = await import("node:fs");
+      const { createRequire } = await import("node:module");
+      await f.evaluate(readFileSync(createRequire(import.meta.url).resolve("axe-core/axe.min.js"), "utf8"));
+      const serious = await f.evaluate(async () => (await window.axe.run(document.querySelector('[data-testid="nudge-sheet"]'), { resultTypes: ["violations"] })).violations.filter((v) => v.impact === "serious" || v.impact === "critical").map((v) => `${v.id}: ${v.nodes[0].target.join(" ")}`));
+      assert.deepEqual(serious, [], "axe on the nudge sheet");
+    }
+    // Tapping the button hands off to WhatsApp and records the nudge without waiting.
+    const [popup] = await Promise.all([f.context().waitForEvent("page"), sheet.getByTestId("nudge-whatsapp").click()]);
+    assert.ok(popup.url().startsWith("https://wa.me/919876543210"));
+    await popup.close();
+    await f.getByText("Nudge recorded. We'll remind you to check in 3 days.").waitFor();
+    assert.equal(await sheet.count(), 0);
+    // The invoices list and the dashboard's Reminders offer the same nudge for the overdue invoice.
+    await f.goto(`${BASE}/invoices`);
+    await f.getByTestId("invoice-list").getByRole("button", { name: `Nudge client about ${number}` }).waitFor();
+    await f.goto(`${BASE}/dashboard`);
+    const overdueRow = f.getByTestId("reminders").locator("li", { hasText: `Invoice ${number} is overdue` });
+    await overdueRow.getByRole("button", { name: `Nudge client about ${number}` }).click();
+    await sheet.getByTestId("nudge-message").waitFor();
+    await sheet.getByRole("button", { name: "Cancel" }).click();
+    // Recorded on the project's timeline; the check-in appears in 3 days, not today.
+    await f.goto(menuUrl);
+    await f.getByText(`Payment nudge sent (WhatsApp, firm) for ${number}`).first().waitFor();
+    await f.goto(`${BASE}/dashboard`);
+    await f.getByTestId("reminders").waitFor();
+    assert.equal(await f.getByTestId("reminders").getByText(`Check payment for ${number}`).count(), 0, "the follow-up isn't due yet");
+  }
   await f.goto(invoiceUrl);
   await f.getByRole("button", { name: "Void invoice" }).click();
   await confirmDialog(f);
   await f.getByText(/Voided .* Clients no longer see this invoice/).waitFor();
+  assert.equal(await f.getByTestId("nudge-button").count(), 0, "a voided invoice has no Nudge");
   await f.goto(menuUrl);
   await f.getByRole("button", { name: "Create invoice" }).first().waitFor();
   await c.reload();

@@ -3,8 +3,11 @@
  * Keep it true to what's built: ScopeFlow doesn't send reminders to clients.
  */
 
-/** The Free card's payments line. */
-export const FREE_REMINDERS_LINE = "Payment tracking and follow-ups";
+/**
+ * The Free card's payments line. "One-tap reminders" is the payment nudge: the freelancer taps and
+ * their own WhatsApp or email app sends it. ScopeFlow sends nothing, so never call it automatic.
+ */
+export const FREE_REMINDERS_LINE = "Payment tracking and one-tap reminders";
 
 /** The Solo card, top to bottom. Every line is something Solo does today. */
 export const SOLO_LINES = [

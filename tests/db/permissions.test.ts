@@ -21,7 +21,7 @@ const FREELANCER_FUNCTIONS = [
   "send_scope", "recall_scope", "resolve_revision", "create_change_order", "withdraw_change_order",
   "complete_change_order_work", "set_milestone_paid", "complete_project", "cancel_project",
   "unread_notification_count", "mark_notifications_seen", "my_plan", "join_early_access", "update_client", "set_payment_details", "set_invoice_details", "update_client_billing", "create_invoice", "void_invoice", "set_deliverable_progress", "add_expense", "delete_expense", "set_signup_source", "record_payment", "delete_payment", "add_follow_up", "set_follow_up_done", "delete_follow_up", "log_client_request", "create_client", "save_template", "delete_template",
-  "add_payment", "archive_client", "delete_client", "log_usage_event", "set_notification_prefs",
+  "add_payment", "archive_client", "delete_client", "log_usage_event", "set_notification_prefs", "record_nudge",
   "is_blog_author", "blog_my_posts", "save_blog_post", "delete_blog_post", "create_blog_key", "blog_my_keys", "revoke_blog_key",
 ];
 // Plan changes: never callable from the app. admin_set_plan = SQL editor; process_billing_event = service role (future webhook).
@@ -42,7 +42,7 @@ const SECURITY_DEFINER = [...FREELANCER_FUNCTIONS, ...PORTAL_FUNCTIONS, ...BACK_
 const OWNER_READABLE = [
   "profiles", "clients", "projects", "deliverables", "scope_snapshots", "scope_decisions", "revision_requests",
   "change_orders", "change_order_decisions", "milestones", "activity_log",
-  "subscription_changes", "invoices", "early_access_requests", "client_invoices", "expenses", "payments", "follow_ups", "scope_templates", "usage_events",
+  "subscription_changes", "invoices", "early_access_requests", "client_invoices", "expenses", "payments", "follow_ups", "scope_templates", "usage_events", "nudges",
 ].sort();
 // share_links, subscriptions: column grants only (never the token hash / provider ids).
 const NOT_READABLE = ["owner_emails", "blog_authors", "blog_api_keys", "beta_allowlist", "portal_rate_limits", "share_links", "subscriptions", "billing_events", "provider_plans", "billing_checkouts"].sort();

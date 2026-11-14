@@ -20,12 +20,12 @@ const card = (id: string, interval: "month" | "year" = "month") => {
 };
 const lines = (cardHtml: string) => [...cardHtml.matchAll(/<li[^>]*>(.*?)<\/li>/g)].map((m) => m[1].replace(/<[^>]+>/g, ""));
 
-describe("T2-01 the Free card doesn't promise reminders to clients", () => {
+describe("T2-01 / N-04 the Free card promises only the one-tap reminder the freelancer sends", () => {
   it("uses the decided line", () => {
-    expect(FREE_REMINDERS_LINE).toBe("Payment tracking and follow-ups");
-    expect(lines(card("free"))).toEqual(["2 active projects", "5 clients", "Scope agreements, approvals, revision tracking", "Change orders, quotes and GST invoices", "Payment tracking and follow-ups"]);
+    expect(FREE_REMINDERS_LINE).toBe("Payment tracking and one-tap reminders");
+    expect(lines(card("free"))).toEqual(["2 active projects", "5 clients", "Scope agreements, approvals, revision tracking", "Change orders, quotes and GST invoices", "Payment tracking and one-tap reminders"]);
   });
-  it("no public plan copy says 'reminder'", () => {
+  it("no public plan copy promises automatic reminders", () => {
     const pricing = JSON.stringify(structuredData("/pricing")) + JSON.stringify(PUBLIC_PAGES["/pricing"]) + JSON.stringify(structuredData("/")) + JSON.stringify(PUBLIC_PAGES["/"]);
     const copy = [
       ...Object.values(HIGHLIGHTS).flat(),
@@ -36,7 +36,9 @@ describe("T2-01 the Free card doesn't promise reminders to clients", () => {
       html(createElement(FeatureMatrix, { plans: PLANS })),
       pricing,
     ].join("\n");
-    expect(copy).not.toMatch(/reminder/i);
+    // "One-tap reminders" is true (the freelancer sends it); anything that sounds automatic is not.
+    expect(copy.replace(/one-tap reminders/gi, "")).not.toMatch(/reminder/i);
+    expect(copy).not.toMatch(/auto(matic|mated|matically)?[- ]reminders?|reminders? (are |get )?sent|we remind your client/i);
     expect(copy).toContain(FREE_REMINDERS_LINE);
   });
 });

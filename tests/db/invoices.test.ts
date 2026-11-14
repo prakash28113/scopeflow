@@ -170,7 +170,8 @@ describe("the client page", () => {
 
 describe("migration", () => {
   it("re-runs and rolls back (twice) cleanly, restoring the previous client page", async () => {
-    const fresh = await createDb();
+    // Later migrations that point at invoices (payment nudges) are rolled back first, as in real life.
+    const fresh = await createDb({ upTo: "20261124000000_activation.sql" });
     await fresh.exec(readMigration("20261105000000_client_invoices.sql"));
     await fresh.exec(DOWN);
     await fresh.exec(DOWN);

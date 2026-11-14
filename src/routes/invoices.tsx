@@ -1,3 +1,5 @@
+import { NudgeButton } from "@/components/nudge";
+import { canNudge } from "@/lib/nudge";
 import { useState } from "react";
 import { Link, useParams } from "react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -97,9 +99,9 @@ export function InvoicesPage() {
             {shown.map((r) => {
               const s = statusOf(r, today);
               return (
-                <li key={r.id}>
+                <li key={r.id} className="flex items-center">
                   {/* Phones: number + status, then client (cut with …) + amount. Wider: one line, as before. */}
-                  <Link to={`/invoices/${r.id}`} className="inv-row px-5 py-3.5 hover:bg-sunken/60">
+                  <Link to={`/invoices/${r.id}`} className="inv-row min-w-0 flex-1 px-5 py-3.5 hover:bg-sunken/60">
                     <span className="inv-num num whitespace-nowrap text-[13px] font-medium">{r.number}</span>
                     <span className="inv-client min-w-0 truncate text-[13px] text-muted" data-testid="invoice-client">
                       <span className="hidden sm:inline">· </span>
@@ -114,6 +116,9 @@ export function InvoicesPage() {
                       {r.due_date && s !== "paid" && s !== "void" ? ` · due ${formatDate(r.due_date)}` : ""}
                     </span>
                   </Link>
+                  {r.due_date && canNudge(r, s === "paid", balanceOf(r), today) ? (
+                    <NudgeButton compact className="mr-3" invoice={{ id: r.id, number: r.number, due_date: r.due_date, currency: r.currency, balanceCents: balanceOf(r) }} />
+                  ) : null}
                 </li>
               );
             })}
@@ -168,7 +173,10 @@ export function InvoicePage() {
             </Link>
           ) : null}
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
+          {inv.due_date && canNudge(inv, status === "paid", balanceOf(inv), localToday()) ? (
+            <NudgeButton invoice={{ id: inv.id, number: inv.number, due_date: inv.due_date, currency: inv.currency, balanceCents: balanceOf(inv) }} />
+          ) : null}
           {status !== "void" ? (
             <ActionButton
               variant="secondary"
