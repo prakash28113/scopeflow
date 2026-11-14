@@ -442,10 +442,21 @@ try {
   await shot(f, "09-change-order");
   await f.getByRole("button", { name: "Send for approval" }).click();
   await f.getByText(/Change order sent/).waitFor();
+  // Ready words to tell the client, sent from the freelancer's own WhatsApp or email.
+  {
+    await f.goto(projectUrl);
+    const tell = f.getByTestId("tell-client").first();
+    const words = await tell.getByTestId("tell-client-text").innerText();
+    assert.match(words, /^Hi Dana, I've added change order #1 for “Loyalty card design” on your project page: \$552\.50, \+3 days\. It's outside the scope you approved, so nothing changes until you approve it there\. Thank you!/);
+    const href = await tell.getByTestId("tell-client-whatsapp").getAttribute("href");
+    assert.equal(decodeURIComponent(href.split("?text=")[1]), words);
+    assert.ok(!/https?:\/\/[^ ]*\/p[#?]/.test(words), "no client link in the words");
+  }
 
   step("client approves the change order");
   await c.reload();
   await c.getByText("Change order #1: Loyalty card design").waitFor();
+  assert.equal(await c.getByTestId("made-with").getAttribute("href"), "/?utm_source=client-link&utm_medium=portal");
   await shot(c, "10-portal-change-order-mobile");
   await c.getByRole("button", { name: "Approve", exact: true }).click();
   await c.getByRole("button", { name: "Confirm approval" }).click();
