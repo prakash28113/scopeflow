@@ -8,7 +8,7 @@ Supabase's free plan has no automatic backups, so ScopeFlow makes its own, for f
 
 1. Reads every table in the database: all of `public`, the sign-in accounts (`auth.users`, `auth.identities`) and the record of applied migrations. It uses the existing `SUPABASE_ACCESS_TOKEN` and read-only queries.
 2. Compresses it and encrypts it with AES-256-GCM. The key comes from your `BACKUP_PASSPHRASE` through scrypt (N = 2¹⁷), with a new salt and IV every time. Any change to the file is detected when it's opened.
-3. Proves the backup works. It decrypts the file and loads it into a fresh database built from the migrations, then checks that every row arrived. If anything fails, the run fails and GitHub emails you.
+3. Tests the backup. It decrypts the file and loads it into a fresh database built from the migrations, then checks row counts and foreign-key relationships. If anything fails, the run fails before an artifact is uploaded. Check GitHub notification settings to receive failure alerts.
 4. Keeps the encrypted file as a workflow artifact named `scopeflow-backup-YYYY-MM-DD` for 90 days, the longest GitHub allows. That gives up to 90 daily copies.
 
 The repository is public. Signed-in GitHub users can download artifacts, which is why the file is encrypted before it's uploaded. The log shows only the number of tables and the file size, never any data. Without the passphrase, the file is useless.
@@ -52,7 +52,8 @@ Don't restore over the live database without a fresh backup taken first.
 ## Limits
 
 - Backups are daily, so up to a day of changes can be lost if every run succeeds. You can run the workflow by hand before risky work.
-- Uploaded files aren't covered. ScopeFlow doesn't store any today.
+- Uploaded files aren't covered. Blog images in Supabase Storage need a separate recovery copy; this database backup does not restore their object bytes or storage metadata.
+- Export requests do not share a database snapshot. Writes during export can produce inconsistent relationships; the restore check rejects missing foreign-key references instead of uploading a broken backup. A quiet-time rerun may succeed. This check cannot detect every possible change to values between reads, so these backups are not a substitute for transaction-consistent database backups as the service grows.
 - A backup is only useful together with its passphrase. Test that you can find yours.
 
 ## Tests
@@ -62,4 +63,9 @@ Don't restore over the live database without a fresh backup taken first.
   - wrong passphrase and tampering are rejected;
   - a restore into a fresh database comes back identical, and loading twice changes nothing;
   - the daily restore check passes, and flags a table that doesn't load.
+  - a project created between table reads is rejected if its client was omitted, even when all exported rows load successfully.
 - The daily run itself repeats the restore check on the real data, inside GitHub's runner.
+
+### Local validation of the integrity correction (15 November 2026)
+
+All 588 tests across 73 files passed, including the interleaved-write regression. The 351 unit tests also passed in each of Honolulu, Kiritimati and Kolkata. TypeScript, production build with all six public-page prerenders, secret scan and dependency audit passed. PR GitHub Actions verification remains required; no production backup or restore was run for this correction.
