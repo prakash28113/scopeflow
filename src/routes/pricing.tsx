@@ -3,7 +3,7 @@ import { Link } from "react-router";
 import { Alert } from "@/components/ui";
 import { BetaBadge, SiteFooter } from "@/components/site-footer";
 import { FeatureMatrix, IntervalToggle, PlanCards } from "@/components/plans";
-import { PageSpinner } from "@/components/app-shell";
+import { PageSpinner } from "@/components/route-guards";
 import { useMyPlan, usePlans, type Interval } from "@/lib/plans";
 import { soloCta } from "@/lib/plan-intent";
 import { useAuth } from "@/lib/auth";

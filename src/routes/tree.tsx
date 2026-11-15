@@ -1,5 +1,5 @@
 import type { RouteObject } from "react-router";
-import { PageSpinner, RequireAuth, AppShell } from "../components/app-shell";
+import { PageSpinner, RequireAuth } from "../components/route-guards";
 import NotFound, { RouteError } from "./not-found";
 import { pages } from "./loaders";
 
@@ -34,7 +34,7 @@ export const routes: RouteObject[] = [
         element: <RequireAuth />,
         children: [
           {
-            element: <AppShell />,
+            lazy: async () => ({ Component: (await import("../components/app-shell")).AppShell }),
             children: [
               { path: "/dashboard", lazy: lazy(pages.dashboard) },
               { path: "/projects", lazy: lazy(pages.projects) },
