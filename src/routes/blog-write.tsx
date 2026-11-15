@@ -9,7 +9,7 @@ import { supabase } from "@/lib/supabase";
 import { call } from "@/lib/use-action";
 import { formatDateTime } from "@/lib/format";
 import { BLOG_API_URL, BLOG_IMAGE_PREFIX, uploadBlogImage, useBlogKeys, useIsBlogAuthor, useMyPosts, type MyPost } from "@/lib/blog";
-import { CATEGORIES, categoryOf, readingMinutes, renderMarkdown, type BlogCategory } from "@/lib/blog-content";
+import { CATEGORIES, categoryOf, readingMinutes, renderMarkdown, isTrustedBlogImage, type BlogCategory } from "@/lib/blog-content";
 
 type Draft = { id: string | null; title: string; description: string; category: BlogCategory; body: string; status: "draft" | "published"; cover_image: string | null };
 const EMPTY: Draft = { id: null, title: "", description: "", category: "strategies", body: "", status: "draft", cover_image: null };
@@ -132,6 +132,10 @@ function Editor({ initial, onDone }: { initial: Draft; onDone: () => void }) {
   async function save(publish: boolean, e?: FormEvent) {
     e?.preventDefault();
     setError(null);
+    if (d.cover_image && !isTrustedBlogImage(d.cover_image, BLOG_IMAGE_PREFIX)) {
+      setError("The cover photo must be uploaded to ScopeFlow blog storage. Remove it or upload a new photo.");
+      return;
+    }
     setSaving(publish ? "publish" : "draft");
     const r = await call(() =>
       supabase.rpc("save_blog_post", { p_id: d.id, p: { title: d.title, description: d.description, category: d.category, body: d.body, cover_image: d.cover_image, publish } }),
