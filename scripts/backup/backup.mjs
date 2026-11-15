@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Weekly encrypted backup (run by .github/workflows/backup.yml).
+ * Daily encrypted backup (run by .github/workflows/backup.yml).
  *   SUPABASE_ACCESS_TOKEN  the existing release token (Database access to this project)
  *   BACKUP_PASSPHRASE      a long passphrase only the owner knows (GitHub secret)
  * Reads every table through Supabase's database query endpoint, writes backup/scopeflow-backup-<date>.sfbk,
@@ -51,7 +51,7 @@ async function main() {
 
   if (env.GITHUB_OUTPUT) appendFileSync(env.GITHUB_OUTPUT, `file=backup/${name}\nname=${name.replace(/\.sfbk$/, "")}\n`);
   if (env.GITHUB_STEP_SUMMARY)
-    appendFileSync(env.GITHUB_STEP_SUMMARY, `### Weekly backup\n\n- ✅ Encrypted backup: ${s.tables} tables, ${(file.length / 1024).toFixed(1)} KB\n- ✅ Restore check passed (fresh database, same migrations)\n- Kept for 90 days as a workflow artifact. Only the passphrase holder can read it.\n`);
+    appendFileSync(env.GITHUB_STEP_SUMMARY, `### Daily backup\n\n- ✅ Encrypted backup: ${s.tables} tables, ${(file.length / 1024).toFixed(1)} KB\n- ✅ Restore check passed (fresh database, same migrations)\n- Kept for 90 days as a workflow artifact. Only the passphrase holder can read it.\n`);
 }
 
 /** Loads the backup into an in-memory PostgreSQL (PGlite) with the migrations applied; returns tables whose rows didn't all load. */
