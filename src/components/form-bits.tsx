@@ -8,7 +8,7 @@ export function SubmitButton({
   ...props
 }: ComponentProps<typeof Button> & { pending?: boolean; pendingLabel?: string }) {
   return (
-    <Button type="submit" disabled={pending || props.disabled} aria-busy={pending} {...props}>
+    <Button {...props} type="submit" disabled={pending || props.disabled} aria-busy={pending}>
       {pending ? pendingLabel : children}
     </Button>
   );
@@ -32,22 +32,26 @@ export function ActionButton({
 }) {
   const [pending, setPending] = useState(false);
   const [asking, setAsking] = useState(false);
+  const inFlight = useRef(false);
   const run = async () => {
+    if (inFlight.current) return;
+    inFlight.current = true;
     setPending(true);
     try {
       await onAction();
     } finally {
+      inFlight.current = false;
       setPending(false);
     }
   };
   return (
     <>
       <Button
+        {...props}
         type="button"
         disabled={pending || props.disabled}
         aria-busy={pending}
         onClick={() => (confirm ? setAsking(true) : void run())}
-        {...props}
       >
         {pending ? pendingLabel : children}
       </Button>
