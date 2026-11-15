@@ -1,0 +1,144 @@
+name: Isolated release readiness
+
+on:
+  push:
+    branches: [ci/release-readiness-20261115]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: isolated-release-readiness-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  integration:
+    name: Combined PRs 48–52 — isolated checks only
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    env:
+      CI: true
+      WRANGLER_SEND_METRICS: false
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: 8cae2007fb5422ec6bd7c8e7e5105eaa09c6b8e4
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Combine pinned PR heads in the runner only
+        run: |
+          git config user.name "ScopeFlow isolated integration"
+          git config user.email "integration@example.invalid"
+          git merge --no-ff --no-edit \
+            50ff65ebb401eb105c239c5484ebd8a059ec1ef0 \
+            c36c8f391cad161153be1f7f436c0c8bd9a13a44 \
+            6bcc3da0dae0eb8f196b47a1096e12c2bfe55b44 \
+            7bee161b29e7becd7d4245a609baf81eb3ddf90f \
+            432a849bfeaedd04aa13ad9ecec925cebd4ba04e
+          test "$(git rev-parse HEAD^{tree})" = d21995d53caa3b788895524a63003798779c5864
+          mkdir -p reports
+          git log -1 --format='%H %T' > reports/combined-source.txt
+          git diff --check 8cae2007fb5422ec6bd7c8e7e5105eaa09c6b8e4 HEAD
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: TypeScript and complete combined suite
+        run: |
+          npm run typecheck
+          npx vitest run --maxWorkers=2 --reporter=default --reporter=junit --outputFile.junit=reports/integration-junit.xml
+          node scripts/audit/permission-report.mjs > reports/permission-audit.md
+      - name: Three time zones
+        run: |
+          TZ=Pacific/Honolulu npx vitest run tests/unit --maxWorkers=2
+          TZ=Pacific/Kiritimati npx vitest run tests/unit --maxWorkers=2
+          TZ=Asia/Kolkata npx vitest run tests/unit --maxWorkers=2
+      - name: Production build and security/dependency checks
+        env:
+          VITE_SUPABASE_URL: https://integration-test.invalid
+          VITE_SUPABASE_PUBLISHABLE_KEY: public-test-key
+        run: |
+          npm run build
+          npm run audit:secrets
+          npm run audit:deps
+          npm audit --json > reports/dependency-advisories.json
+      - name: Real PostgreSQL concurrency regressions
+        working-directory: tests/concurrency
+        run: |
+          npm ci
+          npm test
+      - run: npm ci
+        working-directory: tests/e2e
+      - name: Install Chromium
+        working-directory: tests/e2e
+        run: npx playwright install --with-deps chromium
+      - name: Download official PostgREST 12.2.12
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release download v12.2.12 -R PostgREST/postgrest -p "postgrest-v12.2.12-linux-static-x*.tar.xz" -D "$RUNNER_TEMP/pgrst"
+          tar -xJf "$RUNNER_TEMP"/pgrst/*.tar.xz -C "$RUNNER_TEMP"
+          "$RUNNER_TEMP/postgrest" --version
+      - name: Complete browser workflow, fixes and CAPTCHA
+        run: POSTGREST_BIN="$RUNNER_TEMP/postgrest" bash tests/e2e/run.sh
+      - name: Prepare temporary mobile lab sampler
+        run: |
+          cat > tests/e2e/release-perf.mjs <<'JS'
+          import { chromium } from 'playwright';
+          import { writeFileSync } from 'node:fs';
+          const browser = await chromium.launch({args: ['--no-sandbox']});
+          const samples = [];
+          try {
+            for (let run = 1; run <= 5; run++) {
+              const context = await browser.newContext({viewport: {width: 390, height: 844}, isMobile: true, hasTouch: true, deviceScaleFactor: 1, serviceWorkers: 'block'});
+              const page = await context.newPage();
+              const cdp = await context.newCDPSession(page);
+              await cdp.send('Emulation.setCPUThrottlingRate', {rate: 4});
+              await cdp.send('Network.enable');
+              await cdp.send('Network.setCacheDisabled', {cacheDisabled: true});
+              await cdp.send('Network.emulateNetworkConditions', {offline: false, latency: 150, downloadThroughput: 1600000 / 8, uploadThroughput: 750000 / 8});
+              await page.addInitScript(() => {
+                window.__releaseMetrics = {lcp: null, shifts: [], interactions: {}};
+                const m = window.__releaseMetrics;
+                new PerformanceObserver(list => { for (const e of list.getEntries()) m.lcp = e.startTime; }).observe({type: 'largest-contentful-paint', buffered: true});
+                new PerformanceObserver(list => { for (const e of list.getEntries()) if (!e.hadRecentInput) m.shifts.push({time: e.startTime, value: e.value}); }).observe({type: 'layout-shift', buffered: true});
+                if (PerformanceObserver.supportedEntryTypes.includes('event')) new PerformanceObserver(list => { for (const e of list.getEntries()) if (e.interactionId) m.interactions[e.interactionId] = Math.max(m.interactions[e.interactionId] || 0, e.duration); }).observe({type: 'event', buffered: true, durationThreshold: 16});
+              });
+              const response = await page.goto(process.env.BASE || 'http://localhost:3000', {waitUntil: 'networkidle', timeout: 60000});
+              if (response?.status() !== 200) throw new Error('Homepage did not return 200');
+              await page.waitForTimeout(3000);
+              const loading = await page.evaluate(() => structuredClone(window.__releaseMetrics));
+              for (let index = 0; index < 3; index++) {
+                await page.locator('#questions summary').nth(index).click();
+                await page.waitForTimeout(250);
+              }
+              await page.waitForTimeout(1000);
+              const final = await page.evaluate(() => structuredClone(window.__releaseMetrics));
+              let cls = 0, windowValue = 0, first = 0, last = 0;
+              for (const shift of loading.shifts) {
+                if (!windowValue || shift.time - last > 1000 || shift.time - first > 5000) {windowValue = shift.value; first = shift.time;} else windowValue += shift.value;
+                last = shift.time;
+                cls = Math.max(cls, windowValue);
+              }
+              const durations = Object.values(final.interactions);
+              samples.push({run, lcpMs: loading.lcp, cls, labInpCandidateMs: durations.length ? Math.max(...durations) : null, measuredInteractions: durations.length});
+              await context.close();
+            }
+            const result = {conditions: {viewport: '390x844', coldCache: true, cpuSlowdown: 4, networkLatencyMs: 150, downloadBitsPerSecond: 1600000, uploadBitsPerSecond: 750000, runs: 5, target: 'isolated localhost preview'}, limitations: ['Lab samples only, not production or real-user Core Web Vitals.', 'labInpCandidateMs is the maximum recorded Event Timing duration for three FAQ clicks, not a representative field INP.', 'null means no qualifying Event Timing entry was recorded; it does not mean zero latency.', 'No before/after comparison or claimed performance improvement.'], samples};
+            writeFileSync('reports/mobile-lab.json', JSON.stringify(result, null, 2));
+            console.log(JSON.stringify(result));
+          } finally { await browser.close(); }
+          JS
+          node --check tests/e2e/release-perf.mjs
+      - name: Five cold mobile lab runs on the isolated preview
+        run: E2E_SCRIPT=release-perf.mjs POSTGREST_BIN="$RUNNER_TEMP/postgrest" bash tests/e2e/run.sh
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: isolated-release-readiness-reports
+          path: |
+            reports/
+            tests/e2e/shots/
+            tests/e2e/.logs/
+          retention-days: 30
