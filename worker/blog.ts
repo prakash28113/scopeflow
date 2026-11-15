@@ -16,6 +16,7 @@ import {
   escapeHtml,
   formatPostDate,
   imagePrefix,
+  isTrustedBlogImage,
   readingMinutes,
   renderMarkdown,
   type BlogPost,
@@ -107,16 +108,17 @@ export function fillShell(shell: string, p: Page): string {
 
 const header = `<header class="border-b border-line bg-surface/80"><div class="mx-auto flex h-16 max-w-6xl items-center justify-between gap-3 px-4 sm:px-6"><div class="flex items-center gap-3"><a href="/" aria-label="ScopeFlow home" class="text-[15px] font-semibold text-ink">ScopeFlow</a><span class="h-5 w-px bg-line" aria-hidden="true"></span><a href="/blog" class="text-[14px] font-semibold text-ink">Blog</a></div><nav class="flex items-center gap-2" aria-label="Main"><a href="/#product" class="hidden px-3 text-[14px] font-medium text-ink-2 md:inline">Product</a><a href="/#how" class="hidden px-3 text-[14px] font-medium text-ink-2 md:inline">How it works</a><a href="/pricing" class="px-2 text-[14px] font-medium text-ink-2 sm:px-3">Pricing</a><a href="/login" class="hidden px-3 text-[14px] font-medium text-ink-2 sm:inline">Sign in</a><a href="/signup" class="rounded-lg bg-accent px-3 py-1.5 text-[13px] font-semibold text-white">Start free</a></nav></div></header>`;
 
-const card = (p: ListItem) => {
+const card = (p: ListItem, trustedPrefix: string) => {
   const c = categoryOf(p.category);
-  const img = p.cover_image ? `<img src="${escapeHtml(p.cover_image)}" alt="" loading="lazy" class="mb-4 aspect-[16/9] w-full rounded-xl object-cover">` : "";
+  const img = p.cover_image && isTrustedBlogImage(p.cover_image, trustedPrefix) ? `<img src="${escapeHtml(p.cover_image)}" alt="" loading="lazy" class="mb-4 aspect-[16/9] w-full rounded-xl object-cover">` : "";
   return `<article><a href="/blog/${escapeHtml(p.slug)}">${img}<p class="text-[12px] font-semibold uppercase tracking-[0.06em]" style="color:${c.tone}">${escapeHtml(c.label)}</p><h2 class="mt-1.5 text-[18px] font-semibold leading-snug text-ink">${escapeHtml(p.title)}</h2></a><p class="mt-2 text-[14px] text-ink-2">${escapeHtml(p.description)}</p><p class="mt-3 text-[13px] text-muted"><time datetime="${escapeHtml(p.published_at)}">${formatPostDate(p.published_at)}</time></p></article>`;
 };
 
 const ORG = { "@type": "Organization", "@id": `${SITE_URL}/#organization`, name: SITE_NAME, url: `${SITE_URL}/`, logo: `${SITE_URL}/icon-512.png` };
 
-export function listPage(posts: ListItem[]): Page {
-  const body = `<div class="min-h-dvh bg-canvas">${header}<main class="mx-auto max-w-6xl px-4 pb-8 pt-10 sm:px-6 sm:pt-14"><div class="max-w-2xl"><p class="text-[13px] font-semibold uppercase tracking-[0.08em] text-accent">The ScopeFlow blog</p><h1 class="display mt-3 text-[38px] font-semibold leading-[1.05] text-ink sm:text-[52px]">Run your freelance business better.</h1><p class="mt-4 text-[17px] leading-relaxed text-ink-2">${escapeHtml(BLOG_DESCRIPTION)}</p></div><nav class="mt-8 flex flex-wrap gap-2" aria-label="Categories">${CATEGORIES.map((c) => `<a href="/blog?category=${c.id}" class="rounded-full border border-line px-3.5 py-1.5 text-[13px]">${escapeHtml(c.label)}</a>`).join("")}</nav><div class="mt-10 grid grid-cols-1 gap-x-8 gap-y-12 sm:grid-cols-2 lg:grid-cols-3">${posts.map(card).join("")}</div></main></div>`;
+export function listPage(posts: ListItem[], supabaseUrl = ""): Page {
+  const trustedPrefix = imagePrefix(supabaseUrl);
+  const body = `<div class="min-h-dvh bg-canvas">${header}<main class="mx-auto max-w-6xl px-4 pb-8 pt-10 sm:px-6 sm:pt-14"><div class="max-w-2xl"><p class="text-[13px] font-semibold uppercase tracking-[0.08em] text-accent">The ScopeFlow blog</p><h1 class="display mt-3 text-[38px] font-semibold leading-[1.05] text-ink sm:text-[52px]">Run your freelance business better.</h1><p class="mt-4 text-[17px] leading-relaxed text-ink-2">${escapeHtml(BLOG_DESCRIPTION)}</p></div><nav class="mt-8 flex flex-wrap gap-2" aria-label="Categories">${CATEGORIES.map((c) => `<a href="/blog?category=${c.id}" class="rounded-full border border-line px-3.5 py-1.5 text-[13px]">${escapeHtml(c.label)}</a>`).join("")}</nav><div class="mt-10 grid grid-cols-1 gap-x-8 gap-y-12 sm:grid-cols-2 lg:grid-cols-3">${posts.map((post) => card(post, trustedPrefix)).join("")}</div></main></div>`;
   return {
     path: "/blog",
     title: BLOG_TITLE,
@@ -146,7 +148,8 @@ export function listPage(posts: ListItem[]): Page {
 export function postPage(post: BlogPost, posts: ListItem[], supabaseUrl = ""): Page {
   const c = categoryOf(post.category);
   const url = `${SITE_URL}/blog/${post.slug}`;
-  const body = `<div class="min-h-dvh bg-canvas">${header}<main><article class="mx-auto max-w-[720px] px-4 pb-6 pt-10 sm:px-6 sm:pt-14"><nav aria-label="Breadcrumb" class="text-[13px] text-muted"><a href="/blog">Blog</a> / <a href="/blog?category=${c.id}" style="color:${c.tone}">${escapeHtml(c.label)}</a></nav><h1 class="display mt-4 text-[34px] font-semibold leading-[1.08] text-ink sm:text-[46px]">${escapeHtml(post.title)}</h1><p class="mt-4 text-[18px] leading-relaxed text-ink-2">${escapeHtml(post.description)}</p><p class="mt-5 text-[14px] text-muted"><span class="font-medium text-ink">${escapeHtml(post.author_name)}</span> · <time datetime="${escapeHtml(post.published_at)}">${formatPostDate(post.published_at)}</time> · ${readingMinutes(post.body)} min read</p>${post.cover_image ? `<img src="${escapeHtml(post.cover_image)}" alt="${escapeHtml(post.title)}" class="mt-8 aspect-[5/2] w-full rounded-2xl object-cover">` : ""}<div class="blog-prose mt-10">${renderMarkdown(post.body, { imagePrefix: supabaseUrl ? imagePrefix(supabaseUrl) : undefined })}</div></article></main></div>`;
+  const trustedCover = post.cover_image && isTrustedBlogImage(post.cover_image, imagePrefix(supabaseUrl)) ? post.cover_image : null;
+  const body = `<div class="min-h-dvh bg-canvas">${header}<main><article class="mx-auto max-w-[720px] px-4 pb-6 pt-10 sm:px-6 sm:pt-14"><nav aria-label="Breadcrumb" class="text-[13px] text-muted"><a href="/blog">Blog</a> / <a href="/blog?category=${c.id}" style="color:${c.tone}">${escapeHtml(c.label)}</a></nav><h1 class="display mt-4 text-[34px] font-semibold leading-[1.08] text-ink sm:text-[46px]">${escapeHtml(post.title)}</h1><p class="mt-4 text-[18px] leading-relaxed text-ink-2">${escapeHtml(post.description)}</p><p class="mt-5 text-[14px] text-muted"><span class="font-medium text-ink">${escapeHtml(post.author_name)}</span> · <time datetime="${escapeHtml(post.published_at)}">${formatPostDate(post.published_at)}</time> · ${readingMinutes(post.body)} min read</p>${trustedCover ? `<img src="${escapeHtml(trustedCover)}" alt="${escapeHtml(post.title)}" class="mt-8 aspect-[5/2] w-full rounded-2xl object-cover">` : ""}<div class="blog-prose mt-10">${renderMarkdown(post.body, { imagePrefix: supabaseUrl ? imagePrefix(supabaseUrl) : undefined })}</div></article></main></div>`;
   return {
     path: `/blog/${post.slug}`,
     title: `${post.title} | ScopeFlow blog`,
@@ -154,7 +157,7 @@ export function postPage(post: BlogPost, posts: ListItem[], supabaseUrl = ""): P
     url,
     body,
     ogType: "article",
-    image: post.cover_image,
+    image: trustedCover,
     state: dehydrated([
       [["blog", "post", post.slug], post],
       [["blog", "list"], posts],
@@ -174,7 +177,7 @@ export function postPage(post: BlogPost, posts: ListItem[], supabaseUrl = ""): P
           wordCount: post.body.trim().split(/\s+/).length,
           author: { "@type": "Person", name: post.author_name || OPERATOR_NAME },
           publisher: { "@id": ORG["@id"] },
-          image: post.cover_image || OG_IMAGE,
+          image: trustedCover || OG_IMAGE,
           url,
           mainEntityOfPage: url,
           inLanguage: "en-IN",
