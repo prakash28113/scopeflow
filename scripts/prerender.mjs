@@ -59,6 +59,9 @@ export function pageHtml(template, { path, seo, body, state, jsonLd, fonts, cano
   html = replaceOnce(html, /<meta property="og:url" content="[^"]*"\s*\/?>/, `<meta property="og:url" content="${esc(canonical)}" />`, "og:url");
   html = replaceOnce(html, /<meta property="og:image" content="[^"]*"\s*\/?>/, `<meta property="og:image" content="${esc(ogImage)}" />`, "og:image");
   const head = [
+    `<meta name="twitter:title" content="${esc(seo.title)}" />`,
+    `<meta name="twitter:description" content="${esc(seo.description)}" />`,
+    `<meta name="twitter:image" content="${esc(ogImage)}" />`,
     `<link rel="canonical" href="${esc(canonical)}" />`,
     ...fonts.map((f) => `<link rel="preload" href="/assets/${esc(f)}" as="font" type="font/woff2" crossorigin />`),
     // Scroll-reveal sections start hidden until the script shows them; without JavaScript, show everything.
