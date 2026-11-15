@@ -5,7 +5,7 @@ import { SiteFooter } from "@/components/site-footer";
 import { PublicHeader } from "@/components/public-header";
 import { useAuth } from "@/lib/auth";
 import { BLOG_IMAGE_PREFIX, useBlogList, useBlogPost, useIsBlogAuthor, type BlogListItem } from "@/lib/blog";
-import { CATEGORIES, categoryOf, formatPostDate, readingMinutes, renderMarkdown, type BlogCategory } from "@/lib/blog-content";
+import { CATEGORIES, categoryOf, formatPostDate, readingMinutes, renderMarkdown, isTrustedBlogImage, type BlogCategory } from "@/lib/blog-content";
 import { SITE_URL, usePageHead } from "@/lib/seo";
 import NotFound from "./not-found";
 
@@ -39,7 +39,7 @@ function BlogHeader() {
 export function PostCover({ category, title, large, image, alt }: { category: BlogCategory; title?: string; large?: boolean; image?: string | null; alt?: string }) {
   const c = categoryOf(category);
   const shape = large ? "aspect-[2/1] rounded-2xl sm:aspect-[5/2]" : "aspect-[16/9] rounded-xl";
-  if (image) {
+  if (image && isTrustedBlogImage(image, BLOG_IMAGE_PREFIX)) {
     return (
       <div className={cx("relative overflow-hidden bg-sunken", shape)}>
         <img src={image} alt={alt ?? ""} loading={large ? "eager" : "lazy"} decoding="async" className="absolute inset-0 h-full w-full object-cover" />

@@ -16,7 +16,7 @@ const POST = {
   published_at: "2026-11-02T10:00:00Z",
   updated_at: "2026-11-02T12:00:00Z",
 };
-function db(posts = [POST], fail = false) {
+function db(posts: (typeof POST & { cover_image?: string | null })[] = [POST], fail = false) {
   const calls: string[] = [];
   const f = async (url: string, init: RequestInit = {}) => {
     calls.push(url);
@@ -40,6 +40,29 @@ describe("blog routes", () => {
     expect(blogRoute("/sitemap.xml")).toEqual({ kind: "sitemap" });
     expect(blogRoute("/blog/Bad Slug")).toBeNull();
     expect(blogRoute("/dashboard")).toBeNull();
+  });
+});
+
+describe("blog cover image URL policy", () => {
+  const trusted = `${SUPA}/storage/v1/object/public/blog/cover.webp`;
+  const external = "https://tracking.example/cover.png";
+  it("rejects external cover images in list, article, Open Graph and JSON-LD", async () => {
+    const post = { ...POST, cover_image: external };
+    const database = db([post]).f;
+    const list = await (await get("/blog", database))!.text();
+    expect(list).not.toContain(`<img src="${external}"`);
+    const page = await (await get(`/blog/${POST.slug}`, database))!.text();
+    expect(page).not.toContain(`<img src="${external}"`);
+    expect(page).not.toContain(`<meta property="og:image" content="${external}"`);
+    const ld = JSON.parse(page.match(/<script type="application\/ld\+json">(.+?)<\/script>/)![1]);
+    expect(ld["@graph"][1].image).not.toBe(external);
+  });
+  it("preserves images in the configured public blog storage bucket", async () => {
+    const database = db([{ ...POST, cover_image: trusted }]).f;
+    expect(await (await get("/blog", database))!.text()).toContain(`<img src="${trusted}"`);
+    const page = await (await get(`/blog/${POST.slug}`, database))!.text();
+    expect(page).toContain(`<img src="${trusted}"`);
+    expect(page).toContain(`<meta property="og:image" content="${trusted}"`);
   });
 });
 

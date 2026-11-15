@@ -180,7 +180,7 @@ export async function serveBlog(request: Request, env: Env, f: Fetcher = fetch):
   if (route.kind === "app") return new Response(body(shellHtml), { status: 200, headers: s.headers });
   try {
     if (route.kind === "list") {
-      return new Response(body(fillShell(shellHtml, listPage(await listPosts(env, f)))), { status: 200, headers: s.headers });
+      return new Response(body(fillShell(shellHtml, listPage(await listPosts(env, f), env.SUPABASE_URL))), { status: 200, headers: s.headers });
     }
     const [post, posts] = await Promise.all([getPost(env, f, route.slug), listPosts(env, f)]);
     if (!post) return new Response(body(fillShell(shellHtml, notFoundPage(route.slug))), { status: 404, headers: s.headers });
