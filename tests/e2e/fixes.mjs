@@ -773,6 +773,28 @@ window.Razorpay.prototype.open=function(){var o=this.o;window.__rzp=o;window.__r
     await ctx.close();
   }
 
+  // ------------------------------------------------------------------ Approvals
+  step("Approvals: a failed decisions request shows an error and Try again, not 'No decisions yet'; waiting days never go negative");
+  {
+    const ctx = await newCtx();
+    const p = await newPage(ctx, "approvals");
+    await signUp(p, "Lata Bose", "lata@fixes.test");
+    const q = await ctx.newPage(); // the refused request below is an expected error
+    let fail = true;
+    await q.route(/\/rest\/v1\/activity_log\?.*event=in\./, (route) => (fail ? route.fulfill({ status: 500, contentType: "application/json", body: '{"message":"boom"}' }) : route.continue()));
+    await q.goto(`${BASE}/approvals`);
+    await q.getByTestId("decisions-error").getByText("Couldn't load recent decisions.", { exact: false }).waitFor({ timeout: 20000 });
+    assert.equal(await q.getByText("No decisions yet").count(), 0, "an error is not an empty list");
+    await shot(q, "approvals-decisions-error");
+    fail = false;
+    await q.getByRole("button", { name: "Try again" }).click();
+    await q.getByText("No decisions yet").waitFor();
+    assert.equal(await q.getByTestId("decisions-error").count(), 0);
+    // Nothing on the page reads as a negative number of days.
+    assert.ok(!/-\d+ days?/.test(await q.locator("main").innerText()));
+    await ctx.close();
+  }
+
   if (errors.length) throw new Error(`Browser errors:\n${errors.join("\n")}`);
   console.log("✓ fix-list checks passed with no browser errors");
 } finally {
