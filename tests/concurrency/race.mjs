@@ -211,6 +211,60 @@ try {
     });
   }
 
+  for (const action of ["revoke", "rotate", "expire"]) for (const endpoint of ["scope", "revision", "change_order"]) check(`${action} wins over queued portal ${endpoint}`, async () => {
+    const p = endpoint === "scope" ? await approvedProject(2) : await approve(await approvedProject(2));
+    const change = endpoint === "change_order" ? (await call("owner", "create_change_order", [p.id,
+      JSON.stringify({ title: "Extra work", pricing_type: "fixed", amount_cents: 1000 })])).value : null;
+    const owner = conn();
+    const client = conn();
+    await owner.connect();
+    await client.connect();
+    let pending;
+    try {
+      await owner.query("begin");
+      await owner.query("set local role authenticated");
+      await owner.query("select set_config('request.jwt.claim.sub', $1, true)", [ownerId]);
+      if (action === "expire") {
+        // Hold the same project lock, while the database owner changes expiry.
+        await owner.query("reset role");
+        await owner.query("select id from public.projects where id = $1 for update", [p.id]);
+        await owner.query("update public.share_links set created_at = clock_timestamp() - interval '2 days', expires_at = clock_timestamp() - interval '1 second' where project_id = $1 and revoked_at is null", [p.id]);
+      } else {
+        await owner.query(`select public.${action === "rotate" ? "rotate_share_link" : "revoke_share_link"}($1)`, [p.id]);
+      }
+      await client.query("set role anon");
+      await client.query("set statement_timeout = '10s'");
+      const pid = (await client.query("select pg_backend_pid() as pid")).rows[0].pid;
+      const query = endpoint === "scope"
+        ? ["select public.portal_decide_scope($1,$2,'approved','Client',null) as r", [p.token, p.snapshotId]]
+        : endpoint === "change_order"
+          ? ["select public.portal_decide_change_order($1,$2,'approved','Client',null) as r", [p.token, change]]
+          : ["select public.portal_request_revision($1,'revision',$2,'must not land','Client',$3) as r", [p.token, p.deliverableId, randomUUID()]];
+      pending = client.query(...query).then(r => ({ value: r.rows[0].r }), e => ({ error: e.message }));
+      // Observe the actual blocked backend, rather than relying on a timing sleep.
+      let blocked = false;
+      const deadline = Date.now() + 5000;
+      while (Date.now() < deadline) {
+        const row = (await admin.query("select wait_event_type from pg_stat_activity where pid = $1", [pid])).rows[0];
+        if (row?.wait_event_type === "Lock") { blocked = true; break; }
+        await new Promise(r => setTimeout(r, 10));
+      }
+      assert.ok(blocked, "portal request must be waiting behind the owner's revocation transaction");
+      await owner.query("commit");
+      const result = await pending;
+      assert.equal(result.error, undefined);
+      assert.equal(result.value?.error, action === "expire" ? "expired_link" : "invalid_link", JSON.stringify(result));
+      assert.equal((await admin.query("select count(*)::int n from revision_requests where project_id = $1", [p.id])).rows[0].n, 0);
+      if (endpoint === "scope") assert.equal((await admin.query("select count(*)::int n from scope_decisions where project_id=$1", [p.id])).rows[0].n, 0);
+      if (endpoint === "change_order") assert.equal((await admin.query("select status from change_orders where id=$1", [change])).rows[0].status, "sent");
+    } finally {
+      await owner.query("rollback").catch(() => {});
+      if (pending) await pending;
+      await owner.end();
+      await client.end();
+    }
+  });
+
   let failed = 0;
   for (const r of results) {
     try {
