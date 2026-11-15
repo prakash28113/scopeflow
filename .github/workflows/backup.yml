@@ -1,6 +1,6 @@
-# Weekly encrypted database backup — free GitHub Actions minutes, no new services.
+# Daily encrypted database backup — free GitHub Actions minutes, no new services.
 #
-# Every Sunday night (and on demand: Actions → Backup → Run workflow):
+# Every day (and on demand: Actions → Backup → Run workflow):
 #   1. reads every table through Supabase's database query endpoint (the existing release token),
 #   2. compresses and encrypts it with AES-256-GCM, key derived from BACKUP_PASSPHRASE (scrypt),
 #   3. proves it restores: decrypts it and loads it into a fresh database built from the migrations,
@@ -15,7 +15,7 @@ name: Backup
 
 on:
   schedule:
-    - cron: "37 21 * * 0" # Sunday 21:37 UTC = Monday 03:07 in India
+    - cron: "37 21 * * *" # Daily 21:37 UTC = 03:07 next day in India
   workflow_dispatch:
 
 permissions:
