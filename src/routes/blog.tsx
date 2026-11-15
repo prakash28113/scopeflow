@@ -96,7 +96,7 @@ export function BlogIndexPage() {
   const list = useBlogList();
   usePageHead(
     active
-      ? { title: `${categoryOf(active).label} | ScopeFlow blog`, description: BLOG_DESCRIPTION, url: `${SITE_URL}/blog?category=${active}` }
+      ? { title: `${categoryOf(active).label} | ScopeFlow blog`, description: BLOG_DESCRIPTION, url: `${SITE_URL}/blog` }
       : { title: BLOG_TITLE, description: BLOG_DESCRIPTION, url: `${SITE_URL}/blog` },
   );
   const posts = useMemo(() => (list.data ?? []).filter((p) => !active || p.category === active), [list.data, active]);
@@ -165,7 +165,7 @@ export function BlogPostPage() {
   const q = useBlogPost(slug);
   const list = useBlogList();
   const post = q.data;
-  usePageHead(post ? { title: `${post.title} | ScopeFlow blog`, description: post.description, url: `${SITE_URL}/blog/${post.slug}` } : null);
+  usePageHead(post ? { title: `${post.title} | ScopeFlow blog`, description: post.description, url: `${SITE_URL}/blog/${post.slug}`, type: "article", image: post.cover_image && isTrustedBlogImage(post.cover_image, BLOG_IMAGE_PREFIX) ? post.cover_image : undefined } : null);
   const html = useMemo(() => (post ? renderMarkdown(post.body, { imagePrefix: BLOG_IMAGE_PREFIX }) : ""), [post]);
 
   if (q.isLoading) {
