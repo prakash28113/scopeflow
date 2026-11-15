@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import type { z } from "zod";
 import { issuesToFieldErrors, type FieldErrors } from "./validation";
 import { userMessage } from "./errors";
@@ -13,6 +13,7 @@ type DbError = { code?: string; message?: string; hint?: string; details?: strin
  */
 export function useAction() {
   const [pending, setPending] = useState(false);
+  const inFlight = useRef(false);
   const [error, setError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   /** Set when the database refused because of a plan limit, so the page can explain and offer plans. */
@@ -23,6 +24,8 @@ export function useAction() {
     input: unknown,
     call: (data: z.output<S>) => PromiseLike<{ data: R; error: DbError }>,
   ): Promise<R | undefined> {
+    // A disabled button renders on the next update; guard the current event too.
+    if (inFlight.current) return undefined;
     setError(null);
     setLimit(null);
     const parsed = schema.safeParse(input);
@@ -32,6 +35,7 @@ export function useAction() {
       return undefined;
     }
     setFieldErrors({});
+    inFlight.current = true;
     setPending(true);
     try {
       const { data, error } = await call(parsed.data);
@@ -46,6 +50,7 @@ export function useAction() {
       setError("Couldn't reach the server. Check your connection and try again.");
       return undefined;
     } finally {
+      inFlight.current = false;
       setPending(false);
     }
   }
