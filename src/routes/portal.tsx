@@ -9,7 +9,7 @@ import { invoiceStatus } from "@/lib/invoice";
 import { localToday } from "@/lib/upcoming";
 import { progressLabel, progressSummary } from "@/lib/progress";
 import { sourceLabel } from "@/components/log-request";
-import { PageSpinner } from "@/components/app-shell";
+import { PageSpinner } from "@/components/route-guards";
 import { usePortal } from "@/lib/queries";
 import { tokenFromHash } from "@/lib/portal-link";
 import type { PortalError } from "@/lib/portal-rpc";
