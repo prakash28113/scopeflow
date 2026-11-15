@@ -1,5 +1,5 @@
 /**
- * Where a sign-up came from: the UTM tags and referring site of the first visit, kept in this browser
+ * Where a sign-up came from: the UTM tags and referring origin of the first visit, kept in this browser
  * for 30 days and saved once to the new account's profile (set_signup_source). Nothing else is
  * tracked, and nothing leaves the browser until the person creates an account.
  */
@@ -10,6 +10,17 @@ export const SOURCE_TTL_MS = 30 * 86_400_000;
 
 type Store = Pick<Storage, "getItem" | "setItem" | "removeItem">;
 const clip = (v: string | null | undefined, n: number) => (v ? v.trim().slice(0, n) || undefined : undefined);
+
+/** Keep attribution to the site only: paths, queries, fragments and credentials can contain private data. */
+function referringOrigin(value: unknown): string | undefined {
+  if (typeof value !== "string") return undefined;
+  try {
+    const url = new URL(value);
+    return url.protocol === "https:" || url.protocol === "http:" ? `${url.origin}/` : undefined;
+  } catch {
+    return undefined;
+  }
+}
 
 function storage(): Store | null {
   try {
@@ -28,6 +39,12 @@ export function readSource(now = Date.now(), store: Store | null = storage()): S
     if (typeof s.at !== "number" || now - s.at > SOURCE_TTL_MS) {
       store?.removeItem(KEY);
       return null;
+    }
+    // Also minimise previously saved attribution before it can be sent on signup.
+    const referrer = referringOrigin(s.referrer);
+    if (s.referrer !== referrer) {
+      s.referrer = referrer;
+      store?.setItem(KEY, JSON.stringify(s));
     }
     return s;
   } catch {
@@ -50,7 +67,7 @@ export function captureSource(href: string, referrer: string, now = Date.now(), 
   const q = url.searchParams;
   let ref: string | undefined;
   try {
-    ref = referrer && new URL(referrer).host !== url.host ? clip(referrer, 300) : undefined;
+    ref = referrer && new URL(referrer).host !== url.host ? referringOrigin(referrer) : undefined;
   } catch {
     ref = undefined;
   }

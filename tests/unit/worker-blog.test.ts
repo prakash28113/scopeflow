@@ -54,6 +54,8 @@ describe("blog cover image URL policy", () => {
     const page = await (await get(`/blog/${POST.slug}`, database))!.text();
     expect(page).not.toContain(`<img src="${external}"`);
     expect(page).not.toContain(`<meta property="og:image" content="${external}"`);
+    expect(page).not.toContain(`<meta name="twitter:image" content="${external}"`);
+    expect(page).toContain('<meta name="twitter:image" content="https://scopeflow.in/og.png?v=3" />');
     const ld = JSON.parse(page.match(/<script type="application\/ld\+json">(.+?)<\/script>/)![1]);
     expect(ld["@graph"][1].image).not.toBe(external);
   });
@@ -63,6 +65,7 @@ describe("blog cover image URL policy", () => {
     const page = await (await get(`/blog/${POST.slug}`, database))!.text();
     expect(page).toContain(`<img src="${trusted}"`);
     expect(page).toContain(`<meta property="og:image" content="${trusted}"`);
+    expect(page).toContain(`<meta name="twitter:image" content="${trusted}"`);
   });
 });
 

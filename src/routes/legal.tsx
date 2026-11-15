@@ -50,7 +50,7 @@ export function PrivacyPage() {
             the name they enter, any comment, the time, and their IP address and browser type. This is the evidence of who approved what,
             and it can&apos;t be edited afterwards.
           </li>
-          <li><strong>How you found us:</strong> if you arrived from a link with campaign tags (utm_source, utm_medium, utm_campaign) or from another website, your browser keeps that for up to 30 days, and it&apos;s saved with your account when you sign up. We use it only to count which channels bring sign-ups.</li>
+          <li><strong>How you found us:</strong> if you arrived from a link with campaign tags (utm_source, utm_medium, utm_campaign) or from another website, your browser keeps the campaign tags and referring website origin (not its path, query or fragment) for up to 30 days, and it&apos;s saved with your account when you sign up. We use it only to count which channels bring sign-ups.</li>
           <li><strong>Abuse protection:</strong> a one-way hash of visitors&apos; IP addresses to limit excessive requests. These counters are deleted within a day.</li>
         </ul>
       </section>

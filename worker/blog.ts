@@ -87,6 +87,9 @@ export function fillShell(shell: string, p: Page): string {
   html = meta("property", "og:description", p.description, html);
   html = meta("property", "og:url", p.url, html);
   html = meta("property", "og:type", p.ogType ?? "website", html);
+  html = meta("name", "twitter:title", p.title, html);
+  html = meta("name", "twitter:description", p.description, html);
+  html = meta("name", "twitter:image", p.image || OG_IMAGE, html);
   if (p.image) {
     html = meta("property", "og:image", p.image, html);
     // The site's default image size doesn't describe an uploaded photo.
