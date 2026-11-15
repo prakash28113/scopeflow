@@ -38,6 +38,14 @@ export const LIST_COLUMNS = "slug, title, description, category, author_name, pu
 
 /** Where uploaded blog images live: <Supabase URL>/storage/v1/object/public/blog/… */
 export const imagePrefix = (supabaseUrl: string) => `${supabaseUrl.replace(/\/+$/, "")}/storage/v1/object/public/blog/`;
+
+/** Only allow public objects in this project's blog bucket as cover images. */
+export function isTrustedBlogImage(url: string, prefix: string): boolean {
+  if (!prefix.startsWith("https://") || !url.startsWith(prefix)) return false;
+  const path = url.slice(prefix.length);
+  return /^(?:[A-Za-z0-9_-]+\/)*[A-Za-z0-9_-]+\.(?:webp|jpe?g|png)$/i.test(path);
+}
+
 export type RenderOptions = { imagePrefix?: string };
 
 export const readingMinutes = (body: string) => Math.max(1, Math.round(body.trim().split(/\s+/).length / 200));
@@ -66,7 +74,7 @@ function inline(escaped: string, opts: RenderOptions = {}): string {
   // Images first (before links): ![alt](url)
   s = s.replace(/!\[([^\]\n]*)\]\(((?:[^()\s]|\([^()\s]*\))+)\)/g, (_, alt, href) => {
     const url = href.replace(/&amp;/g, "&");
-    if (opts.imagePrefix && url.startsWith(opts.imagePrefix) && /^[\w./%-]+$/.test(url.slice(opts.imagePrefix.length))) {
+    if (opts.imagePrefix && isTrustedBlogImage(url, opts.imagePrefix)) {
       codes.push(`<img src="${escapeHtml(url)}" alt="${alt}" loading="lazy" decoding="async">`);
       return `\u0000${codes.length - 1}\u0000`;
     }
