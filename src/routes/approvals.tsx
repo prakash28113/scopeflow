@@ -39,7 +39,7 @@ export default function ApprovalsPage() {
   const outOfScope = revisions.filter((r) => !r.in_scope);
   const withClients = scopes.length + changeOrders.length;
   const onYou = changesAsked.length + outOfScope.length;
-  const waited = (iso: string | undefined) => (iso ? daysBetween(iso.slice(0, 10), today) : 0);
+  const waited = (iso: string | undefined) => (iso ? Math.max(0, daysBetween(iso.slice(0, 10), today)) : 0);
 
   return (
     <>
@@ -126,6 +126,8 @@ export default function ApprovalsPage() {
         <CardHeader title="Recent decisions" description="What your clients approved or sent back, newest first." />
         {decisions.isLoading ? (
           <p className="px-5 py-5 text-[13px] text-muted">Loading…</p>
+        ) : decisions.isError ? (
+          <div className="px-5 py-4"><Alert>Couldn't load recent decisions. Please refresh to try again.</Alert></div>
         ) : !decisions.data?.length ? (
           <EmptyState title="No decisions yet" body="Approvals and change requests from your clients will be listed here, with the date." />
         ) : (
