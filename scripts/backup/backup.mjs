@@ -47,14 +47,14 @@ async function main() {
   const restored = unpack(readFileSync(join(ROOT, "backup", name)), env.BACKUP_PASSPHRASE);
   const problems = await verifyRestore(restored);
   if (problems.length) throw new Error(`Restore check failed for ${problems.length} table(s): ${problems.join(", ")}`);
-  console.log("Restore check passed: every row loaded into a fresh database built from the migrations.");
+  console.log("Restore check passed: row counts and foreign-key relationships verified in a fresh database built from the migrations.");
 
   if (env.GITHUB_OUTPUT) appendFileSync(env.GITHUB_OUTPUT, `file=backup/${name}\nname=${name.replace(/\.sfbk$/, "")}\n`);
   if (env.GITHUB_STEP_SUMMARY)
     appendFileSync(env.GITHUB_STEP_SUMMARY, `### Daily backup\n\n- ✅ Encrypted backup: ${s.tables} tables, ${(file.length / 1024).toFixed(1)} KB\n- ✅ Restore check passed (fresh database, same migrations)\n- Kept for 90 days as a workflow artifact. Only the passphrase holder can read it.\n`);
 }
 
-/** Loads the backup into an in-memory PostgreSQL (PGlite) with the migrations applied; returns tables whose rows didn't all load. */
+/** Loads into isolated PostgreSQL (PGlite); returns row-count and foreign-key problems. */
 export async function verifyRestore(backup) {
   const { PGlite } = await import("@electric-sql/pglite");
   const db = new PGlite();
@@ -79,6 +79,38 @@ export async function verifyRestore(backup) {
     }
     const { rows: [{ n }] } = await db.query(`select count(*)::int as n from "${s}"."${t}"`);
     if (n !== rows.length) problems.push(`${name} (${n}/${rows.length})`);
+  }
+  // Restore intentionally pauses FK triggers so tables can load in any order.
+  // Recheck their relationships explicitly: VALIDATE CONSTRAINT would skip
+  // already-validated constraints, even when rows were loaded with triggers off.
+  // Separate export requests can observe writes at different moments, so matching
+  // row counts alone cannot prove that the restored database is usable.
+  const { rows: foreignKeys } = await db.query(`
+    select ns.nspname as schema, child.relname as table, fk.conname as name,
+           pns.nspname as parent_schema, parent.relname as parent_table,
+           fk.confmatchtype as match,
+           array_agg(ca.attname::text order by cols.ordinality) as columns,
+           array_agg(pa.attname::text order by cols.ordinality) as parent_columns
+      from pg_constraint fk
+      join pg_class child on child.oid = fk.conrelid
+      join pg_namespace ns on ns.oid = child.relnamespace
+      join pg_class parent on parent.oid = fk.confrelid
+      join pg_namespace pns on pns.oid = parent.relnamespace
+      cross join lateral unnest(fk.conkey, fk.confkey) with ordinality as cols(child_attnum, parent_attnum, ordinality)
+      join pg_attribute ca on ca.attrelid = child.oid and ca.attnum = cols.child_attnum
+      join pg_attribute pa on pa.attrelid = parent.oid and pa.attnum = cols.parent_attnum
+     where fk.contype = 'f' and ns.nspname in ('public', 'auth', 'scopeflow_admin')
+     group by ns.nspname, child.relname, fk.conname, pns.nspname, parent.relname, fk.confmatchtype
+  `);
+  const ident = (value) => `"${value.replaceAll('"', '""')}"`;
+  for (const fk of foreignKeys) {
+    const child = fk.columns.map((col) => `c.${ident(col)}`);
+    const present = child.map((col) => `${col} is not null`).join(' and ');
+    const matches = child.map((col, i) => `p.${ident(fk.parent_columns[i])} = ${col}`).join(' and ');
+    const missing = `((${present}) and not exists (select 1 from ${ident(fk.parent_schema)}.${ident(fk.parent_table)} p where ${matches}))`;
+    const mixedNulls = fk.match === 'f' ? ` or ((${child.map((col) => `${col} is null`).join(' or ')}) and (${child.map((col) => `${col} is not null`).join(' or ')}))` : '';
+    const { rows: [{ invalid }] } = await db.query(`select exists (select 1 from ${ident(fk.schema)}.${ident(fk.table)} c where ${missing}${mixedNulls}) as invalid`);
+    if (invalid) problems.push(`${fk.schema}.${fk.table} (foreign key ${fk.name})`);
   }
   await db.close();
   return Object.assign(problems, { lines });

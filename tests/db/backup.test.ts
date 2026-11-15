@@ -94,10 +94,34 @@ describe("restore", () => {
     await fresh.close();
   }, 120_000);
 
-  it("the weekly job's restore check passes, and catches a table that doesn't load", async () => {
+  it("the daily job's restore check passes, and catches a table that doesn't load", async () => {
     expect([...(await verifyRestore(backup))]).toEqual([]);
     const broken = structuredClone(backup);
     broken.tables["public.not_a_table"] = [{ id: 1 }];
     expect([...(await verifyRestore(broken))]).toEqual(["public.not_a_table (missing)"]);
+  }, 120_000);
+
+  it("rejects an inconsistent backup when a project is created between table reads", async () => {
+    const owner: Role = { kind: "user", id: backup.tables["auth.users"][0].id as string };
+    let inserted = false;
+    const inconsistent: Backup = await exportDatabase(async (query: string) => {
+      // clients sorts before deliverables and projects. A real write during
+      // separate export requests can create a project after clients was read.
+      if (!inserted && query.includes('count(*)') && query.includes('"public"."deliverables"')) {
+        inserted = true;
+        await as(db, owner, "select public.save_project(null, $1::jsonb)", [JSON.stringify({
+          title: "Concurrent project", currency: "INR", budget_cents: 0,
+          client: { name: "Concurrent client", email: "client@example.com" },
+          deliverables: [{ title: "Logo", revisions_included: 2 }], milestones: [],
+        })]);
+      }
+      return (await db.query(query)).rows;
+    });
+    expect(inserted).toBe(true);
+    expect(inconsistent.tables["public.clients"]).toHaveLength(backup.tables["public.clients"].length);
+    expect(inconsistent.tables["public.projects"]).toHaveLength(backup.tables["public.projects"].length + 1);
+    // Every exported row loads, but the project's client is missing. This
+    // must fail verification before the workflow uploads an artifact.
+    expect([...(await verifyRestore(inconsistent))]).toContain("public.projects (foreign key projects_client_id_fkey)");
   }, 120_000);
 });
