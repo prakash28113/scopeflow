@@ -74,6 +74,20 @@ describe("sign-up source", () => {
     expect(captureSource("https://scopeflow.in/", "", now, s)).toBeNull();
     expect(captureSource("https://scopeflow.in/blog", "https://www.google.com/", now, s)).toMatchObject({ referrer: "https://www.google.com/" });
   });
+  it("stores only an external referring origin, stripping private URL data", () => {
+    const s = memory();
+    expect(captureSource("https://scopeflow.in/", "https://user:password@example.com/private/client?token=secret#email", now, s)?.referrer).toBe("https://example.com/");
+    expect([...s.m.values()].join("")).not.toMatch(/password|private|secret|email/);
+    expect(takeSource(now, s)?.referrer).toBe("https://example.com/");
+    expect(captureSource("https://scopeflow.in/", "javascript:alert(1)", now, memory())).toBeNull();
+  });
+  it("minimises legacy saved URLs before handing attribution to a new account", () => {
+    const s = memory();
+    s.setItem("sf-signup-source", JSON.stringify({ at: now, utm_source: "google", referrer: "https://example.com/private?token=secret#client" }));
+    expect(readSource(now, s)?.referrer).toBe("https://example.com/");
+    expect([...s.m.values()].join("")).not.toContain("secret");
+    expect(takeSource(now, s)).toEqual({ utm_source: "google", referrer: "https://example.com/" });
+  });
   it("hands the source over once", () => {
     const s = memory();
     captureSource(`https://scopeflow.in/?utm_source=${"x".repeat(300)}`, "", now, s);

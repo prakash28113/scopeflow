@@ -66,6 +66,9 @@ describe("prerendered HTML", () => {
     expect(html).toContain("<title>Pricing &amp; &quot;plans&quot;</title>");
     expect(html).toContain('<meta name="description" content="Free &lt;b&gt;plan&lt;/b&gt;" />');
     expect(html).toContain('<link rel="canonical" href="https://scopeflow.in/pricing" />');
+    expect(html).toContain('<meta name="twitter:title" content="Pricing &amp; &quot;plans&quot;" />');
+    expect(html).toContain('<meta name="twitter:description" content="Free &lt;b&gt;plan&lt;/b&gt;" />');
+    expect(html).toContain('<meta name="twitter:image" content="https://scopeflow.in/og.png" />');
     expect(html).toContain('<meta property="og:url" content="https://scopeflow.in/pricing" />');
     expect(html).toContain('href="/assets/inter-latin-wght-normal-abc.woff2" as="font" type="font/woff2" crossorigin');
     expect(html).not.toContain("needs JavaScript");
