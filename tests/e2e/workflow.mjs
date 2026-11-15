@@ -192,6 +192,7 @@ try {
       const title = html.match(/<title>([^<]+)<\/title>/)[1];
       assert.ok(!titles.has(title), `${path} has its own title`);
       titles.add(title);
+      assert.ok(html.includes(`<meta name="twitter:title" content="${title}" />`), `${path} social title`);
       const ld = JSON.parse(html.match(/<script type="application\/ld\+json">(.+?)<\/script>/)[1]);
       assert.ok(ld["@graph"].some((n) => n["@type"] === "Organization" && n.name === "ScopeFlow"), `${path} structured data`);
     }
@@ -253,6 +254,9 @@ try {
     await hp.getByRole("heading", { name: /Simple pricing/ }).waitFor();
     assert.equal(await hp.title(), "Pricing: free for 2 active projects | ScopeFlow", "title follows in-app navigation");
     assert.equal(await hp.locator('link[rel="canonical"]').getAttribute("href"), "https://scopeflow.in/pricing");
+    assert.equal(await hp.locator('meta[name="twitter:title"]').getAttribute("content"), await hp.title());
+    await hp.goto(`${BASE}/blog?category=market-prices`, { waitUntil: "networkidle" });
+    assert.equal(await hp.locator('link[rel="canonical"]').getAttribute("href"), "https://scopeflow.in/blog", "filtered blog has the same canonical before and after hydration");
     await hp.goto(`${BASE}/no-such-page`);
     await hp.getByRole("heading", { name: "Page not found" }).waitFor();
     await hp.getByRole("link", { name: "Go to home" }).waitFor(); // visitors get the home page, blog and pricing
@@ -1367,6 +1371,7 @@ document.body.appendChild(d)}`,
     assert.ok(!raw.includes("<script>window.__xss"), "post HTML is escaped");
     assert.ok(raw.includes('"@type":"BlogPosting"'));
     assert.ok(raw.includes(`<meta property="og:image" content="${cover}" />`), "link previews use the cover photo");
+    assert.ok(raw.includes(`<meta name="twitter:image" content="${cover}" />`), "Twitter previews use the same trusted cover photo");
     assert.ok(raw.includes('alt="icon 512" loading="lazy"'), "photos in the post are in the page");
     const sm = await (await fetch(`${BASE}/sitemap.xml`)).text();
     assert.ok(sm.includes("<loc>https://scopeflow.in/blog/five-ways-to-win-repeat-clients</loc>"));
@@ -1382,13 +1387,18 @@ document.body.appendChild(d)}`,
     // Photos load (allowed by the security policy) and show at full width.
     await v.waitForFunction(() => [...document.querySelectorAll("main img")].length >= 2 && [...document.querySelectorAll("main img")].every((i) => i.complete && i.naturalWidth > 0));
     await v.getByRole("heading", { name: "More from the blog" }).waitFor();
+    assert.equal(await v.locator('meta[name="twitter:image"]').getAttribute("content"), cover);
+    assert.equal(await v.locator('meta[property="og:type"]').getAttribute("content"), "article");
     await shot(v, "65-blog-post");
     await v.getByRole("link", { name: "Blog", exact: true }).first().click();
     await v.getByTestId("blog-featured").getByRole("link", { name: "Five ways to win repeat clients", exact: true }).waitFor();
+    assert.equal(await v.locator('meta[name="twitter:image"]').getAttribute("content"), "https://scopeflow.in/og.png?v=3", "leaving an article restores the site image");
+    assert.equal(await v.locator('meta[property="og:type"]').getAttribute("content"), "website");
     await v.getByRole("link", { name: "Market prices" }).first().click();
     await v.waitForURL("**/blog?category=market-prices");
     await v.getByTestId("blog-featured").getByRole("link", { name: "How much should a logo cost in India?", exact: true }).waitFor();
     assert.equal(await v.getByText("Five ways to win repeat clients").count(), 0);
+    assert.equal(await v.locator('link[rel="canonical"]').getAttribute("href"), "https://scopeflow.in/blog");
     await shot(v, "66-blog-list", false);
     await v.goto(BASE);
     await v.getByTestId("home-blog").getByText("Five ways to win repeat clients").waitFor();
