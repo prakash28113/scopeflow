@@ -41,7 +41,10 @@ export const imagePrefix = (supabaseUrl: string) => `${supabaseUrl.replace(/\/+$
 
 /** Only allow public objects in this project's blog bucket as cover images. */
 export function isTrustedBlogImage(url: string, prefix: string): boolean {
-  if (!prefix.startsWith("https://") || !url.startsWith(prefix)) return false;
+  // Local Supabase (including the browser walkthrough) serves storage over HTTP.
+  // Only the explicitly configured loopback bucket may use HTTP; remote storage requires HTTPS.
+  const localStorage = /^http:\/\/(?:127\.0\.0\.1|localhost|\[::1\])(?::\d+)?\/storage\/v1\/object\/public\/blog\/$/.test(prefix);
+  if ((!prefix.startsWith("https://") && !localStorage) || !url.startsWith(prefix)) return false;
   const path = url.slice(prefix.length);
   return /^(?:[A-Za-z0-9_-]+\/)*[A-Za-z0-9_-]+\.(?:webp|jpe?g|png)$/i.test(path);
 }
