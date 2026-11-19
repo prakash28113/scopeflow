@@ -273,21 +273,16 @@ describe("rollback", () => {
 describe("promo code SOLO199", () => {
   const promo = (u: { id: string }, o: { plan?: string; interval?: string; mode?: string; reserve?: boolean; code?: string } = {}) =>
     svc<Json>("billing_apply_promo", [u.id, o.code ?? "SOLO199", o.plan ?? "solo", o.interval ?? "month", o.mode ?? "live", o.reserve ?? false]);
-  // What the activation migration will insert once the Razorpay offer exists.
-  const live = () =>
-    db.query(
-      `insert into promo_codes (code, plan_id, billing_interval, discount_cents, discount_cycles, max_uses, offer_id_live, offer_id_test)
-       values ('SOLO199', 'solo', 'month', 30000, 3, 50, 'offer_LIVE12345678', 'offer_TEST12345678')
-       on conflict (code) do update set offer_id_live = excluded.offer_id_live, offer_id_test = excluded.offer_id_test, max_uses = 50, active = true`,
-    );
+  // SOLO199 comes from migration 20261127000001; tests give it both offers and a clean slate.
+  const live = () => db.query("update promo_codes set offer_id_live = 'offer_LIVE12345678', offer_id_test = 'offer_TEST12345678', max_uses = 50, active = true where code = 'SOLO199'");
   const pay = (u: { id: string }) =>
     db.query("insert into invoices (owner_id, provider, provider_invoice_id, amount_cents, currency, status, paid_at) values ($1, 'razorpay', $2, 19900, 'INR', 'paid', now() + interval '1 minute')", [u.id, `inv_${++seq}`]);
 
-  it("refuses every code until a code row with its Razorpay offer exists", async () => {
-    expect((await db.query("select count(*)::int as n from promo_codes")).rows[0]).toMatchObject({ n: 0 });
+  it("ships SOLO199 with its live offer only: works live, refused in test mode, and unknown codes are refused", async () => {
     const u = await createUser(db, "promo-off@example.com", "P", { plan: "free" });
-    expect(await promo(u)).toMatchObject({ valid: false });
-    await live();
+    expect(await promo(u)).toMatchObject({ valid: true, offer_id: "offer_U26pZCE687GpDs", price_cents: 19900 });
+    expect(await promo(u, { mode: "test" })).toMatchObject({ valid: false });
+    expect(await promo(u, { code: "OTHER" })).toMatchObject({ valid: false });
     await db.query("update promo_codes set offer_id_live = null, offer_id_test = null");
     expect(await promo(u)).toMatchObject({ valid: false });
     expect((await db.query("select plan_id, billing_interval, discount_cents, discount_cycles, max_uses from promo_codes")).rows).toEqual([{ plan_id: "solo", billing_interval: "month", discount_cents: 30000, discount_cycles: 3, max_uses: 50 }]);
