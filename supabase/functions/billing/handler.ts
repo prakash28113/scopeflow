@@ -2,7 +2,8 @@
  * ScopeFlow billing: Razorpay subscriptions for paid plans.
  *
  *   GET  /billing/status    signed in → is checkout available to this account, and in which mode
- *   POST /billing/checkout  signed in → creates a Razorpay subscription for { plan, interval }
+ *   POST /billing/checkout  signed in → creates a Razorpay subscription for { plan, interval, promo? }
+ *   POST /billing/promo     signed in → is this promo code good for this plan, and what would it cost
  *   POST /billing/verify    signed in → checks the payment signature Checkout returned and, if it's
  *                           genuine and Razorpay says the subscription is active, applies it right
  *                           away; otherwise answers { status: "pending" } and the webhook finishes it
@@ -32,6 +33,7 @@ export type BillingConfig = {
 
 type Fetch = (input: string, init?: RequestInit) => Promise<Response>;
 type User = { id: string; email: string };
+type Promo = { valid: boolean; reason?: string; code?: string; offer_id?: string; discount_cents?: number; cycles?: number; price_cents?: number; full_price_cents?: number; currency?: string };
 type Prepared = { plan: string; plan_name: string; interval: "month" | "year"; amount_cents: number; currency: string; provider_plan_id: string | null; email: string; name: string };
 
 const MAX_BODY = 512 * 1024;
@@ -153,7 +155,7 @@ async function checkout(req: Request, cfg: BillingConfig, f: Fetch) {
   const mode = billingMode(cfg.keyId)!;
   const tester = isTester(cfg, user.email);
   if (mode === "test" && !tester) throw new HttpError(409, "Paid plans aren't on sale yet.");
-  let input: { plan?: unknown; interval?: unknown };
+  let input: { plan?: unknown; interval?: unknown; promo?: unknown };
   try {
     input = JSON.parse(await readBody(req));
   } catch {
@@ -162,6 +164,14 @@ async function checkout(req: Request, cfg: BillingConfig, f: Fetch) {
   const plan = String(input.plan ?? "");
   const interval = String(input.interval ?? "");
   const prep = await rpc<Prepared>(cfg, f, "billing_prepare_checkout", { p_owner: user.id, p_plan: plan, p_interval: interval, p_mode: mode, p_tester: tester });
+  // A promo code is checked (and one use taken) before anything is created at Razorpay. A bad code
+  // stops here: the customer is never charged full price after typing a code.
+  const code = typeof input.promo === "string" ? input.promo.trim().slice(0, 40) : "";
+  let promo: Promo | null = null;
+  if (code) {
+    promo = await rpc<Promo>(cfg, f, "billing_apply_promo", { p_owner: user.id, p_code: code, p_plan: prep.plan, p_interval: prep.interval, p_mode: mode, p_reserve: true });
+    if (!promo?.valid || !promo.offer_id) throw new HttpError(409, promo?.reason ?? "That code isn't valid.");
+  }
 
   let planId = prep.provider_plan_id;
   if (!planId) {
@@ -183,6 +193,7 @@ async function checkout(req: Request, cfg: BillingConfig, f: Fetch) {
     total_count: prep.interval === "year" ? 10 : 120,
     quantity: 1,
     customer_notify: 1,
+    ...(promo?.offer_id ? { offer_id: promo.offer_id } : {}),
     notes: { scopeflow_account: user.id, scopeflow_plan: prep.plan, billing_interval: prep.interval },
   });
   await rpc(cfg, f, "billing_record_checkout", {
@@ -199,7 +210,25 @@ async function checkout(req: Request, cfg: BillingConfig, f: Fetch) {
     currency: prep.currency,
     email: prep.email,
     name: prep.name,
+    ...(promo?.valid ? { promo: { code: promo.code, discount_cents: promo.discount_cents, cycles: promo.cycles, price_cents: promo.price_cents } } : {}),
   };
+}
+
+/** Preview for the promo field: valid or not, and the price. Takes no use. */
+async function promoCheck(req: Request, cfg: BillingConfig, f: Fetch) {
+  const user = await signedInUser(req, cfg, f);
+  const mode = billingMode(cfg.keyId)!;
+  let input: { plan?: unknown; interval?: unknown; promo?: unknown };
+  try {
+    input = JSON.parse(await readBody(req));
+  } catch {
+    throw new HttpError(400, "Enter a code.");
+  }
+  const code = typeof input.promo === "string" ? input.promo.trim().slice(0, 40) : "";
+  if (!code) throw new HttpError(400, "Enter a code.");
+  const r = await rpc<Promo>(cfg, f, "billing_apply_promo", { p_owner: user.id, p_code: code, p_plan: String(input.plan ?? ""), p_interval: String(input.interval ?? ""), p_mode: mode, p_reserve: false });
+  if (!r?.valid) return { valid: false, reason: r?.reason ?? "That code isn't valid." };
+  return { valid: true, code: r.code, discount_cents: r.discount_cents, cycles: r.cycles, price_cents: r.price_cents, full_price_cents: r.full_price_cents, currency: r.currency };
 }
 
 /**
@@ -282,10 +311,11 @@ export async function handleBilling(req: Request, cfg: BillingConfig, f: Fetch =
     if (route === "status" && req.method === "GET") {
       return reply(200, configured ? await status(req, cfg, f) : { enabled: false, mode: null, tester: false }, headers);
     }
-    if (!configured && (route === "checkout" || route === "cancel" || route === "verify")) {
+    if (!configured && (route === "checkout" || route === "cancel" || route === "verify" || route === "promo")) {
       return reply(503, { error: "Payments aren't set up yet." }, headers);
     }
     if (route === "checkout" && req.method === "POST") return reply(200, await checkout(req, cfg, f), headers);
+    if (route === "promo" && req.method === "POST") return reply(200, await promoCheck(req, cfg, f), headers);
     if (route === "verify" && req.method === "POST") return reply(200, await verify(req, cfg, f), headers);
     if (route === "cancel" && req.method === "POST") return reply(200, await cancel(req, cfg, f), headers);
     return reply(404, { error: "Not found" }, headers);

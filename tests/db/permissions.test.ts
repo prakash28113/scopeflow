@@ -29,7 +29,7 @@ const FREELANCER_FUNCTIONS = [
 // user's session or the webhook signature.
 const BILLING_SERVICE = [
   "billing_prepare_checkout", "billing_save_provider_plan", "billing_record_checkout",
-  "billing_current_subscription", "billing_mark_cancelling", "process_razorpay_event",
+  "billing_current_subscription", "billing_mark_cancelling", "process_razorpay_event", "billing_apply_promo",
   // The "blog" Edge Function, after hashing the publishing key it received.
   "blog_publish_with_key",
   // The "notify" Edge Function: takes queued owner emails and reports how each went.
@@ -45,7 +45,7 @@ const OWNER_READABLE = [
   "subscription_changes", "invoices", "early_access_requests", "client_invoices", "expenses", "payments", "follow_ups", "scope_templates", "usage_events", "nudges",
 ].sort();
 // share_links, subscriptions: column grants only (never the token hash / provider ids).
-const NOT_READABLE = ["owner_emails", "blog_authors", "blog_api_keys", "beta_allowlist", "portal_rate_limits", "share_links", "subscriptions", "billing_events", "provider_plans", "billing_checkouts"].sort();
+const NOT_READABLE = ["owner_emails", "blog_authors", "blog_api_keys", "beta_allowlist", "portal_rate_limits", "share_links", "subscriptions", "billing_events", "provider_plans", "billing_checkouts", "promo_codes", "promo_redemptions"].sort();
 const PUBLIC_CATALOGUE = ["plans", "blog_posts"]; // pricing page; published blog posts (RLS hides drafts). No personal data
 const ALL_TABLES = [...OWNER_READABLE, ...NOT_READABLE, ...PUBLIC_CATALOGUE].sort();
 const PRIVS = ["SELECT", "INSERT", "UPDATE", "DELETE", "TRUNCATE", "REFERENCES", "TRIGGER"];

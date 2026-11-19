@@ -12,6 +12,7 @@ import { formatDate } from "@/lib/format";
 import { formatMoney } from "@/lib/money";
 import { STATUS_TEXT, useInvoices, useMyPlan, usePlans, type Interval, type Plan, type PlanId } from "@/lib/plans";
 import { ActionButton } from "@/components/form-bits";
+import { PromoField } from "@/components/promo-field";
 import { BILLING_ENABLED, buyPlan, cancelPlan, preloadCheckout, useBillingStatus } from "@/lib/billing";
 import { planSale } from "@/lib/sale";
 import { ACTIVATING_TEXT, waitForPaidPlan } from "@/lib/activation";
@@ -32,6 +33,8 @@ export default function PlanPage() {
   const plansSection = useRef<HTMLElement>(null);
   const [joining, setJoining] = useState<PlanId | null>(null);
   const [buying, setBuying] = useState<PlanId | null>(null);
+  // A promo code the server has said is good for Solo monthly (checked again when the payment opens).
+  const [promo, setPromo] = useState<string | null>(null);
   const [activating, setActivating] = useState(false);
   const billing = useBillingStatus();
   const ready = !(plans.isLoading || mine.isLoading || (BILLING_ENABLED && billing.isLoading));
@@ -81,7 +84,7 @@ export default function PlanPage() {
   async function buy(id: PlanId) {
     setBuying(id);
     try {
-      const outcome = await buyPlan(id, interval, () => logUsage("checkout_open", takeCheckoutSource()));
+      const outcome = await buyPlan(id, interval, () => logUsage("checkout_open", takeCheckoutSource()), id === "solo" && interval === "month" && promo ? promo : undefined);
       if (outcome.kind === "paid") {
         toast("positive", ACTIVATING_TEXT);
         await waitForPlan();
@@ -204,7 +207,7 @@ export default function PlanPage() {
               <p className="mt-2 inline-flex rounded-md bg-warning-soft px-2 py-1 text-[12px] font-medium text-warning">Test mode: use Razorpay's test card or UPI. No real money moves.</p>
             ) : null}
           </div>
-          <IntervalToggle value={interval} onChange={setInterval} />
+          <IntervalToggle value={interval} onChange={(v) => { setInterval(v); setPromo(null); }} />
         </div>
         {m.early_access ? (
           <div className="mb-5">
@@ -212,6 +215,9 @@ export default function PlanPage() {
               You joined early access for {m.early_access.plan === "solo" ? "Solo" : "Studio"} ({m.early_access.billing_interval === "year" ? "yearly" : "monthly"}) on {formatDate(m.early_access.created_at)}.
             </Alert>
           </div>
+        ) : null}
+        {BILLING_ENABLED && b?.enabled && interval === "month" && effective.id === "free" && plans.data.some((p) => p.id === "solo" && canBuy(p)) ? (
+          <PromoField plan="solo" interval="month" applied={promo} onApplied={setPromo} />
         ) : null}
         <PlanCards
           plans={plans.data}
