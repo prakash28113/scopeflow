@@ -26,7 +26,9 @@ export type Checkout = {
   currency: string;
   email: string;
   name: string;
+  promo?: { code: string; discount_cents: number; cycles: number; price_cents: number } | null;
 };
+export type PromoCheck = { valid: false; reason: string } | { valid: true; code: string; discount_cents: number; cycles: number; price_cents: number; full_price_cents: number; currency: string };
 type RazorpayResponse = { razorpay_payment_id: string; razorpay_subscription_id: string; razorpay_signature: string };
 type RazorpayInstance = { open(): void; on(event: "payment.failed", cb: (r: { error?: { description?: string } }) => void): void };
 declare global {
@@ -64,6 +66,10 @@ export function useBillingStatus(enabled = true) {
   });
 }
 
+/** Is this promo code good for this plan, and what would it cost? Takes no use of the code. */
+export const checkPromo = (plan: PlanId, interval: Interval, promo: string) =>
+  call<PromoCheck>("promo", { method: "POST", body: JSON.stringify({ plan, interval, promo }) });
+
 let loading: Promise<void> | null = null;
 /**
  * Fetches Razorpay's checkout.js ahead of the click (when Plan & usage opens for an account that
@@ -99,9 +105,9 @@ export type CheckoutOutcome = { kind: "paid"; result: string } | { kind: "dismis
  * Creates the subscription, opens Razorpay's payment window, and on success sends the signed
  * response back for verification. Resolves when the window closes, with what happened.
  */
-export async function buyPlan(plan: PlanId, interval: Interval, onOpen?: () => void): Promise<CheckoutOutcome> {
+export async function buyPlan(plan: PlanId, interval: Interval, onOpen?: () => void, promo?: string): Promise<CheckoutOutcome> {
   timeStart("checkout-open");
-  const [c] = await Promise.all([call<Checkout>("checkout", { method: "POST", body: JSON.stringify({ plan, interval }) }), loadCheckout()]);
+  const [c] = await Promise.all([call<Checkout>("checkout", { method: "POST", body: JSON.stringify({ plan, interval, ...(promo ? { promo } : {}) }) }), loadCheckout()]);
   return new Promise<CheckoutOutcome>((resolve) => {
     let failure: string | null = null;
     const rzp = new window.Razorpay!({

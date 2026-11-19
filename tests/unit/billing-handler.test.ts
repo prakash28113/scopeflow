@@ -19,7 +19,7 @@ const cfg = (o: Partial<BillingConfig> = {}): BillingConfig => ({
 });
 
 type Call = { url: string; init: RequestInit; body: Record<string, unknown> | null };
-function world(o: { user?: { id: string; email: string } | null; prepared?: Record<string, unknown>; dbError?: { code: string; message: string }; current?: unknown; rzpFail?: boolean; subStatus?: string } = {}) {
+function world(o: { user?: { id: string; email: string } | null; prepared?: Record<string, unknown>; dbError?: { code: string; message: string }; current?: unknown; rzpFail?: boolean; subStatus?: string; promo?: Record<string, unknown> } = {}) {
   const calls: Call[] = [];
   const json = (status: number, data: unknown) => new Response(JSON.stringify(data), { status, headers: { "content-type": "application/json" } });
   const f = async (url: string, init: RequestInit = {}) => {
@@ -34,6 +34,8 @@ function world(o: { user?: { id: string; email: string } | null; prepared?: Reco
       if (o.dbError && fn === "billing_prepare_checkout") return json(400, o.dbError);
       if (fn === "billing_prepare_checkout")
         return json(200, { plan: "solo", plan_name: "Solo", interval: "year", amount_cents: 499900, currency: "INR", provider_plan_id: null, email: "buyer@example.com", name: "Buyer", ...o.prepared });
+      if (fn === "billing_apply_promo")
+        return json(200, o.promo ?? { valid: true, code: "SOLO199", offer_id: "offer_TEST12345678", discount_cents: 30000, cycles: 3, price_cents: 19900, full_price_cents: 49900, currency: "INR" });
       if (fn === "billing_save_provider_plan") return json(200, body!.p_provider_plan_id);
       if (fn === "billing_current_subscription") return json(200, o.current ?? null);
       if (fn === "process_razorpay_event") return json(200, "applied");
@@ -117,6 +119,26 @@ describe("webhook", () => {
   });
 });
 
+describe("promo check", () => {
+  const check = async (body: unknown, w = world()) => {
+    const r = await handleBilling(req("/promo", { method: "POST", body: JSON.stringify(body) }), cfg(), w.f);
+    return { status: r.status, body: await r.json(), w };
+  };
+  it("previews the price without taking a use", async () => {
+    const r = await check({ plan: "solo", interval: "month", promo: "SOLO199" });
+    expect(r.status).toBe(200);
+    expect(r.body).toEqual({ valid: true, code: "SOLO199", discount_cents: 30000, cycles: 3, price_cents: 19900, full_price_cents: 49900, currency: "INR" });
+    expect(r.body).not.toHaveProperty("offer_id");
+    expect(r.w.calls.find((c) => c.url.endsWith("/rpc/billing_apply_promo"))!.body).toMatchObject({ p_reserve: false });
+    expect(r.w.calls.some((c) => c.url.startsWith(RZP))).toBe(false);
+  });
+  it("says why a code isn't good, needs a code and a signed-in user", async () => {
+    expect((await check({ plan: "solo", interval: "month", promo: "NOPE" }, world({ promo: { valid: false, reason: "That code isn't valid." } }))).body).toEqual({ valid: false, reason: "That code isn't valid." });
+    expect((await check({ plan: "solo", interval: "month", promo: "  " })).status).toBe(400);
+    expect((await check({ plan: "solo", interval: "month", promo: "SOLO199" }, world({ user: null }))).status).toBe(401);
+  });
+});
+
 describe("checkout", () => {
   const buy = (c = cfg(), w = world(), body = { plan: "solo", interval: "year" }) =>
     handleBilling(req("/checkout", { method: "POST", body: JSON.stringify(body) }), c, w.f).then(async (r) => ({ status: r.status, body: await r.json(), headers: r.headers, w }));
@@ -141,6 +163,31 @@ describe("checkout", () => {
     expect(w.calls.find((c) => c.url === `${RZP}/subscriptions`)!.body).toMatchObject({ plan_id: "plan_new", total_count: 10, notes: { scopeflow_account: "u1" } });
     expect(w.calls.find((c) => c.url.endsWith("/rpc/billing_record_checkout"))!.body).toMatchObject({ p_owner: "u1", p_subscription_id: "sub_new", p_mode: "live", p_plan: "solo", p_interval: "year" });
     expect(w.calls.find((c) => c.url.endsWith("/rpc/billing_prepare_checkout"))!.body).toMatchObject({ p_owner: "u1", p_tester: false });
+  });
+
+  it("with a promo code, links the Razorpay offer to the subscription and reports the discount", async () => {
+    const w = world({ prepared: { provider_plan_id: "plan_old", interval: "month", amount_cents: 49900 } });
+    const r = await buy(cfg(), w, { plan: "solo", interval: "month", promo: " solo199 " } as never);
+    expect(r.status).toBe(200);
+    expect(w.calls.find((c) => c.url.endsWith("/rpc/billing_apply_promo"))!.body).toMatchObject({ p_owner: "u1", p_code: "solo199", p_plan: "solo", p_interval: "month", p_mode: "live", p_reserve: true });
+    expect(w.calls.find((c) => c.url === `${RZP}/subscriptions`)!.body).toMatchObject({ plan_id: "plan_old", offer_id: "offer_TEST12345678" });
+    expect(r.body.promo).toEqual({ code: "SOLO199", discount_cents: 30000, cycles: 3, price_cents: 19900 });
+    expect(r.body.amount_cents).toBe(49900);
+  });
+
+  it("a code that isn't good stops checkout before anything is created at Razorpay", async () => {
+    const w = world({ promo: { valid: false, reason: "This code has been fully claimed." } });
+    const r = await buy(cfg(), w, { plan: "solo", interval: "month", promo: "SOLO199" } as never);
+    expect(r).toMatchObject({ status: 409, body: { error: "This code has been fully claimed." } });
+    expect(w.calls.some((c) => c.url.startsWith(RZP))).toBe(false);
+    expect(w.rpcCalls()).not.toContain("billing_record_checkout");
+  });
+
+  it("without a code, never sends an offer", async () => {
+    const w = world();
+    await buy(cfg(), w);
+    expect(w.rpcCalls()).not.toContain("billing_apply_promo");
+    expect(w.calls.find((c) => c.url === `${RZP}/subscriptions`)!.body).not.toHaveProperty("offer_id");
   });
 
   it("reuses an existing Razorpay plan", async () => {

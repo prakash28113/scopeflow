@@ -269,3 +269,84 @@ describe("rollback", () => {
     expect((await fresh.query<Json>("select monthly_price_cents from plans where id = 'solo'")).rows[0]).toEqual({ monthly_price_cents: 49900 });
   });
 });
+
+describe("promo code SOLO199", () => {
+  const promo = (u: { id: string }, o: { plan?: string; interval?: string; mode?: string; reserve?: boolean; code?: string } = {}) =>
+    svc<Json>("billing_apply_promo", [u.id, o.code ?? "SOLO199", o.plan ?? "solo", o.interval ?? "month", o.mode ?? "live", o.reserve ?? false]);
+  // What the activation migration will insert once the Razorpay offer exists.
+  const live = () =>
+    db.query(
+      `insert into promo_codes (code, plan_id, billing_interval, discount_cents, discount_cycles, max_uses, offer_id_live, offer_id_test)
+       values ('SOLO199', 'solo', 'month', 30000, 3, 50, 'offer_LIVE12345678', 'offer_TEST12345678')
+       on conflict (code) do update set offer_id_live = excluded.offer_id_live, offer_id_test = excluded.offer_id_test, max_uses = 50, active = true`,
+    );
+  const pay = (u: { id: string }) =>
+    db.query("insert into invoices (owner_id, provider, provider_invoice_id, amount_cents, currency, status, paid_at) values ($1, 'razorpay', $2, 19900, 'INR', 'paid', now() + interval '1 minute')", [u.id, `inv_${++seq}`]);
+
+  it("refuses every code until a code row with its Razorpay offer exists", async () => {
+    expect((await db.query("select count(*)::int as n from promo_codes")).rows[0]).toMatchObject({ n: 0 });
+    const u = await createUser(db, "promo-off@example.com", "P", { plan: "free" });
+    expect(await promo(u)).toMatchObject({ valid: false });
+    await live();
+    await db.query("update promo_codes set offer_id_live = null, offer_id_test = null");
+    expect(await promo(u)).toMatchObject({ valid: false });
+    expect((await db.query("select plan_id, billing_interval, discount_cents, discount_cycles, max_uses from promo_codes")).rows).toEqual([{ plan_id: "solo", billing_interval: "month", discount_cents: 30000, discount_cycles: 3, max_uses: 50 }]);
+  });
+
+  it("answers the price, with the code in any case, and takes no use when only checking", async () => {
+    await live();
+    const u = await createUser(db, "promo-ok@example.com", "P", { plan: "free" });
+    expect(await promo(u, { code: " solo199 " })).toEqual({ valid: true, code: "SOLO199", offer_id: "offer_LIVE12345678", discount_cents: 30000, cycles: 3, price_cents: 19900, full_price_cents: 49900, currency: "INR" });
+    expect(await promo(u, { mode: "test" })).toMatchObject({ valid: true, offer_id: "offer_TEST12345678" });
+    expect((await db.query("select count(*)::int as n from promo_redemptions")).rows[0]).toMatchObject({ n: 0 });
+  });
+
+  it("is only for Solo monthly, and unknown or switched-off codes are refused", async () => {
+    await live();
+    const u = await createUser(db, "promo-plan@example.com", "P", { plan: "free" });
+    expect(await promo(u, { interval: "year" })).toMatchObject({ valid: false, reason: expect.stringMatching(/Solo, billed monthly/) });
+    expect(await promo(u, { plan: "studio" })).toMatchObject({ valid: false });
+    expect(await promo(u, { code: "NOPE" })).toMatchObject({ valid: false });
+    await db.query("update promo_codes set active = false where code = 'SOLO199'");
+    expect(await promo(u)).toMatchObject({ valid: false });
+    await live();
+  });
+
+  it("stops at 50 accounts, gives back a use after 2 hours without payment, and keeps paid uses", async () => {
+    await live();
+    await db.query("update promo_codes set max_uses = 2 where code = 'SOLO199'");
+    await db.query("delete from promo_redemptions");
+    const a = await createUser(db, "promo-a@example.com", "A", { plan: "free" });
+    const b = await createUser(db, "promo-b@example.com", "B", { plan: "free" });
+    const c = await createUser(db, "promo-c@example.com", "C", { plan: "free" });
+    expect(await promo(a, { reserve: true })).toMatchObject({ valid: true });
+    expect(await promo(b, { reserve: true })).toMatchObject({ valid: true });
+    expect(await promo(c, { reserve: true })).toMatchObject({ valid: false, reason: expect.stringMatching(/fully claimed/) });
+    // A's checkout is abandoned: after 2 hours the use comes back. B paid: it stays used.
+    await db.query("update promo_redemptions set created_at = now() - interval '3 hours'");
+    await pay(b);
+    expect(await promo(c, { reserve: true })).toMatchObject({ valid: true });
+    const d = await createUser(db, "promo-d@example.com", "D", { plan: "free" });
+    expect(await promo(d, { reserve: true })).toMatchObject({ valid: false, reason: expect.stringMatching(/fully claimed/) });
+  });
+
+  it("is one use per account: a paid account can't use it again, an unpaid one can try again", async () => {
+    await live();
+    await db.query("delete from promo_redemptions");
+    const u = await createUser(db, "promo-once@example.com", "O", { plan: "free" });
+    expect(await promo(u, { reserve: true })).toMatchObject({ valid: true });
+    expect(await promo(u, { reserve: true })).toMatchObject({ valid: true });
+    expect((await db.query("select count(*)::int as n from promo_redemptions where owner_id = $1", [u.id])).rows[0]).toMatchObject({ n: 1 });
+    await pay(u);
+    expect(await promo(u, { reserve: true })).toMatchObject({ valid: false, reason: expect.stringMatching(/already used/) });
+  });
+
+  it("never changes a price, and the app can't read or call any of it", async () => {
+    const rows = (await db.query<Json>("select id, monthly_price_cents, annual_price_cents from plans where id in ('solo','studio') order by id")).rows;
+    expect(rows).toEqual([{ id: "solo", monthly_price_cents: 49900, annual_price_cents: 499900 }, { id: "studio", monthly_price_cents: 99900, annual_price_cents: 999900 }]);
+    const u = await createUser(db, "promo-app@example.com", "X", { plan: "free" });
+    await expect(as(db, u, "select * from promo_codes")).rejects.toThrow(/permission denied/);
+    await expect(as(db, u, "select * from promo_redemptions")).rejects.toThrow(/permission denied/);
+    await expect(as(db, u, "select public.billing_apply_promo($1, 'SOLO199', 'solo', 'month', 'live', true)", [u.id])).rejects.toThrow(/permission denied/);
+  });
+});

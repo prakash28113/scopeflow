@@ -37,9 +37,10 @@ drop function if exists public.blog_publish_with_key, public.revoke_blog_key, pu
   public._save_blog_post, public.delete_blog_post, public.save_blog_post, public.blog_my_posts,
   public._slugify, public._require_blog_author, public.is_blog_author cascade;
 -- Razorpay billing (if installed).
+drop table if exists public.promo_redemptions, public.promo_codes cascade;
 drop table if exists public.billing_checkouts, public.provider_plans cascade;
 drop function if exists
-  public.process_razorpay_event, public.billing_mark_cancelling, public.billing_current_subscription,
+  public.billing_apply_promo, public.process_razorpay_event, public.billing_mark_cancelling, public.billing_current_subscription,
   public.billing_record_checkout, public.billing_save_provider_plan, public.billing_prepare_checkout
 cascade;
 -- Subscription plans (if installed).
