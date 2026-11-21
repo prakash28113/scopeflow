@@ -2,14 +2,61 @@ import { Link } from "react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import { intentProps } from "@/lib/prefetch";
 import { useQuery } from "@tanstack/react-query";
-import { Alert, Badge, Card, CardHeader, EmptyState, PageHeader } from "@/components/ui";
+import { Alert, Badge, Button, Card, CardHeader, EmptyState, PageHeader } from "@/components/ui";
 import { PageSpinner } from "@/components/app-shell";
 import { useDashboard } from "@/lib/queries";
 import { supabase } from "@/lib/supabase";
 import { formatMoney } from "@/lib/money";
 import { formatDate, formatDateTime } from "@/lib/format";
-import { daysBetween } from "@/lib/reminders";
+import { waitingDays, waitingLabel } from "@/lib/approvals";
 import { localToday } from "@/lib/upcoming";
+
+type Decision = { id: string; event: string; summary: string; created_at: string; project_id: string; projects: { title: string } | null };
+
+/**
+ * The "Recent decisions" card. Loading, failed and empty are three different things: a failed
+ * request says so (with Try again), and only a successful empty answer reads "No decisions yet".
+ */
+export function RecentDecisions({ state, onRetry }: { state: { isLoading: boolean; isError: boolean; data?: Decision[] }; onRetry: () => void }) {
+  return (
+    <Card className="mt-6">
+      <CardHeader title="Recent decisions" description="What your clients approved or sent back, newest first." />
+      {state.isLoading ? (
+        <p className="px-5 py-5 text-[13px] text-muted" role="status">
+          Loading…
+        </p>
+      ) : state.isError ? (
+        <div className="space-y-3 px-5 py-5" data-testid="decisions-error">
+          <Alert>Couldn't load recent decisions. Your clients' decisions are safe; this list just didn't load.</Alert>
+          <Button type="button" variant="secondary" size="sm" onClick={onRetry}>
+            Try again
+          </Button>
+        </div>
+      ) : !state.data?.length ? (
+        <EmptyState title="No decisions yet" body="Approvals and change requests from your clients will be listed here, with the date." />
+      ) : (
+        <ul className="divide-y divide-line" data-testid="decisions-list">
+          {state.data.map((d) => {
+            const approved = d.event.endsWith("approved");
+            return (
+              <li key={d.id}>
+                <Link to={`/projects/${d.project_id}`} className="flex items-start gap-3 px-5 py-3 transition-colors hover:bg-canvas">
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-[14px] text-ink">{d.summary}</span>
+                    <span className="block text-[12px] text-muted">
+                      {d.projects?.title ?? "Project"}, {formatDateTime(d.created_at)}
+                    </span>
+                  </span>
+                  <Badge tone={approved ? "positive" : "danger"}>{approved ? "Approved" : "Sent back"}</Badge>
+                </Link>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </Card>
+  );
+}
 
 /** Client decisions: what's with your clients, what's waiting on you, and what was decided recently. */
 export default function ApprovalsPage() {
@@ -25,7 +72,7 @@ export default function ApprovalsPage() {
         .order("created_at", { ascending: false })
         .limit(12);
       if (error) throw error;
-      return data as unknown as { id: string; event: string; summary: string; created_at: string; project_id: string; projects: { title: string } }[];
+      return data as unknown as Decision[];
     },
   });
   if (q.isLoading) return <PageSpinner />;
@@ -39,7 +86,7 @@ export default function ApprovalsPage() {
   const outOfScope = revisions.filter((r) => !r.in_scope);
   const withClients = scopes.length + changeOrders.length;
   const onYou = changesAsked.length + outOfScope.length;
-  const waited = (iso: string | undefined) => (iso ? Math.max(0, daysBetween(iso.slice(0, 10), today)) : 0);
+  const waited = (iso: string | undefined) => waitingDays(iso, today);
 
   return (
     <>
@@ -62,7 +109,7 @@ export default function ApprovalsPage() {
                           {p.clients.company || p.clients.name}, sent {lastSent.get(p.id) ? formatDate(lastSent.get(p.id)!) : "recently"}
                         </span>
                       </span>
-                      <Badge tone={days >= 3 ? "warning" : "neutral"}>{days === 0 ? "Today" : `${days} day${days === 1 ? "" : "s"}`}</Badge>
+                      <Badge tone={days >= 3 ? "warning" : "neutral"}>{waitingLabel(days)}</Badge>
                     </Link>
                   </li>
                 );
@@ -80,7 +127,7 @@ export default function ApprovalsPage() {
                           {c.projects.title}, {formatMoney(Number(c.amount_cents), c.projects.currency)}
                         </span>
                       </span>
-                      <Badge tone={days >= 3 ? "warning" : "neutral"}>{days === 0 ? "Today" : `${days} day${days === 1 ? "" : "s"}`}</Badge>
+                      <Badge tone={days >= 3 ? "warning" : "neutral"}>{waitingLabel(days)}</Badge>
                     </Link>
                   </li>
                 );
@@ -122,35 +169,7 @@ export default function ApprovalsPage() {
         </Card>
       </div>
 
-      <Card className="mt-6">
-        <CardHeader title="Recent decisions" description="What your clients approved or sent back, newest first." />
-        {decisions.isLoading ? (
-          <p className="px-5 py-5 text-[13px] text-muted">Loading…</p>
-        ) : decisions.isError ? (
-          <div className="px-5 py-4"><Alert>Couldn't load recent decisions. Please refresh to try again.</Alert></div>
-        ) : !decisions.data?.length ? (
-          <EmptyState title="No decisions yet" body="Approvals and change requests from your clients will be listed here, with the date." />
-        ) : (
-          <ul className="divide-y divide-line">
-            {decisions.data.map((d) => {
-              const approved = d.event.endsWith("approved");
-              return (
-                <li key={d.id}>
-                  <Link to={`/projects/${d.project_id}`} className="flex items-start gap-3 px-5 py-3 transition-colors hover:bg-canvas">
-                    <span className="min-w-0 flex-1">
-                      <span className="block text-[14px] text-ink">{d.summary}</span>
-                      <span className="block text-[12px] text-muted">
-                        {d.projects.title}, {formatDateTime(d.created_at)}
-                      </span>
-                    </span>
-                    <Badge tone={approved ? "positive" : "danger"}>{approved ? "Approved" : "Sent back"}</Badge>
-                  </Link>
-                </li>
-              );
-            })}
-          </ul>
-        )}
-      </Card>
+      <RecentDecisions state={decisions} onRetry={() => void decisions.refetch()} />
     </>
   );
 }
