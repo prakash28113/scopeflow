@@ -10,7 +10,8 @@
 import { mkdirSync, readFileSync, readdirSync, writeFileSync, appendFileSync } from "node:fs";
 import { join } from "node:path";
 import { preflight, supabaseQuery } from "../lib/supabase-api.mjs";
-import { checkManifest, checkPassphrase, exportDatabase, pack, restoreSql, summary, unpack } from "./lib.mjs";
+import { cleanup, exportStorage, findStorageReferences, restoreStorage } from "./storage.mjs";
+import { checkManifest, checkPassphrase, exportDatabase, manifestOf, pack, restoreSql, summary, unpack } from "./lib.mjs";
 
 const ROOT = new URL("../../", import.meta.url).pathname;
 const env = process.env;
@@ -28,6 +29,11 @@ async function main() {
   console.log("Supabase access check passed.");
 
   const backup = await exportDatabase(sql);
+  // Blog images: read from the public bucket and kept, encrypted, in the same file.
+  backup.storage = await exportStorage({ sql, fetch, supabaseUrl: config.url.replace(/\/+$/, "") });
+  backup.manifest = manifestOf(backup.tables, backup.storage);
+  const nObjects = Object.values(backup.storage.buckets).reduce((n, b) => n + b.objects.length, 0);
+  console.log(`Storage read: ${nObjects} object(s) in ${Object.keys(backup.storage.buckets).length} bucket(s).`);
   const file = pack(backup, env.BACKUP_PASSPHRASE);
   const name = `scopeflow-backup-${backup.created_at.slice(0, 10)}.sfbk`;
   mkdirSync(join(ROOT, "backup"), { recursive: true });
@@ -41,13 +47,19 @@ async function main() {
   if (damaged.length) throw new Error(`Backup integrity check failed: ${damaged.join("; ")}`);
   if (!Object.keys(restored.tables).length || !restored.migrations.length) throw new Error("Backup integrity check failed: the backup is empty.");
   console.log(`Integrity check passed: ${Object.keys(restored.manifest.tables).length} tables match the manifest checksums.`);
+  // Storage restore, in a throwaway folder: every object comes back byte-identical.
+  const st = restoreStorage(restored);
+  cleanup(st.dir);
+  console.log(`Storage restore check passed: ${st.files} file(s), ${st.bytes} bytes recreated and matched to their checksums.`);
+  const refs = findStorageReferences(restored);
+  if (refs.missing.length) console.log(`::warning::${refs.missing.length} image(s) used by blog posts are not in Storage (already missing before this backup): ${refs.missing.slice(0, 5).join(", ")}`);
   const problems = await verifyRestore(restored);
   if (problems.length) throw new Error(`Restore check failed for ${problems.length} table(s): ${problems.join(", ")}`);
   console.log("Restore check passed: every row loaded into a fresh database built from the migrations.");
 
   if (env.GITHUB_OUTPUT) appendFileSync(env.GITHUB_OUTPUT, `file=backup/${name}\nname=${name.replace(/\.sfbk$/, "")}\n`);
   if (env.GITHUB_STEP_SUMMARY)
-    appendFileSync(env.GITHUB_STEP_SUMMARY, `### Daily backup\n\n- ✅ Encrypted backup: ${s.tables} tables, ${(file.length / 1024).toFixed(1)} KB\n- ✅ Restore check passed (fresh database, same migrations)\n- Kept for 90 days as a workflow artifact. Only the passphrase holder can read it.\n`);
+    appendFileSync(env.GITHUB_STEP_SUMMARY, `### Daily backup\n\n- ✅ Encrypted backup: ${s.tables} tables, ${(file.length / 1024).toFixed(1)} KB\n- ✅ Restore check passed (fresh database, same migrations)\n- ✅ Storage: ${nObjects} image(s) backed up and restored to a throwaway folder with matching checksums\n- Kept for 90 days as a workflow artifact. Only the passphrase holder can read it.\n`);
 }
 
 /** Loads the backup into an in-memory PostgreSQL (PGlite) with the migrations applied; returns tables whose rows didn't all load. */

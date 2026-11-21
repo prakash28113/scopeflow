@@ -8,7 +8,7 @@ const APP = "https://scopeflow.prakash-studio.workers.dev";
 
 type Call = { method: string; url: string; body?: unknown; headers?: Record<string, string> };
 
-function world(opts: { subdomain?: string | null; leak?: boolean; badCsp?: boolean; shellHome?: boolean; softNotFound?: boolean; fnForbidden?: boolean; fnVerifyJwt?: boolean; status?: string[]; accounts?: number; authForbidden?: boolean } = {}) {
+function world(opts: { subdomain?: string | null; leak?: boolean; badCsp?: boolean; shellHome?: boolean; softNotFound?: boolean; fnForbidden?: boolean; fnVerifyJwt?: boolean; status?: string[]; accounts?: number; authForbidden?: boolean; backup?: "ok" | "failed" | "stale" | "noartifact" | "down" } = {}) {
   const calls: Call[] = [];
   const statuses = [...(opts.status ?? ["ACTIVE_HEALTHY"])];
   const json = (status: number, data: unknown, headers: Record<string, string> = {}) =>
@@ -18,6 +18,14 @@ function world(opts: { subdomain?: string | null; leak?: boolean; badCsp?: boole
     const body = typeof init.body === "string" ? JSON.parse(init.body) : init.body;
     calls.push({ method, url, body, headers: init.headers });
     const u = new URL(url);
+    // GitHub API: the backup gate reads the Backup workflow's latest run and its artifact.
+    if (u.host === "api.github.com") {
+      const mode = opts.backup ?? "ok";
+      if (mode === "down") return json(503, {});
+      const finished = new Date(Date.now() - (mode === "stale" ? 80 : 5) * 36e5).toISOString();
+      if (u.pathname.endsWith("/artifacts")) return json(200, { artifacts: mode === "noartifact" ? [] : [{ name: "scopeflow-backup-2026-11-22", size_in_bytes: 55288, expired: false }] });
+      return json(200, { workflow_runs: [{ id: 77, status: "completed", conclusion: mode === "failed" ? "failure" : "success", head_branch: "main", created_at: finished, updated_at: finished }] });
+    }
     // Supabase Management API
     if (u.host === "api.supabase.com") {
       if (u.pathname === "/v1/projects") return json(200, [{ id: REF, name: "scopeflow-beta", status: statuses.length > 1 ? statuses.shift() : statuses[0] }]);
@@ -84,7 +92,7 @@ function world(opts: { subdomain?: string | null; leak?: boolean; badCsp?: boole
   return { calls, execs, deps, summary: () => summary };
 }
 
-const BOTH = { SUPABASE_ACCESS_TOKEN: "sbp_secret_value", CLOUDFLARE_API_TOKEN: "cf_secret_value" };
+const BOTH = { SUPABASE_ACCESS_TOKEN: "sbp_secret_value", CLOUDFLARE_API_TOKEN: "cf_secret_value", GITHUB_REPOSITORY: "owner/repo", GITHUB_TOKEN: "gh_secret_value" };
 
 describe("release automation — deploy and live checks", () => {
   it("waits cleanly, doing nothing, when no tokens are configured", async () => {
@@ -92,6 +100,26 @@ describe("release automation — deploy and live checks", () => {
     expect(await run(w.deps({}))).toBe("waiting-supabase");
     expect(w.calls).toHaveLength(0);
     expect(w.summary()).toMatch(/Waiting for setup/);
+  });
+
+  it("backup gate: a failed, stale, artifact-less or unreachable backup stops the release before any change, with the fix in the message", async () => {
+    for (const backup of ["failed", "stale", "noartifact", "down"] as const) {
+      const w = world({ backup });
+      await expect(run(w.deps(BOTH))).rejects.toThrow(/Release blocked by the backup gate.*Run Actions → Backup/);
+      // Nothing that changes anything was called: no SQL, no Cloudflare, no build.
+      expect(w.calls.filter((c) => c.url.includes("/database/query") && !String((c.body as { query?: string })?.query).startsWith("select 1"))).toEqual([]);
+      expect(w.execs).toEqual([]);
+    }
+  });
+
+  it("backup gate: passes when healthy, and the owner's typed override is recorded loudly", async () => {
+    const ok = world();
+    await run(ok.deps(BOTH));
+    expect(ok.summary()).toMatch(/Backup gate passed: run #77 succeeded 5 hours ago/);
+    const o = world({ backup: "failed" });
+    expect(await run(o.deps({ ...BOTH, BACKUP_GATE_OVERRIDE: "RELEASE WITHOUT FRESH BACKUP" }))).toBe("deployed");
+    expect(o.summary()).toMatch(/Backup gate overridden by the owner/);
+    await expect(run(world({ backup: "failed" }).deps({ ...BOTH, BACKUP_GATE_OVERRIDE: "ok" }))).rejects.toThrow(/backup gate/);
   });
 
   it("deploys end to end with both tokens", async () => {

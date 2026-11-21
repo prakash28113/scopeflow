@@ -10,6 +10,7 @@
  */
 import { createCipheriv, createDecipheriv, createHash, randomBytes, scryptSync } from "node:crypto";
 import { gunzipSync, gzipSync } from "node:zlib";
+import { checkStorage, storageManifest } from "./storage.mjs";
 
 export const FORMAT = "scopeflow-backup/1";
 export const MIN_PASSPHRASE = 20;
@@ -56,8 +57,9 @@ export async function exportDatabase(sql, now = new Date()) {
 }
 
 /** Row count and SHA-256 of every table's rows: lets a restore prove nothing was lost or altered inside the file. */
-export function manifestOf(tables) {
+export function manifestOf(tables, storage) {
   return {
+    ...(storage ? { storage: storageManifest(storage) } : {}),
     tables: Object.fromEntries(Object.entries(tables).map(([name, rows]) => [name, { rows: rows.length, sha256: createHash("sha256").update(JSON.stringify(rows)).digest("hex") }])),
   };
 }
@@ -68,6 +70,13 @@ export function checkManifest(backup) {
   if (!want) return ["the backup has no manifest"];
   const got = manifestOf(backup.tables).tables;
   const problems = [];
+  // Storage (backups made before Storage was included have none, and none recorded: that is consistent).
+  if (backup.manifest.storage || backup.storage) {
+    problems.push(...checkStorage(backup.storage));
+    const wantS = JSON.stringify(backup.manifest.storage ?? null);
+    const gotS = JSON.stringify(backup.storage ? storageManifest(backup.storage) : null);
+    if (wantS !== gotS) problems.push("Storage objects don't match the manifest");
+  }
   for (const name of new Set([...Object.keys(want), ...Object.keys(got)])) {
     if (!want[name]) problems.push(`${name}: not in the manifest`);
     else if (!got[name]) problems.push(`${name}: missing from the backup`);
