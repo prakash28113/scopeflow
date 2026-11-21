@@ -9,7 +9,8 @@
  */
 import { mkdirSync, readFileSync, readdirSync, writeFileSync, appendFileSync } from "node:fs";
 import { join } from "node:path";
-import { checkPassphrase, exportDatabase, pack, restoreSql, summary, unpack } from "./lib.mjs";
+import { preflight, supabaseQuery } from "../lib/supabase-api.mjs";
+import { checkManifest, checkPassphrase, exportDatabase, pack, restoreSql, summary, unpack } from "./lib.mjs";
 
 const ROOT = new URL("../../", import.meta.url).pathname;
 const env = process.env;
@@ -21,19 +22,10 @@ async function main() {
   const ref = new URL(config.url).hostname.split(".")[0];
   if (!/^[a-z0-9]{20}$/.test(ref)) throw new Error("Unexpected Supabase project reference.");
 
-  const sql = async (query) => {
-    for (let attempt = 1; ; attempt++) {
-      const res = await fetch(`https://api.supabase.com/v1/projects/${ref}/database/query`, {
-        method: "POST",
-        headers: { Authorization: `Bearer ${env.SUPABASE_ACCESS_TOKEN}`, "Content-Type": "application/json" },
-        body: JSON.stringify({ query, read_only: true }),
-      });
-      if (res.ok) return res.json();
-      // Never echo the response body: on a public repository the log is public.
-      if (attempt >= 3 || ![429, 500, 502, 503, 504].includes(res.status)) throw new Error(`Supabase query failed (${res.status}).`);
-      await new Promise((r) => setTimeout(r, attempt * 5000));
-    }
-  };
+  const sql = (query) => supabaseQuery({ token: env.SUPABASE_ACCESS_TOKEN, ref, query, readOnly: true });
+  // Fail first, and clearly, if the token doesn't work: nothing is read or encrypted before this passes.
+  await preflight({ token: env.SUPABASE_ACCESS_TOKEN, ref });
+  console.log("Supabase access check passed.");
 
   const backup = await exportDatabase(sql);
   const file = pack(backup, env.BACKUP_PASSPHRASE);
@@ -45,6 +37,10 @@ async function main() {
 
   // Prove it can be restored: decrypt with the passphrase and load into a fresh database with the same migrations.
   const restored = unpack(readFileSync(join(ROOT, "backup", name)), env.BACKUP_PASSPHRASE);
+  const damaged = checkManifest(restored);
+  if (damaged.length) throw new Error(`Backup integrity check failed: ${damaged.join("; ")}`);
+  if (!Object.keys(restored.tables).length || !restored.migrations.length) throw new Error("Backup integrity check failed: the backup is empty.");
+  console.log(`Integrity check passed: ${Object.keys(restored.manifest.tables).length} tables match the manifest checksums.`);
   const problems = await verifyRestore(restored);
   if (problems.length) throw new Error(`Restore check failed for ${problems.length} table(s): ${problems.join(", ")}`);
   console.log("Restore check passed: every row loaded into a fresh database built from the migrations.");
@@ -87,6 +83,9 @@ export async function verifyRestore(backup) {
 if (import.meta.url === `file://${process.argv[1]}`) {
   main().catch((e) => {
     console.log(`::error::${e.message}`);
+    // No artifact is uploaded on failure. Say so on the run page, and what to do, without any secret or data.
+    if (process.env.GITHUB_STEP_SUMMARY)
+      appendFileSync(process.env.GITHUB_STEP_SUMMARY, `### ❌ Daily backup failed — no backup was saved today\n\n- ${e.message}\n- Backups are only as good as the last green run: fix this before releasing. See docs/RECOVERY.md.\n`);
     process.exit(1);
   });
 }
