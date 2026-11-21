@@ -16,9 +16,8 @@ Fix (account owner only, never in chat):
 
 Runs every day (`.github/workflows/backup.yml`). Steps: access check → read every table → compress and encrypt (AES-256-GCM, scrypt key from `BACKUP_PASSPHRASE`) → check the file's own **manifest** (row count and SHA-256 per table) → load it into a fresh database built from the migrations → upload the encrypted file (90 days). Any failure fails the run, uploads nothing, and writes the reason on the run page. Every release summary also says whether the latest backup succeeded.
 
-**Covers:** all `public` tables, ScopeFlow's migration history, and sign-in accounts (`auth.users`, `auth.identities`).
+**Covers:** all `public` tables, ScopeFlow's migration history, sign-in accounts (`auth.users`, `auth.identities`), and **Storage**: every object in the public `blog` bucket (blog images), kept in the same encrypted file with its size and SHA-256. Images are read from their public URLs, so no new secret is needed. The backup fails (and saves nothing) if an object can't be read, its size differs from what Storage lists, the bucket stops being public, or Storage exceeds 150 MB. After encryption, the job restores the images into a throwaway folder and checks every file against its checksum, and warns about images that blog posts use but Storage no longer holds.
 **Does not cover (known gaps):**
-- **Storage files.** Blog images (bucket `blog-images`) are not in the backup. Their database rows are, so the posts survive, but images would need re-uploading. Closing this needs a Storage download step with a service key; that is a decision for the owner (see section 6).
 - Schema, functions, triggers, row-level-security policies, extensions and grants are **rebuilt from `supabase/migrations`**, not from the backup file. This is why a restore needs the same migrations applied first.
 - Sessions, auth logs and other Supabase-internal data.
 
@@ -41,15 +40,19 @@ Each applied migration stores a SHA-256 of its file. If an applied migration's f
 
 Prefer a new forward migration that corrects the problem when a rollback would delete data.
 
-## 5. Release checklist
+## 5. Release gate and checklist
 
+**A release will not start** unless the latest Backup run on main succeeded, finished within 36 hours, and still has its encrypted artifact (not expired, over 1 KB). The check runs before any database change and fails closed: if GitHub can't be asked, the release stops. The fix is always: run Actions → Backup, wait until it is green, release again. In a real emergency the owner can type `RELEASE WITHOUT FRESH BACKUP` in the release form's `backup_override` box; the release summary then says the gate was overridden. Rollbacks are never gated.
+
+Checklist:
 - [ ] CI green: verify, PostgreSQL concurrency, browser walkthrough.
-- [ ] Latest Backup run green (the release summary says).
+- [ ] Backup gate passed (first lines of the release summary).
 - [ ] `SUPABASE_ACCESS_TOKEN` accepted (the release's first step passes).
 - [ ] Migration history check: no problems.
 - [ ] After release: live checks pass in the release log.
 
 ## 6. Open decisions for the owner
 
-- Storage backup: add a step that downloads the `blog-images` objects (service key via a GitHub secret) and includes them, encrypted, in the backup.
+- If a Storage bucket ever becomes private, or Storage grows past 150 MB, the backup stops with a message. Decide then between a service key (GitHub secret) or a second backup destination.
+- Uploading restored images back to a live bucket is manual by design.
 - A restore drill into a throwaway Supabase project, to measure the real RTO.
