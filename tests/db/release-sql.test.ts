@@ -30,6 +30,13 @@ function fakeSupabase(db: PGlite) {
     const body = init.body ? JSON.parse(init.body) : undefined;
     calls.push({ method, path: u.pathname, body });
     const json = (status: number, data: unknown) => new Response(JSON.stringify(data), { status });
+    // The backup gate asks GitHub whether the daily backup is healthy: here it is.
+    if (u.host === "api.github.com") {
+      const at = new Date(Date.now() - 2 * 36e5).toISOString();
+      return u.pathname.endsWith("/artifacts")
+        ? json(200, { artifacts: [{ name: "scopeflow-backup-2026-11-22", size_in_bytes: 55288, expired: false }] })
+        : json(200, { workflow_runs: [{ id: 1, status: "completed", conclusion: "success", head_branch: "main", created_at: at, updated_at: at }] });
+    }
     if (u.pathname === "/v1/projects") return json(200, [{ id: REF, ref: REF, name: "scopeflow-beta", status: "ACTIVE_HEALTHY", region: "ap-south-1" }]);
     if (u.pathname.endsWith("/database/query")) {
       try {
@@ -49,7 +56,7 @@ function fakeSupabase(db: PGlite) {
 }
 
 const deps = (fetch: unknown, extra: Record<string, unknown> = {}) => ({
-  env: { SUPABASE_ACCESS_TOKEN: "sbp_test" },
+  env: { SUPABASE_ACCESS_TOKEN: "sbp_test", GITHUB_REPOSITORY: "owner/repo", GITHUB_TOKEN: "gh_test" },
   fetch,
   exec: () => "",
   log: () => {},
