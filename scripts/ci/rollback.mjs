@@ -15,6 +15,8 @@ import { execFileSync } from "node:child_process";
 import { appendFileSync, existsSync, readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { rollbackSql } from "./migrations.mjs";
+import { preflight, supabaseQuery } from "../lib/supabase-api.mjs";
 
 const ROOT = fileURLToPath(new URL("../..", import.meta.url));
 
@@ -45,13 +47,11 @@ export async function rollback({ env, fetch, exec, log, summary, files }) {
     const ref = new URL(url).hostname.split(".")[0];
     if (!/^[a-z0-9]{20}$/.test(ref)) throw new Error("config/public-supabase.json has no valid project URL.");
     const plan = rollbackPlan(files.migrations, files.rollbacks);
-    const res = await fetch(`https://api.supabase.com/v1/projects/${ref}/database/query`, {
-      method: "POST",
-      headers: { Authorization: `Bearer ${env.SUPABASE_ACCESS_TOKEN}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ query: files.read(plan.script) }),
-    });
-    if (!res.ok) throw new Error(`Database rollback failed (${res.status}): ${(await res.text()).slice(0, 300)}`);
-    summary(`## Rollback\n\n- ✅ Database rolled back: \`${plan.migration}\` undone with \`supabase/rollback/${plan.script}\`.\n- Next: set \`databaseVersion\` in config/public-supabase.json to the previous migration.`);
+    // Prove the token works first; then run the rollback and the removal of its history row as ONE transaction,
+    // so the history can never say "applied" for a migration that was undone (or the reverse).
+    await preflight({ token: env.SUPABASE_ACCESS_TOKEN, ref, fetch });
+    await supabaseQuery({ token: env.SUPABASE_ACCESS_TOKEN, ref, query: rollbackSql(plan.migration, files.read(plan.script)), fetch, retries: 1 });
+    summary(`## Rollback\n\n- ✅ Database rolled back: \`${plan.migration}\` undone with \`supabase/rollback/${plan.script}\`, and its history row removed in the same transaction, so a later release applies it again.\n- Next: set \`databaseVersion\` in config/public-supabase.json to the previous migration.`);
     return "database-rolled-back";
   }
   throw new Error(`Unknown rollback target "${target}".`);
