@@ -17,6 +17,12 @@ describe("promo field", () => {
     expect(plan).toContain('id === "solo" && interval === "month" && promo ? promo : undefined');
     expect(plan).toMatch(/setInterval\(v\); setPromo\(null\)/);
   });
+  it("sits right above the Solo Upgrade button (not above the cards), only for a Free account on monthly billing", () => {
+    expect(src("src/components/plans.tsx")).toMatch(/\{beforeBuy\?\.\(p\.id\)\}\s*<Button[\s\S]{0,300}data-upgrade/);
+    const plan = src("src/routes/plan.tsx");
+    expect(plan).toContain('beforeBuy={(id) => (id === "solo" && interval === "month" && effective.id === "free"');
+    expect(plan).not.toMatch(/<\/div>\s*\)\s*:\s*null\}\s*<PromoField/);
+  });
   it("the page never sets a price itself: amounts come from the server", () => {
     expect(src("src/components/promo-field.tsx")).not.toMatch(/\b19900\b|\b49900\b|\b199\b|\b499\b/);
   });

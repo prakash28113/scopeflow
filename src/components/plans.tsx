@@ -1,6 +1,6 @@
 import { PRICE_TAX_NOTE } from "@/lib/business";
 import { FREE_REMINDERS_LINE, LIMIT_LATER_LABEL, LIMIT_UPGRADE_LABEL, SOLO_LINES, SOLO_VALUE_LINE, limitPrompt, soloYearlyNote } from "@/lib/plan-copy";
-import { useEffect } from "react";
+import { useEffect, type ReactNode } from "react";
 import { logUsage, rememberCheckoutSource } from "@/lib/usage";
 import { Link } from "react-router";
 import { BILLING_ENABLED } from "@/lib/billing";
@@ -46,6 +46,7 @@ export function PlanCards({
   canBuy,
   onBuy,
   buying,
+  beforeBuy,
   testMode,
   soloLink,
   onSoloIntent,
@@ -75,6 +76,8 @@ export function PlanCards({
   onBuy?: (plan: PlanId) => void;
   buying?: PlanId | null;
   testMode?: boolean;
+  /** Something to show right above a plan's Upgrade button (the promo code field), so it is never scrolled out of sight. */
+  beforeBuy?: (plan: PlanId) => ReactNode;
 }) {
   return (
     <div className="grid gap-4 md:grid-cols-3">
@@ -138,9 +141,12 @@ export function PlanCards({
                   </Link>
                 )
               ) : buyable ? (
-                <Button className="w-full" variant={recommended ? "primary" : "secondary"} disabled={Boolean(buying)} onClick={() => onBuy!(p.id)} data-upgrade={p.id}>
-                  {buying === p.id ? "Opening payment…" : `Upgrade to ${p.name}`}
-                </Button>
+                <>
+                  {beforeBuy?.(p.id)}
+                  <Button className="w-full" variant={recommended ? "primary" : "secondary"} disabled={Boolean(buying)} onClick={() => onBuy!(p.id)} data-upgrade={p.id}>
+                    {buying === p.id ? "Opening payment…" : `Upgrade to ${p.name}`}
+                  </Button>
+                </>
               ) : !onJoin && onSale ? (
                 <Link
                   to={p.id === "solo" && soloLink ? soloLink.to : "/signup"}

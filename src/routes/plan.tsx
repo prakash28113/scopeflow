@@ -216,10 +216,8 @@ export default function PlanPage() {
             </Alert>
           </div>
         ) : null}
-        {BILLING_ENABLED && b?.enabled && interval === "month" && effective.id === "free" && plans.data.some((p) => p.id === "solo" && canBuy(p)) ? (
-          <PromoField plan="solo" interval="month" applied={promo} onApplied={setPromo} />
-        ) : null}
         <PlanCards
+          beforeBuy={(id) => (id === "solo" && interval === "month" && effective.id === "free" ? <PromoField plan="solo" interval="month" applied={promo} onApplied={setPromo} /> : null)}
           plans={plans.data}
           interval={interval}
           current={m.plan}

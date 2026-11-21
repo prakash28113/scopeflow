@@ -49,13 +49,13 @@ export function PromoField({ plan, interval, applied, onApplied }: { plan: PlanI
 
   if (!open && !applied) {
     return (
-      <button type="button" className="mb-4 text-[13px] font-medium text-accent hover:underline" onClick={() => setOpen(true)} data-testid="promo-open">
+      <button type="button" className="mb-3 block w-full text-center text-[13px] font-medium text-accent hover:underline" onClick={() => setOpen(true)} data-testid="promo-open">
         Have a promo code?
       </button>
     );
   }
   return (
-    <div className="mb-5 max-w-md" data-testid="promo-field">
+    <div className="mb-3 text-left" data-testid="promo-field">
       {applied && result?.valid ? (
         <div className="space-y-2">
           <Alert tone="positive">{promoSummary(result)}</Alert>
