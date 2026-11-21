@@ -19,7 +19,7 @@
  */
 import { checkHistory, migrationSql } from "./migrations.mjs";
 import { TOKEN_HELP, preflight } from "../lib/supabase-api.mjs";
-import { backupStatus } from "./backup-status.mjs";
+import { checkBackupGate } from "./backup-status.mjs";
 import { execFileSync } from "node:child_process";
 import { appendFileSync, readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
@@ -331,9 +331,11 @@ export async function run(deps) {
   // Before anything is changed: prove the token works for this project. A bad token stops the release here, in plain words.
   await preflight({ token: sbToken, ref, fetch });
   ok("Supabase access check passed");
-  const backups = await backupStatus({ fetch, repo: env.GITHUB_REPOSITORY, token: env.GITHUB_TOKEN });
-  if (backups.ok) ok(`Backups: ${backups.text}`);
-  else { log(`::warning::Backups: ${backups.text}`); report.push(`- ⚠️ **Backups need attention:** ${backups.text}`); }
+  // Mandatory gate: no fresh, verified backup → no release (before any database change).
+  const gate = await checkBackupGate({ fetch, repo: env.GITHUB_REPOSITORY, token: env.GITHUB_TOKEN, override: env.BACKUP_GATE_OVERRIDE });
+  if (!gate.ok) throw new Error(`Release blocked by the backup gate: ${gate.text} Run Actions → Backup, wait until it is green, then release again. (To release anyway, the owner types the override phrase in the release form; it is recorded in the summary.)`);
+  if (gate.overridden) { log(`::warning::Backup gate ${gate.text}`); report.push(`- ⚠️ **Backup gate overridden by the owner.** ${gate.text}`); }
+  else ok(`Backup gate passed: ${gate.text}`);
 
   // Migrations: each applied exactly once, inside its own transaction, recorded in a private schema.
   await sql(`create schema if not exists scopeflow_admin;
