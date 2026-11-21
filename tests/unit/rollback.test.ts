@@ -49,7 +49,23 @@ describe("rollback automation", () => {
       env: { ROLLBACK_TARGET: "rollback-database", SUPABASE_ACCESS_TOKEN: "t", ROLLBACK_CONFIRM: "ROLLBACK" },
     });
     expect(r).toBe("database-rolled-back");
+    // 1st call: the access check. 2nd: the rollback itself, one transaction that also removes the history row.
     expect(bodies[0]).toBe("https://api.supabase.com/v1/projects/esixrjouserdayxxezid/database/query");
-    expect(bodies[1]).toMatch(/^-- Rollback for /);
+    expect(bodies[1]).toBe("select 1 as ok");
+    expect(bodies[2]).toBe(bodies[0]);
+    expect(bodies[3]).toMatch(/^begin;/);
+    expect(bodies[3]).toContain("-- Rollback for ");
+    expect(bodies[3]).toMatch(/delete from scopeflow_admin\.applied_migrations where name = /);
+  });
+
+  it("a rejected token stops the database rollback before anything runs, with the fix in the message", async () => {
+    const calls: string[] = [];
+    const err = await rollback({
+      fetch: async (_u: string, init: { body: string }) => (calls.push(JSON.parse(init.body).query), new Response("{}", { status: 401 })),
+      exec: () => "", log: () => {}, summary: () => {}, files,
+      env: { ROLLBACK_TARGET: "rollback-database", SUPABASE_ACCESS_TOKEN: "t", ROLLBACK_CONFIRM: "ROLLBACK" },
+    }).catch((e: Error) => e);
+    expect(String(err.message)).toMatch(/expired, revoked or mistyped/);
+    expect(calls).toEqual(["select 1 as ok"]);
   });
 });

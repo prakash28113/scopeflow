@@ -17,6 +17,9 @@
  * Never prints secrets. Never uses the database password or any service-role key (the Edge Function
  * receives its own from Supabase at run time).
  */
+import { checkHistory, migrationSql } from "./migrations.mjs";
+import { TOKEN_HELP, preflight } from "../lib/supabase-api.mjs";
+import { backupStatus } from "./backup-status.mjs";
 import { execFileSync } from "node:child_process";
 import { appendFileSync, readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
@@ -74,10 +77,7 @@ insert into public.beta_allowlist (email, note) values ${values} on conflict (em
 commit;`;
 }
 
-export function migrationSql(name, body) {
-  if (!MIGRATION_NAME.test(name)) throw new Error(`Unexpected migration file name: ${name}`);
-  return `begin;\n${body}\ninsert into scopeflow_admin.applied_migrations (name) values (${quote(name)});\ncommit;`;
-}
+export { migrationSql };
 
 /** Validates public Supabase settings for an app-only release. Refuses anything that looks secret. */
 export function publicSupabaseConfig(env) {
@@ -285,7 +285,10 @@ export async function run(deps) {
       body: body === undefined ? undefined : JSON.stringify(body),
     });
     const text = await res.text();
-    if (!res.ok) throw new Error(`Supabase API ${method} ${path.split("?")[0]} failed (${res.status}): ${short(text)}`);
+    if (!res.ok) {
+      const hint = res.status === 401 ? ` ${TOKEN_HELP}` : "";
+      throw new Error(`Supabase API ${method} ${path.split("?")[0]} failed (${res.status}): ${short(text)}${hint}`);
+    }
     try { return text ? JSON.parse(text) : null; } catch { return text; }
   };
 
@@ -325,14 +328,25 @@ export async function run(deps) {
   };
 
   const sql = (query) => sb(`/projects/${ref}/database/query`, { method: "POST", body: { query } });
+  // Before anything is changed: prove the token works for this project. A bad token stops the release here, in plain words.
+  await preflight({ token: sbToken, ref, fetch });
+  ok("Supabase access check passed");
+  const backups = await backupStatus({ fetch, repo: env.GITHUB_REPOSITORY, token: env.GITHUB_TOKEN });
+  if (backups.ok) ok(`Backups: ${backups.text}`);
+  else { log(`::warning::Backups: ${backups.text}`); report.push(`- ⚠️ **Backups need attention:** ${backups.text}`); }
 
   // Migrations: each applied exactly once, inside its own transaction, recorded in a private schema.
   await sql(`create schema if not exists scopeflow_admin;
 create table if not exists scopeflow_admin.applied_migrations (name text primary key, applied_at timestamptz not null default now());
 revoke all on schema scopeflow_admin from public, anon, authenticated;
 revoke all on all tables in schema scopeflow_admin from public, anon, authenticated;`);
-  const applied = new Set((await sql("select name from scopeflow_admin.applied_migrations")).map((r) => r.name));
-  const pending = migrations.filter((m) => !applied.has(m.name)).sort((a, b) => a.name.localeCompare(b.name));
+  await sql("alter table scopeflow_admin.applied_migrations add column if not exists checksum text;");
+  const appliedRows = await sql("select name, checksum from scopeflow_admin.applied_migrations");
+  const applied = new Set(appliedRows.map((r) => r.name));
+  const history = checkHistory(migrations, appliedRows);
+  for (const w of history.warnings) { log(`::warning::${w}`); report.push(`- ⚠️ ${w}`); }
+  if (history.problems.length) throw new Error(`Migration history doesn't match the files: ${history.problems.join(" ")}`);
+  const pending = history.pending;
   if (pending.length && applied.size === 0) {
     const [existing] = await sql("select to_regclass('public.projects') is not null as present");
     if (existing?.present) {

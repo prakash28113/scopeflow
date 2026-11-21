@@ -3,12 +3,12 @@ import { beforeAll, describe, expect, it } from "vitest";
 import type { PGlite } from "@electric-sql/pglite";
 import { as, createDb, createUser, migrationFiles, type Role } from "./harness";
 // @ts-expect-error plain JavaScript module (scripts run by GitHub Actions)
-import { decrypt, encrypt, exportDatabase, pack, restoreSql, summary, unpack } from "../../scripts/backup/lib.mjs";
+import { checkManifest, decrypt, encrypt, exportDatabase, pack, restoreSql, summary, unpack } from "../../scripts/backup/lib.mjs";
 // @ts-expect-error plain JavaScript module
 import { verifyRestore } from "../../scripts/backup/backup.mjs";
 
 type Json = Record<string, unknown>;
-type Backup = { format: string; created_at: string; migrations: string[]; tables: Record<string, Json[]> };
+type Backup = { format: string; created_at: string; migrations: string[]; manifest?: { tables: Record<string, unknown> }; tables: Record<string, Json[]> };
 const PASS = "correct horse battery staple 2026";
 let db: PGlite;
 let backup: Backup;
@@ -100,4 +100,27 @@ describe("restore", () => {
     broken.tables["public.not_a_table"] = [{ id: 1 }];
     expect([...(await verifyRestore(broken))]).toEqual(["public.not_a_table (missing)"]);
   }, 120_000);
+});
+
+describe("backup manifest", () => {
+  it("matches its own rows, and survives encryption", async () => {
+    const b = await exportDatabase((q: string) => db.query<Json>(q).then((r) => r.rows));
+    expect(checkManifest(b)).toEqual([]);
+    expect(checkManifest(unpack(pack(b, PASS), PASS))).toEqual([]);
+    expect(Object.keys(b.manifest.tables)).toEqual(Object.keys(b.tables));
+  });
+  it("catches a changed, removed or extra table, and a missing manifest", async () => {
+    const b = await exportDatabase((q: string) => db.query<Json>(q).then((r) => r.rows));
+    const name = Object.keys(b.tables).find((t) => b.tables[t].length > 0)!;
+    const changed = structuredClone(b);
+    changed.tables[name][0] = { ...changed.tables[name][0], tampered: true };
+    expect(checkManifest(changed).join(" ")).toContain(`${name}: rows don't match`);
+    const dropped = structuredClone(b);
+    delete dropped.tables[name];
+    expect(checkManifest(dropped).join(" ")).toContain(`${name}: missing from the backup`);
+    const extra = structuredClone(b);
+    extra.tables["public.sneaky"] = [];
+    expect(checkManifest(extra).join(" ")).toContain("public.sneaky: not in the manifest");
+    expect(checkManifest({ ...b, manifest: undefined })).toEqual(["the backup has no manifest"]);
+  });
 });

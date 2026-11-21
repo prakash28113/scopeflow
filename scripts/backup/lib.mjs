@@ -8,7 +8,7 @@
  * The 36-byte header before the tag is authenticated too (GCM additional data), so nothing in it
  * can be altered without the decryption failing.
  */
-import { createCipheriv, createDecipheriv, randomBytes, scryptSync } from "node:crypto";
+import { createCipheriv, createDecipheriv, createHash, randomBytes, scryptSync } from "node:crypto";
 import { gunzipSync, gzipSync } from "node:zlib";
 
 export const FORMAT = "scopeflow-backup/1";
@@ -52,7 +52,28 @@ export async function exportDatabase(sql, now = new Date()) {
     tables[name] = rows;
   }
   const migrations = (tables["scopeflow_admin.applied_migrations"] ?? []).map((r) => r.name).sort();
-  return { format: FORMAT, created_at: now.toISOString(), migrations, tables };
+  return { format: FORMAT, created_at: now.toISOString(), migrations, manifest: manifestOf(tables), tables };
+}
+
+/** Row count and SHA-256 of every table's rows: lets a restore prove nothing was lost or altered inside the file. */
+export function manifestOf(tables) {
+  return {
+    tables: Object.fromEntries(Object.entries(tables).map(([name, rows]) => [name, { rows: rows.length, sha256: createHash("sha256").update(JSON.stringify(rows)).digest("hex") }])),
+  };
+}
+
+/** Problems found when the rows in a backup don't match its own manifest (empty list = consistent). */
+export function checkManifest(backup) {
+  const want = backup.manifest?.tables;
+  if (!want) return ["the backup has no manifest"];
+  const got = manifestOf(backup.tables).tables;
+  const problems = [];
+  for (const name of new Set([...Object.keys(want), ...Object.keys(got)])) {
+    if (!want[name]) problems.push(`${name}: not in the manifest`);
+    else if (!got[name]) problems.push(`${name}: missing from the backup`);
+    else if (want[name].rows !== got[name].rows || want[name].sha256 !== got[name].sha256) problems.push(`${name}: rows don't match the manifest`);
+  }
+  return problems;
 }
 
 export function encrypt(plain, pass, { salt = randomBytes(16), iv = randomBytes(12) } = {}) {
